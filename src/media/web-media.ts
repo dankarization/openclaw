@@ -167,6 +167,9 @@ const HOST_READ_TEXT_PLAIN_ALIASES = new Set([
 // security-boundary review, but extension-declared .html files still need to
 // fail closed instead of falling through to binary/media sniffing.
 const HOST_READ_DECLARED_TEXT_MIMES = new Set([...HOST_READ_TEXT_PLAIN_ALIASES, "text/html"]);
+const HOST_READ_TEXT_PLAIN_EXTENSION_BY_MIME: Record<string, readonly string[]> = {
+  "text/plain": [".txt"],
+};
 const MB = 1024 * 1024;
 
 function getTextStats(text: string): { printableRatio: number } {
@@ -250,6 +253,18 @@ function isValidatedHostReadText(buffer?: Buffer): boolean {
   return printableRatio > 0.95;
 }
 
+function isAllowedHostReadTextAlias(mime: string | undefined, filePath?: string): boolean {
+  if (!mime || !HOST_READ_TEXT_PLAIN_ALIASES.has(mime)) {
+    return false;
+  }
+  const allowedExtensions = HOST_READ_TEXT_PLAIN_EXTENSION_BY_MIME[mime];
+  if (!allowedExtensions) {
+    return true;
+  }
+  const ext = getFileExtension(filePath);
+  return !!ext && allowedExtensions.includes(ext);
+}
+
 function formatMb(bytes: number, digits = 2): string {
   return (bytes / MB).toFixed(digits);
 }
@@ -287,7 +302,7 @@ function assertHostReadMediaAllowed(params: {
   // host-read should reject those instead of returning early on the sniff.
   if (declaredMime && HOST_READ_DECLARED_TEXT_MIMES.has(declaredMime)) {
     if (
-      HOST_READ_TEXT_PLAIN_ALIASES.has(declaredMime) &&
+      isAllowedHostReadTextAlias(declaredMime, params.filePath) &&
       !params.sniffedContentType &&
       params.buffer &&
       isValidatedHostReadText(params.buffer)
@@ -325,7 +340,7 @@ function assertHostReadMediaAllowed(params: {
   if (
     !sniffedMime &&
     normalizedMime &&
-    HOST_READ_TEXT_PLAIN_ALIASES.has(normalizedMime) &&
+    isAllowedHostReadTextAlias(normalizedMime, params.filePath) &&
     params.buffer &&
     isValidatedHostReadText(params.buffer)
   ) {
