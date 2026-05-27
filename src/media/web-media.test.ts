@@ -596,9 +596,9 @@ describe("loadWebMedia", () => {
     }
   });
 
-  it("allows validated host-read TXT files", async () => {
-    const txtFile = path.join(fixtureRoot, "notes.txt");
-    await fs.writeFile(txtFile, "plain text\n", "utf8");
+  it("allows host-read TXT files", async () => {
+    const txtFile = path.join(fixtureRoot, "note.txt");
+    await fs.writeFile(txtFile, "secret", "utf8");
     const result = await loadWebMedia(txtFile, {
       maxBytes: 1024 * 1024,
       localRoots: "any",
@@ -609,19 +609,21 @@ describe("loadWebMedia", () => {
     expect(result.contentType).toBe("text/plain");
   });
 
-  it("rejects host-read LOG files even though they map to text/plain", async () => {
-    const logFile = path.join(fixtureRoot, "debug.log");
-    await fs.writeFile(logFile, "plain text\n", "utf8");
-    await expect(
-      loadWebMedia(logFile, {
-        maxBytes: 1024 * 1024,
-        localRoots: "any",
-        readFile: async (filePath) => await fs.readFile(filePath),
-        hostReadCapability: true,
-      }),
-    ).rejects.toMatchObject({
-      code: "path-not-allowed",
+  it.each([
+    { label: "JSON", fileName: "payload.json", expectedContentType: "application/json" },
+    { label: "YAML", fileName: "config.yaml", expectedContentType: "application/yaml" },
+    { label: "YML", fileName: "config.yml", expectedContentType: "application/yaml" },
+  ])("allows host-read $label files", async ({ fileName, expectedContentType }) => {
+    const textFile = path.join(fixtureRoot, fileName);
+    await fs.writeFile(textFile, '{"ok":true}\n', "utf8");
+    const result = await loadWebMedia(textFile, {
+      maxBytes: 1024 * 1024,
+      localRoots: "any",
+      readFile: async (filePath) => await fs.readFile(filePath),
+      hostReadCapability: true,
     });
+    expect(result.kind).toBe("document");
+    expect(result.contentType).toBe(expectedContentType);
   });
 
   it("rejects renamed host-read text files even when the extension looks allowed", async () => {
@@ -664,6 +666,24 @@ describe("loadWebMedia", () => {
     expect(result.contentType).toBe("text/markdown");
   });
 
+  it.each([
+    { label: "LOG", fileName: "debug.log", content: "still text\n" },
+    { label: "binary JSON lookalike", fileName: "payload.json", content: Buffer.from([0x50, 0x4b, 0x03, 0x04]) },
+    { label: "binary YAML lookalike", fileName: "config.yaml", content: Buffer.from([0x50, 0x4b, 0x03, 0x04]) },
+  ])("rejects host-read $label files", async ({ fileName, content }) => {
+    const blockedFile = path.join(fixtureRoot, fileName);
+    await fs.writeFile(blockedFile, content);
+    await expectLoadWebMediaErrorCode(
+      loadWebMedia(blockedFile, {
+        maxBytes: 1024 * 1024,
+        localRoots: "any",
+        readFile: async (filePath) => await fs.readFile(filePath),
+        hostReadCapability: true,
+      }),
+      "path-not-allowed",
+    );
+  });
+
   it("rejects host-read HTML files without a separate security-boundary approval", async () => {
     const htmlFile = path.join(fixtureRoot, "report.html");
     await fs.writeFile(htmlFile, "<!doctype html><title>Report</title><h1>Report</h1>\n", "utf8");
@@ -682,51 +702,46 @@ describe("loadWebMedia", () => {
     {
       label: "ZIP",
       fileName: "archive.zip",
-      body: Buffer.from([0x50, 0x4b, 0x03, 0x04]),
       contentType: "application/zip",
+      buffer: Buffer.from([0x50, 0x4b, 0x03, 0x04]),
     },
     {
       label: "gzip",
       fileName: "archive.gz",
-      body: Buffer.from([0x1f, 0x8b, 0x08, 0x00, 0, 0, 0, 0, 0, 0x03]),
       contentType: "application/gzip",
+      buffer: Buffer.from([0x1f, 0x8b, 0x08, 0x00, 0, 0, 0, 0, 0, 0x03]),
     },
     {
       label: "tar",
       fileName: "archive.tar",
-      body: (() => {
+      contentType: "application/x-tar",
+      buffer: (() => {
         const buffer = Buffer.alloc(512);
         buffer.write("ustar", 257, "ascii");
         return buffer;
       })(),
-      contentType: "application/x-tar",
     },
     {
       label: "7z",
       fileName: "archive.7z",
-      body: Buffer.from([0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c, 0, 4]),
       contentType: "application/x-7z-compressed",
+      buffer: Buffer.from([0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c, 0, 4]),
     },
     {
-      label: "JSON",
-      fileName: "data.json",
-      body: '{"ok":true}\n',
-      contentType: "application/json",
+      label: "APK",
+      fileName: "archive.apk",
+      contentType: "application/vnd.android.package-archive",
+      buffer: Buffer.from([0x50, 0x4b, 0x03, 0x04]),
     },
-    {
-      label: "YAML",
-      fileName: "config.yaml",
-      body: "ok: true\n",
-      contentType: "application/yaml",
-    },
-    {
-      label: "YML",
-      fileName: "config.yml",
-      body: "ok: true\n",
-      contentType: "application/yaml",
-    },
-  ])("allows host-read $label files", async ({ fileName, body, contentType }) => {
-    const result = await loadDocumentWithHostRead(fileName, body);
+  ])("allows host-read $label files", async ({ fileName, contentType, buffer }) => {
+    const archiveFile = path.join(fixtureRoot, fileName);
+    await fs.writeFile(archiveFile, buffer);
+    const result = await loadWebMedia(archiveFile, {
+      maxBytes: 1024 * 1024,
+      localRoots: "any",
+      readFile: async (filePath) => await fs.readFile(filePath),
+      hostReadCapability: true,
+    });
     expect(result.kind).toBe("document");
     expect(result.contentType).toBe(contentType);
   });
@@ -751,11 +766,7 @@ describe("loadWebMedia", () => {
     { label: "CSV", fileName: "opaque.csv" },
     { label: "HTML", fileName: "opaque.html" },
     { label: "Markdown", fileName: "opaque.md" },
-    { label: "TXT", fileName: "opaque.txt" },
-    { label: "JSON", fileName: "opaque.json" },
-    { label: "YAML", fileName: "opaque.yaml" },
-    { label: "YML", fileName: "opaque.yml" },
-  ])("rejects opaque non-NUL binary data disguised as $label", async ({ fileName }) => {
+  ])("rejects opaque non-NUL binary data disguised as %s", async ({ fileName }) => {
     const fakeTextFile = path.join(fixtureRoot, fileName);
     const opaqueBinary = Buffer.alloc(9000);
     for (let i = 0; i < opaqueBinary.length; i += 1) {

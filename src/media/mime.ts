@@ -37,6 +37,7 @@ const EXT_BY_MIME: Record<string, string> = {
   "video/x-ms-wmv": ".wmv",
   "video/quicktime": ".mov",
   "application/pdf": ".pdf",
+  "application/vnd.android.package-archive": ".apk",
   "application/json": ".json",
   "application/yaml": ".yaml",
   "application/zip": ".zip",
@@ -78,9 +79,9 @@ const MIME_BY_EXT: Record<string, string> = {
   ".jpeg": "image/jpeg",
   ".js": "text/javascript",
   ".log": "text/plain",
+  ".yml": "application/yaml",
   ".htm": "text/html",
   ".xml": "text/xml",
-  ".yml": "application/yaml",
 };
 
 const AUDIO_FILE_EXTENSIONS = new Set([

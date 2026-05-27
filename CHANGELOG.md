@@ -74,6 +74,7 @@ Docs: https://docs.openclaw.ai
 - Codex/Auth: bound ChatGPT OAuth token exchange and refresh requests, and honor cancellation across Codex and Anthropic OAuth login flows.
 - QA/E2E/CI: bound Telegram, kitchen-sink, Open WebUI, ClawHub, MCP, Discord, realtime, labeler, and GitHub API waits; fail empty explicit test, live-media, gateway CPU, startup benchmark, plugin gauntlet, and beta-smoke runs instead of false-greening.
 - Agents/Codex: keep spawned agent bootstrap files rooted in the agent workspace while running task commands, transcripts, and compaction from the requested cwd. (#87218) Thanks @mbelinky.
+- Media/Gateway: preserve `.apk` attachments as `application/vnd.android.package-archive` instead of dropping them behind the host-read media gate.
 
 ## 2026.5.26
 
