@@ -206,6 +206,38 @@ describe("markdownToTelegramHtml", () => {
     ).toBe('<a href="https://example.com">docs</a>');
   });
 
+  it("keeps unsupported markdown link hrefs as visible text in rich HTML", () => {
+    expect(
+      markdownToTelegramRichHtml(
+        [
+          "[local file](scripts/example.py#L41)",
+          "[absolute file](/home/user/.openclaw/workspace/scripts/example.py#L41)",
+          "[config](./openclaw.json)",
+        ].join(" "),
+      ),
+    ).toBe("local file absolute file config");
+
+    expect(
+      markdownToTelegramRichHtml(
+        [
+          "[docs](https://example.com/docs)",
+          "[bot](tg://user?id=123)",
+          "[email](mailto:team@example.com)",
+          "[phone](tel:+15551234567)",
+          "[back](#top)",
+        ].join(" "),
+      ),
+    ).toBe(
+      [
+        '<a href="https://example.com/docs">docs</a>',
+        '<a href="tg://user?id=123">bot</a>',
+        '<a href="mailto:team@example.com">email</a>',
+        '<a href="tel:+15551234567">phone</a>',
+        '<a href="#top">back</a>',
+      ].join(" "),
+    );
+  });
+
   it("preserves Markdown heading levels in rich HTML", () => {
     expect(markdownToTelegramRichHtml("# Title\n\n### Detail")).toBe(
       "<h1>Title</h1>\n\n<h3>Detail</h3>",
