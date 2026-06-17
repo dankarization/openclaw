@@ -56,6 +56,18 @@ function buildTelegramLink(link: MarkdownLinkSpan, text: string) {
   if (isAutoLinkedFileRef(href, label)) {
     return null;
   }
+  // Telegram rich messages reject local/relative hrefs with RICH_MESSAGE_URL_INVALID.
+  // Only allow supported schemes: http://, https://, tg://, mailto:.
+  try {
+    const parsed = new URL(href);
+    if (!["http:", "https:", "tg:", "mailto:"].includes(parsed.protocol)) {
+      return null;
+    }
+  } catch {
+    // Invalid URL (local path, relative path, etc.) — suppress the link
+    // so the visible label text is still delivered as plain text.
+    return null;
+  }
   const safeHref = escapeHtmlAttr(href);
   return {
     start: link.start,
