@@ -32,6 +32,13 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=8192
         run: node scripts/build-all.mjs qaRuntime
 
+      - name: Generate Plugin SDK baseline diagnostic
+        run: |
+          pnpm plugin-sdk:api:gen
+          mkdir -p .artifacts/qa-e2e/pr-112326-a2a-runtime-proof/plugin-sdk
+          cp docs/.generated/plugin-sdk-api-baseline.sha256 \
+            .artifacts/qa-e2e/pr-112326-a2a-runtime-proof/plugin-sdk/
+
       - name: Run real Gateway and qa-channel A2A scenario
         env:
           OPENCLAW_BUILD_PRIVATE_QA: "1"
