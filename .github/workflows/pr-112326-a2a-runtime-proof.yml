@@ -1,0 +1,57 @@
+name: PR 112326 A2A runtime proof
+
+on:
+  push:
+    branches:
+      - proof/pr112326-a2a-runtime-8a4bb12
+
+permissions:
+  contents: read
+
+jobs:
+  a2a-runtime-proof:
+    name: Exact-head qa-channel A2A runtime proof
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Check out exact PR head
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: 8a4bb12f7b2860f6fa8665607432480b5dd914ea
+
+      - name: Setup Node environment
+        uses: ./.github/actions/setup-node-env
+        with:
+          install-bun: "false"
+          sticky-disk: "false"
+          use-actions-cache: "true"
+
+      - name: Build QA runtime
+        env:
+          OPENCLAW_BUILD_PRIVATE_QA: "1"
+          NODE_OPTIONS: --max-old-space-size=8192
+        run: node scripts/build-all.mjs qaRuntime
+
+      - name: Run real Gateway and qa-channel A2A scenario
+        env:
+          OPENCLAW_BUILD_PRIVATE_QA: "1"
+          OPENCLAW_ENABLE_PRIVATE_QA_CLI: "1"
+          OPENCLAW_DISABLE_BUNDLED_PLUGINS: "0"
+          OPENCLAW_QA_REDACT_PUBLIC_METADATA: "1"
+          OPENCLAW_QA_TRANSPORT_READY_TIMEOUT_MS: "180000"
+          NODE_OPTIONS: --max-old-space-size=8192
+        run: |
+          pnpm openclaw qa suite \
+            --provider-mode mock-openai \
+            --scenario a2a-message-tool-mirror-dedupe \
+            --concurrency 1 \
+            --output-dir .artifacts/qa-e2e/pr-112326-a2a-runtime-proof
+
+      - name: Upload redacted runtime evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pr-112326-a2a-runtime-proof-8a4bb12f7b
+          path: .artifacts/qa-e2e/pr-112326-a2a-runtime-proof/
+          if-no-files-found: warn
+          retention-days: 30
