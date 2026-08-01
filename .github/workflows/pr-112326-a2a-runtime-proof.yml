@@ -17,7 +17,7 @@ jobs:
       - name: Check out exact PR head
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
-          ref: 3a8b29500e7702de9b6a222519c269885283520d
+          ref: 3a8b29500ecb80319e71a3525446492c42bb16eb
 
       - name: Setup Node environment
         uses: ./.github/actions/setup-node-env
