@@ -17,7 +17,7 @@ jobs:
       - name: Check out exact PR head
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
-          ref: 3a8b29500ecb80319e71a3525446492c42bb16eb
+          ref: 0eb31ff91b5b5398a8fb36d97317eb2b18b3cf69
 
       - name: Setup Node environment
         uses: ./.github/actions/setup-node-env
@@ -58,7 +58,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: pr-112326-a2a-runtime-proof-3a8b29500e
+          name: pr-112326-a2a-runtime-proof-0eb31ff91b
           path: .artifacts/qa-e2e/pr-112326-a2a-runtime-proof/
           if-no-files-found: warn
           retention-days: 30
