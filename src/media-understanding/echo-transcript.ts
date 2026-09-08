@@ -12,12 +12,20 @@ import { isDeliverableMessageChannel } from "../utils/message-channel.js";
 const loadMessageRuntime = createLazyRuntimeModule(() => import("../channels/message/runtime.js"));
 
 /** Default operator-visible transcript echo format for preflight audio transcription. */
-export const DEFAULT_ECHO_TRANSCRIPT_FORMAT = '📝 "{transcript}"';
+export const DEFAULT_ECHO_TRANSCRIPT_FORMAT = "[Transcription]\n{transcript}";
 
 function formatEchoTranscript(transcript: string, format: string): string {
   // Function replacer keeps `$` sequences in the transcript literal instead of
   // being parsed as String.prototype.replace substitution patterns.
   return format.replace("{transcript}", () => transcript);
+}
+
+/**
+ * Resolves the source message id the echo should visually reply to when the
+ * channel supports reply metadata.
+ */
+function resolveEchoReplyToId(ctx: MsgContext): string | undefined {
+  return ctx.MessageSidFull ?? ctx.MessageSid;
 }
 
 /** Sends a best-effort transcript echo back to the originating deliverable chat. */
@@ -51,6 +59,7 @@ export async function sendTranscriptEcho(params: {
   }
 
   const text = formatEchoTranscript(transcript, params.format ?? DEFAULT_ECHO_TRANSCRIPT_FORMAT);
+  const replyToId = resolveEchoReplyToId(ctx);
 
   try {
     const { sendDurableMessageBatchCore } = await loadMessageRuntime();
@@ -60,7 +69,7 @@ export async function sendTranscriptEcho(params: {
       to,
       accountId: ctx.AccountId ?? undefined,
       threadId: ctx.MessageThreadId ?? undefined,
-      payloads: [{ text }],
+      payloads: [{ text, ...(replyToId ? { replyToId } : {}) }],
       bestEffort: true,
       durability: "best_effort",
     });
@@ -68,7 +77,9 @@ export async function sendTranscriptEcho(params: {
       throw send.error;
     }
     if ((params.logSuccess ?? true) && shouldLogVerbose()) {
-      logVerbose(`media: echo-transcript sent to ${normalizedChannel}/${to}`);
+      logVerbose(
+        `media: echo-transcript sent to ${normalizedChannel}/${to}${replyToId ? ` (reply to ${replyToId})` : ""}`,
+      );
     }
   } catch (err) {
     const prefix = params.failureLogPrefix ?? "media: echo-transcript delivery failed";

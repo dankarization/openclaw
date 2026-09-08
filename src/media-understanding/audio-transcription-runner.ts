@@ -3,6 +3,7 @@ import type { ActiveMediaModel } from "../../packages/media-understanding-common
 // pipeline and extracts the first transcript output.
 import type { MsgContext } from "../auto-reply/templating.js";
 import type { OpenClawConfig } from "../config/types.js";
+import type { AudioTranscriptionIdentity } from "./echo-filter.js";
 import {
   buildProviderRegistry,
   createMediaAttachmentCache,
@@ -20,7 +21,11 @@ export async function runAudioTranscription(params: {
   providers?: Record<string, MediaUnderstandingProvider>;
   activeModel?: ActiveMediaModel;
   localPathRoots?: readonly string[];
-}): Promise<{ transcript: string | undefined; attachments: MediaAttachment[] }> {
+}): Promise<{
+  transcript: string | undefined;
+  attachments: MediaAttachment[];
+  identity?: AudioTranscriptionIdentity;
+}> {
   const attachments = params.attachments ?? normalizeMediaAttachments(params.ctx);
   if (attachments.length === 0) {
     return { transcript: undefined, attachments };
@@ -46,7 +51,15 @@ export async function runAudioTranscription(params: {
     });
     const output = result.outputs.find((entry) => entry.kind === "audio.transcription");
     const transcript = output?.text?.trim();
-    return { transcript: transcript || undefined, attachments };
+    const identity: AudioTranscriptionIdentity | undefined = output
+      ? {
+          provider: output.provider,
+          model: output.model,
+          requestedBackend: output.requestedBackend,
+          observedBackend: output.observedBackend,
+        }
+      : undefined;
+    return { transcript: transcript || undefined, attachments, identity };
   } finally {
     await cache.cleanup();
   }

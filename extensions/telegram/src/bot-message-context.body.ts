@@ -302,6 +302,9 @@ export async function resolveTelegramInboundBody(params: {
         OriginatingTo: originatingTo,
         AccountId: accountId,
         MessageThreadId: replyThreadId,
+        ...(typeof msg.message_id === "number" || typeof msg.message_id === "string"
+          ? { MessageSid: String(msg.message_id) }
+          : {}),
         media: materializedMedia,
       };
       preflightTranscript = await transcribeFirstAudio({

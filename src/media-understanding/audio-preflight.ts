@@ -7,6 +7,7 @@ import { logVerbose, shouldLogVerbose } from "../globals.js";
 import { normalizeMediaFacts } from "../media/media-facts.js";
 import { isAudioAttachment } from "./attachments.js";
 import { runAudioTranscription } from "./audio-transcription-runner.js";
+import { matchesAudioEchoIdentity } from "./echo-filter.js";
 import { DEFAULT_ECHO_TRANSCRIPT_FORMAT, sendTranscriptEcho } from "./echo-transcript.js";
 import { normalizeMediaAttachments, resolveMediaAttachmentLocalRoots } from "./runner.js";
 import type { MediaUnderstandingProvider } from "./types.js";
@@ -48,7 +49,7 @@ export async function transcribeFirstAudio(params: {
   }
 
   try {
-    const { transcript } = await runAudioTranscription({
+    const { transcript, identity } = await runAudioTranscription({
       ctx,
       cfg,
       attachments: [firstAudio],
@@ -61,7 +62,11 @@ export async function transcribeFirstAudio(params: {
       return undefined;
     }
 
-    if (audioConfig?.echoTranscript) {
+    const echoMatch = audioConfig?.echo?.match;
+    if (
+      audioConfig?.echoTranscript &&
+      matchesAudioEchoIdentity({ match: echoMatch, identity: identity ?? {} })
+    ) {
       await sendTranscriptEcho({
         ctx,
         cfg,

@@ -586,6 +586,18 @@ describe("resolveTelegramInboundBody", () => {
     expect(result?.bodyText).not.toContain("<media:audio>");
   });
 
+  it("passes the source message id through audio preflight context", async () => {
+    transcribeFirstAudioMock.mockReset();
+    transcribeFirstAudioMock.mockResolvedValueOnce("reply to me");
+    await resolvePrivate(
+      voiceMessage("voice-dm-sid-1", 4242),
+      audioOverrides("/tmp/voice-dm-sid.ogg", { echo: true, accountId: "primary" }),
+    );
+
+    const ctx = transcribeCallContext();
+    expect(ctx.MessageSid).toBe("4242");
+  });
+
   it("passes DM topic thread IDs through audio preflight context", async () => {
     transcribeFirstAudioMock.mockReset();
     transcribeFirstAudioMock.mockResolvedValueOnce("hello from a threaded dm voice note");

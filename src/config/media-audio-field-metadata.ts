@@ -20,6 +20,8 @@ export const MEDIA_AUDIO_FIELD_HELP = {
     "Choose which matching audio attachments are processed. Use first-only handling unless multi-attachment transcription is intentional.",
   "tools.media.audio.echoTranscript":
     "Echo the audio transcript to the originating chat before agent processing. Enable this when users need to verify what the system heard.",
+  "tools.media.audio.echo.match":
+    "Restrict transcript echo to successful transcription backends matched by provider, model, requestedBackend, or observedBackend. Use this to echo local Whisper results only instead of every successful transcription.",
   "tools.media.audio.echoFormat":
     "Format the echoed transcript with a {transcript} placeholder. Keep the placeholder intact so delivery includes the transcript.",
 } satisfies Record<string, string>;
@@ -35,5 +37,6 @@ export const MEDIA_AUDIO_FIELD_LABELS: Record<keyof typeof MEDIA_AUDIO_FIELD_HEL
   "tools.media.audio.scope": "Audio Understanding Scope",
   "tools.media.audio.attachments": "Audio Understanding Attachment Policy",
   "tools.media.audio.echoTranscript": "Echo Transcript to Chat",
+  "tools.media.audio.echo.match": "Transcript Echo Backend Match",
   "tools.media.audio.echoFormat": "Transcript Echo Format",
 };

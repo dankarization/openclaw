@@ -10,7 +10,7 @@ type TranscribeFirstAudio =
   typeof import("../media-understanding/audio-preflight.js").transcribeFirstAudio;
 type SendTranscriptEcho = typeof sendTranscriptEcho;
 
-const DEFAULT_ECHO_TRANSCRIPT_FORMAT = '📝 "{transcript}"';
+const DEFAULT_ECHO_TRANSCRIPT_FORMAT = "[Transcription]\n{transcript}";
 const loadAudioPreflightRuntime = createLazyRuntimeModule(
   () => import("../media-understanding/audio-preflight.js"),
 );

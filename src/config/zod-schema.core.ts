@@ -1001,6 +1001,23 @@ const ToolsMediaCapabilitySchema = z
   .strict()
   .optional();
 
+const MediaAudioEchoMatchSchema = z
+  .object({
+    provider: z.string().trim().min(1).optional(),
+    model: z.string().trim().min(1).optional(),
+    requestedBackend: z.string().trim().min(1).optional(),
+    observedBackend: z.string().trim().min(1).optional(),
+  })
+  .strict()
+  .optional();
+
+const MediaAudioEchoSchema = z
+  .object({
+    match: MediaAudioEchoMatchSchema,
+  })
+  .strict()
+  .optional();
+
 const ToolsMediaAudioSchema = z
   .object({
     enabled: z.boolean().optional(),
@@ -1011,6 +1028,7 @@ const ToolsMediaAudioSchema = z
     ...MediaUnderstandingRuntimeFields,
     attachments: MediaUnderstandingAttachmentsSchema,
     echoTranscript: z.boolean().optional(),
+    echo: MediaAudioEchoSchema,
     echoFormat: z.string().optional(),
   })
   .strict()

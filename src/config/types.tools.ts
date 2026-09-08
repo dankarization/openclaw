@@ -82,6 +82,24 @@ export type MediaUnderstandingModelConfig = MediaProviderRequestConfig & {
   preferredProfile?: string;
 };
 
+/** Match filter selecting which successful audio transcription backend echoes. */
+export type MediaAudioEchoMatchConfig = {
+  /** Selected/executed provider id (e.g. "whisper"). */
+  provider?: string;
+  /** Selected/executed model id (CLI command or provider model). */
+  model?: string;
+  /** Backend requested by the executed CLI command args (e.g. "cpu", "cuda"). */
+  requestedBackend?: string;
+  /** Backend observed from CLI command execution output. */
+  observedBackend?: string;
+};
+
+/** Optional configuration for audio transcript echo delivery. */
+export type MediaAudioEchoConfig = {
+  /** Restrict echo to transcription results matching these fields. */
+  match?: MediaAudioEchoMatchConfig;
+};
+
 export type MediaUnderstandingConfig = MediaProviderRequestConfig & {
   /** Enable media understanding when models are configured. */
   enabled?: boolean;
@@ -113,8 +131,14 @@ export type MediaUnderstandingConfig = MediaProviderRequestConfig & {
    */
   echoTranscript?: boolean;
   /**
+   * Restrict transcript echo to successful transcription backends matched by
+   * provider/model/requestedBackend/observedBackend identity. Echo stays
+   * unconditional when omitted.
+   */
+  echo?: MediaAudioEchoConfig;
+  /**
    * Format string for the echoed transcript. Use `{transcript}` as placeholder.
-   * Default: '📝 "{transcript}"'
+   * Default: '[Transcription]\n{transcript}'
    */
   echoFormat?: string;
 };

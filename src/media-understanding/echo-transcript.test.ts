@@ -97,7 +97,9 @@ describe("sendTranscriptEcho", () => {
 
     expect(mockDeliverOutboundPayloads).toHaveBeenCalledWith(
       expect.objectContaining({
-        payloads: [{ text: '📝 "tickets cost $$40, wait for the deal & confirm with $&"' }],
+        payloads: [
+          { text: "[Transcription]\ntickets cost $$40, wait for the deal & confirm with $&" },
+        ],
       }),
     );
   });
@@ -165,6 +167,71 @@ describe("sendTranscriptEcho", () => {
       ],
       bestEffort: true,
       durability: "best_effort",
+    });
+  });
+
+  it("replies to the source message when MessageSid is available", async () => {
+    await sendTranscriptEcho({
+      ctx: createCtx({
+        Provider: "telegram",
+        From: undefined,
+        OriginatingTo: "telegram:42",
+        MessageSid: "501",
+        MessageSidFull: "telegram:42:501",
+      }),
+      cfg: EMPTY_CONFIG,
+      transcript: "reply target voice note",
+    });
+
+    expect(mockDeliverOutboundPayloads).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: "telegram",
+        to: "telegram:42",
+        payloads: [
+          {
+            text: DEFAULT_ECHO_TRANSCRIPT_FORMAT.replace("{transcript}", "reply target voice note"),
+            replyToId: "telegram:42:501",
+          },
+        ],
+      }),
+    );
+  });
+
+  it("falls back to MessageSid when MessageSidFull is absent", async () => {
+    await sendTranscriptEcho({
+      ctx: createCtx({
+        Provider: "telegram",
+        From: undefined,
+        OriginatingTo: "telegram:42",
+        MessageSid: "501",
+      }),
+      cfg: EMPTY_CONFIG,
+      transcript: "short sid voice note",
+    });
+
+    expect(mockDeliverOutboundPayloads).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payloads: [
+          {
+            text: DEFAULT_ECHO_TRANSCRIPT_FORMAT.replace("{transcript}", "short sid voice note"),
+            replyToId: "501",
+          },
+        ],
+      }),
+    );
+  });
+
+  it("omits replyToId when the source message id is unknown", async () => {
+    await sendTranscriptEcho({
+      ctx: createCtx({ Provider: "telegram", From: undefined, OriginatingTo: "telegram:42" }),
+      cfg: EMPTY_CONFIG,
+      transcript: "anonymous voice note",
+    });
+
+    const call = mockDeliverOutboundPayloads.mock.calls[0]?.[0] as { payloads: unknown[] };
+    expect(call).toBeDefined();
+    expect(call.payloads[0]).toEqual({
+      text: DEFAULT_ECHO_TRANSCRIPT_FORMAT.replace("{transcript}", "anonymous voice note"),
     });
   });
 

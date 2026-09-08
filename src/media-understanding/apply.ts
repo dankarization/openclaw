@@ -12,6 +12,7 @@ import type { MsgContext } from "../auto-reply/templating.js";
 import type { OpenClawConfig } from "../config/types.js";
 import { runMediaCapability } from "./apply-capability.js";
 import { resolveAttachmentKind } from "./attachments.js";
+import { matchesAudioEchoIdentity } from "./echo-filter.js";
 import { DEFAULT_ECHO_TRANSCRIPT_FORMAT, sendTranscriptEcho } from "./echo-transcript.js";
 import type { ExtractedFileImage } from "./extracted-file-images.js";
 import { extractFileContext, type LocalPathSelfServeUpgrade } from "./file-context.js";
@@ -232,6 +233,9 @@ export async function applyMediaUnderstanding(params: {
       ctx.MediaUnderstandingDecisions = [...(ctx.MediaUnderstandingDecisions ?? []), ...decisions];
     }
 
+    const syntheticAudioIndexes = new Set(
+      syntheticSkippedAudioOutputs.map((o) => o.attachmentIndex),
+    );
     if (outputs.length > 0) {
       const audioOutputs = outputs.filter((output) => output.kind === "audio.transcription");
       if (audioOutputs.length > 0) {
@@ -245,8 +249,29 @@ export async function applyMediaUnderstanding(params: {
           ctx.RawBody = transcript;
         }
         // Echo transcript back to chat before agent processing, if configured.
+        // Identity filtering restricts echo to successful backend matches (for
+        // example local Whisper only); synthetic placeholder outputs never echo.
         const audioCfg = cfg.tools?.media?.audio;
-        if (audioCfg?.echoTranscript && transcript) {
+        const realAudioOutputs = audioOutputs.filter(
+          (output) => !syntheticAudioIndexes.has(output.attachmentIndex),
+        );
+        const echoMatch = audioCfg?.echo?.match;
+        if (
+          audioCfg?.echoTranscript &&
+          transcript &&
+          realAudioOutputs.length > 0 &&
+          realAudioOutputs.every((output) =>
+            matchesAudioEchoIdentity({
+              match: echoMatch,
+              identity: {
+                provider: output.provider,
+                model: output.model,
+                requestedBackend: output.requestedBackend,
+                observedBackend: output.observedBackend,
+              },
+            }),
+          )
+        ) {
           await sendTranscriptEcho({
             ctx,
             cfg,
