@@ -6,6 +6,8 @@ import {
 
 type TranscribeFirstAudio =
   typeof import("../media-understanding/audio-preflight.js").transcribeFirstAudio;
+type ResolveAudioPreflight =
+  typeof import("../media-understanding/audio-preflight.js").resolveAudioPreflight;
 type SendTranscriptEcho =
   typeof import("../media-understanding/echo-transcript.js").sendTranscriptEcho;
 
@@ -101,6 +103,32 @@ describe("createChannelPreflightAudio", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("carries executed backend identity through deferred resolution", async () => {
+    const resolveAudioPreflight = vi.fn<ResolveAudioPreflight>().mockResolvedValue({
+      transcript: "hello",
+      identity: { provider: "whisper", requestedBackend: "cpu" },
+    });
+    const preflight = createChannelPreflightAudio({
+      channel: "test",
+      isAudio: () => true,
+      resolveAudioPreflight,
+    });
+
+    await expect(
+      preflight.resolveDetailed({
+        request: { ctx: { media: [] }, cfg: audioConfig },
+      }),
+    ).resolves.toEqual({
+      transcript: "hello",
+      identity: { provider: "whisper", requestedBackend: "cpu" },
+    });
+    expect(resolveAudioPreflight).toHaveBeenCalledWith({
+      ctx: { media: [] },
+      cfg: audioConfig,
+      deferTranscriptEcho: true,
+    });
+  });
+
   it("formats and sends admitted echoes while preserving literal replacement tokens", async () => {
     const sendTranscriptEcho = vi.fn<SendTranscriptEcho>().mockResolvedValue(undefined);
     const preflight = createChannelPreflightAudio({
@@ -148,6 +176,45 @@ describe("createChannelPreflightAudio", () => {
     await preflight.send({
       transcript: "hello",
       cfg: {},
+      accountId: "work",
+      originatingTo: "channel:C1",
+    });
+
+    expect(sendTranscriptEcho).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      name: "backend identity does not match",
+      match: { provider: "whisper" },
+      identity: { provider: "groq" },
+    },
+    {
+      name: "match object is empty",
+      match: {},
+      identity: { provider: "whisper" },
+    },
+  ])("does not send when $name", async ({ match, identity }) => {
+    const sendTranscriptEcho = vi.fn<SendTranscriptEcho>();
+    const preflight = createChannelPreflightAudio({
+      channel: "test",
+      isAudio: () => true,
+      sendTranscriptEcho,
+    });
+
+    await preflight.send({
+      transcript: "hello",
+      identity,
+      cfg: {
+        tools: {
+          media: {
+            audio: {
+              echoTranscript: true,
+              echo: { match },
+            },
+          },
+        },
+      },
       accountId: "work",
       originatingTo: "channel:C1",
     });

@@ -138,7 +138,8 @@ export type MediaUnderstandingConfig = MediaProviderRequestConfig & {
   echo?: MediaAudioEchoConfig;
   /**
    * Format string for the echoed transcript. Use `{transcript}` as placeholder.
-   * Default: '[Transcription]\n{transcript}'
+   * Default: '📝 "{transcript}"'. Set '[Transcription]\n{transcript}' for the
+   * plain local-Whisper reply format.
    */
   echoFormat?: string;
 };

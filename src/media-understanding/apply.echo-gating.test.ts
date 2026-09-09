@@ -41,9 +41,9 @@ let applyMediaUnderstanding: typeof import("./apply.js").applyMediaUnderstanding
 const TEMP_MEDIA_PREFIX = "openclaw-echo-gating-test-";
 let suiteTempMediaRootDir = "";
 
-async function createTempAudioFile(): Promise<string> {
+async function createTempAudioFile(fileName = "note.ogg"): Promise<string> {
   const dir = await fs.mkdtemp(path.join(suiteTempMediaRootDir, "case-"));
-  const filePath = path.join(dir, "note.ogg");
+  const filePath = path.join(dir, fileName);
   await fs.writeFile(filePath, createSafeAudioFixtureBuffer(2048));
   return filePath;
 }
@@ -67,6 +67,7 @@ function createTelegramAudioCtx(mediaPath: string, extra?: Partial<MsgContext>):
 /** CLI whisper (Python) entry with stdout transcript output. */
 function createLocalWhisperCliConfig(echoMatch: { provider: string }): OpenClawConfig {
   return {
+    channels: { telegram: { replyToMode: "all" } },
     tools: {
       media: {
         models: [
@@ -82,6 +83,7 @@ function createLocalWhisperCliConfig(echoMatch: { provider: string }): OpenClawC
           maxBytes: 1024 * 1024,
           echoTranscript: true,
           echo: { match: echoMatch },
+          echoFormat: "[Transcription]\n{transcript}",
         },
       },
     },
@@ -91,6 +93,7 @@ function createLocalWhisperCliConfig(echoMatch: { provider: string }): OpenClawC
 /** Cloud-provider first, local whisper CLI fallback. */
 function createCloudFirstWithLocalFallbackConfig(): OpenClawConfig {
   return {
+    channels: { telegram: { replyToMode: "all" } },
     tools: {
       media: {
         models: [
@@ -107,6 +110,7 @@ function createCloudFirstWithLocalFallbackConfig(): OpenClawConfig {
           maxBytes: 1024 * 1024,
           echoTranscript: true,
           echo: { match: { provider: "whisper" } },
+          echoFormat: "[Transcription]\n{transcript}",
         },
       },
     },
@@ -144,7 +148,9 @@ function expectSingleEchoDeliveryCall() {
     to?: string;
     channel?: string;
     accountId?: string;
-    payloads: Array<{ text?: string; replyToId?: string }>;
+    replyToId?: string;
+    replyToMode?: string;
+    payloads: Array<{ text?: string }>;
   };
   if (!callArgs) {
     throw new Error("Expected echo transcript delivery call args");
@@ -198,6 +204,11 @@ describe("applyMediaUnderstanding – echo backend gating", () => {
     }));
     vi.doMock("../channels/message/runtime.js", () => ({
       sendDurableMessageBatchCore: (...args: unknown[]) => mockDeliverOutboundPayloads(...args),
+    }));
+    vi.doMock("../auto-reply/reply/reply-threading.js", () => ({
+      resolveReplyDeliveryAccountId: (_cfg: OpenClawConfig, _channel: string, accountId?: string) =>
+        accountId,
+      resolveReplyToMode: (cfg: OpenClawConfig) => cfg.channels?.telegram?.replyToMode ?? "off",
     }));
     vi.doMock("../utils/message-channel.js", () => ({
       isDeliverableMessageChannel: (channel: string) => channel === "telegram",
@@ -268,7 +279,8 @@ describe("applyMediaUnderstanding – echo backend gating", () => {
     expect(callArgs.accountId).toBe("primary");
     expect(callArgs.payloads).toHaveLength(1);
     expect(callArgs.payloads[0]?.text).toBe("[Transcription]\nlocal whisper result");
-    expect(callArgs.payloads[0]?.replyToId).toBe("telegram:42:501");
+    expect(callArgs.replyToId).toBe("telegram:42:501");
+    expect(callArgs.replyToMode).toBe("all");
 
     // The transcript continues unchanged into normal agent processing.
     expect(ctx.Transcript).toBe("local whisper result");
@@ -314,6 +326,41 @@ describe("applyMediaUnderstanding – echo backend gating", () => {
     const callArgs = expectSingleEchoDeliveryCall();
     expect(callArgs.payloads[0]?.text).toBe("[Transcription]\nfallback local result");
     expect(ctx.Transcript).toBe("fallback local result");
+  });
+
+  it("echoes only eligible real outputs while preserving the full agent transcript", async () => {
+    const cloudPath = await createTempAudioFile("cloud.ogg");
+    const localPath = await createTempAudioFile("local.ogg");
+    const ctx = createTelegramAudioCtx(cloudPath, {
+      media: [
+        { path: cloudPath, contentType: "audio/ogg" },
+        { path: localPath, contentType: "audio/ogg" },
+      ],
+    });
+    const cfg = createCloudFirstWithLocalFallbackConfig();
+    const audio = expectDefined(cfg.tools?.media?.audio, "audio config test invariant");
+    audio.attachments = { mode: "all", maxAttachments: 2 };
+    const providers: Record<string, MediaUnderstandingProvider> = {
+      gigaam: {
+        id: "gigaam",
+        capabilities: ["audio"],
+        transcribeAudio: async ({ fileName }) => {
+          if (fileName === "local.ogg") {
+            throw new Error("use local fallback");
+          }
+          return { text: "cloud result" };
+        },
+      },
+    };
+    mockWhisperCliStdout("local result");
+
+    await applyMediaUnderstanding({ ctx, cfg, providers });
+
+    const callArgs = expectSingleEchoDeliveryCall();
+    expect(callArgs.payloads).toEqual([{ text: "[Transcription]\nlocal result" }]);
+    expect(ctx.Transcript).toBe("Audio 1:\ncloud result\n\nAudio 2:\nlocal result");
+    expect(ctx.CommandBody).toBe(ctx.Transcript);
+    expect(ctx.RawBody).toBe(ctx.Transcript);
   });
 
   it("does NOT echo local whisper success when echoTranscript is disabled", async () => {

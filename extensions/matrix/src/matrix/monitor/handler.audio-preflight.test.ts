@@ -33,7 +33,10 @@ vi.mock("openclaw/plugin-sdk/media-understanding-runtime", async (importOriginal
       actual.createChannelPreflightAudio({
         ...params,
         sendTranscriptEcho: sendTranscriptEchoMock,
-        transcribeFirstAudio: transcribeFirstAudioMock,
+        resolveAudioPreflight: async ({ deferTranscriptEcho: _deferred, ...request }) => {
+          const transcript = await transcribeFirstAudioMock(request);
+          return transcript ? { transcript, identity: { provider: "whisper" } } : undefined;
+        },
       }),
   };
 });
@@ -251,7 +254,15 @@ describe("createMatrixRoomMessageHandler audio preflight", () => {
     const { handler } = createAudioPreflightHarness({
       cfg: {
         channels: { matrix: { dm: { allowFrom: ["*"] } } },
-        tools: { media: { audio: { enabled: true, echoTranscript: true } } },
+        tools: {
+          media: {
+            audio: {
+              enabled: true,
+              echoTranscript: true,
+              echo: { match: { provider: "whisper" } },
+            },
+          },
+        },
       },
     });
 

@@ -2,6 +2,7 @@
 // through deliverable message channels.
 import { normalizeLowercaseStringOrEmpty } from "@openclaw/normalization-core/string-coerce";
 import type { MsgContext } from "../auto-reply/templating.js";
+import type { ReplyToMode } from "../config/types.base.js";
 import type { OpenClawConfig } from "../config/types.js";
 import { logVerbose, shouldLogVerbose } from "../globals.js";
 import { createLazyRuntimeModule } from "../shared/lazy-runtime.js";
@@ -10,9 +11,12 @@ import { isDeliverableMessageChannel } from "../utils/message-channel.js";
 // The message runtime is heavy and only needed when echo delivery actually
 // proceeds to a deliverable channel.
 const loadMessageRuntime = createLazyRuntimeModule(() => import("../channels/message/runtime.js"));
+const loadReplyThreadingRuntime = createLazyRuntimeModule(
+  () => import("../auto-reply/reply/reply-threading.js"),
+);
 
 /** Default operator-visible transcript echo format for preflight audio transcription. */
-export const DEFAULT_ECHO_TRANSCRIPT_FORMAT = "[Transcription]\n{transcript}";
+export const DEFAULT_ECHO_TRANSCRIPT_FORMAT = '📝 "{transcript}"';
 
 function formatEchoTranscript(transcript: string, format: string): string {
   // Function replacer keeps `$` sequences in the transcript literal instead of
@@ -59,17 +63,42 @@ export async function sendTranscriptEcho(params: {
   }
 
   const text = formatEchoTranscript(transcript, params.format ?? DEFAULT_ECHO_TRANSCRIPT_FORMAT);
-  const replyToId = resolveEchoReplyToId(ctx);
+  const inferredReplyToId = resolveEchoReplyToId(ctx);
 
   try {
     const { sendDurableMessageBatchCore } = await loadMessageRuntime();
+    let reply:
+      | {
+          replyToId: string;
+          replyToMode: Exclude<ReplyToMode, "off">;
+        }
+      | undefined;
+    if (inferredReplyToId) {
+      const { resolveReplyDeliveryAccountId, resolveReplyToMode } =
+        await loadReplyThreadingRuntime();
+      const deliveryAccountId = resolveReplyDeliveryAccountId(
+        cfg,
+        normalizedChannel,
+        ctx.AccountId,
+      );
+      const replyToMode = resolveReplyToMode(
+        cfg,
+        normalizedChannel,
+        deliveryAccountId,
+        ctx.ChatType,
+      );
+      if (replyToMode !== "off") {
+        reply = { replyToId: inferredReplyToId, replyToMode };
+      }
+    }
     const send = await sendDurableMessageBatchCore({
       cfg,
       channel: normalizedChannel,
       to,
       accountId: ctx.AccountId ?? undefined,
       threadId: ctx.MessageThreadId ?? undefined,
-      payloads: [{ text, ...(replyToId ? { replyToId } : {}) }],
+      ...(reply ?? {}),
+      payloads: [{ text }],
       bestEffort: true,
       durability: "best_effort",
     });
@@ -78,7 +107,7 @@ export async function sendTranscriptEcho(params: {
     }
     if ((params.logSuccess ?? true) && shouldLogVerbose()) {
       logVerbose(
-        `media: echo-transcript sent to ${normalizedChannel}/${to}${replyToId ? ` (reply to ${replyToId})` : ""}`,
+        `media: echo-transcript sent to ${normalizedChannel}/${to}${reply ? ` (reply to ${reply.replyToId})` : ""}`,
       );
     }
   } catch (err) {

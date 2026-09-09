@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { transcribeFirstAudioMock } = vi.hoisted(() => ({
+const { sendTranscriptEchoMock, transcribeFirstAudioMock } = vi.hoisted(() => ({
+  sendTranscriptEchoMock: vi.fn(),
   transcribeFirstAudioMock: vi.fn(),
 }));
 
@@ -14,12 +15,22 @@ vi.mock("openclaw/plugin-sdk/media-understanding-runtime", async (importOriginal
     ) =>
       actual.createChannelPreflightAudio({
         ...params,
-        transcribeFirstAudio: transcribeFirstAudioMock,
+        resolveAudioPreflight: async ({ deferTranscriptEcho: _deferred, ...request }) => {
+          const transcript = await transcribeFirstAudioMock(request);
+          return transcript
+            ? { transcript, identity: { provider: "whisper", requestedBackend: "cpu" } }
+            : undefined;
+        },
+        sendTranscriptEcho: sendTranscriptEchoMock,
       }),
   };
 });
 
-import { isMatrixAudioContent, resolveMatrixPreflightAudioTranscript } from "./preflight-audio.js";
+import {
+  isMatrixAudioContent,
+  resolveMatrixPreflightAudioTranscript,
+  sendMatrixPreflightAudioTranscriptEcho,
+} from "./preflight-audio.js";
 
 const cfg = {} as import("openclaw/plugin-sdk/config-contracts").OpenClawConfig;
 
@@ -39,6 +50,7 @@ describe("isMatrixAudioContent", () => {
 
 describe("resolveMatrixPreflightAudioTranscript", () => {
   beforeEach(() => {
+    sendTranscriptEchoMock.mockReset();
     transcribeFirstAudioMock.mockReset();
   });
 
@@ -72,6 +84,45 @@ describe("resolveMatrixPreflightAudioTranscript", () => {
         cfg,
       }),
     );
-    expect(transcript).toBe("hello from voice");
+    expect(transcript).toEqual({
+      transcript: "hello from voice",
+      identity: { provider: "whisper", requestedBackend: "cpu" },
+    });
+  });
+
+  it("carries backend identity into deferred echo delivery", async () => {
+    transcribeFirstAudioMock.mockResolvedValue("hello from voice");
+    const echoCfg = {
+      tools: {
+        media: {
+          audio: {
+            echoTranscript: true,
+            echo: { match: { provider: "whisper" } },
+          },
+        },
+      },
+    } as import("openclaw/plugin-sdk/config-contracts").OpenClawConfig;
+    const result = await resolveMatrixPreflightAudioTranscript({
+      mediaPath: "/tmp/inbound/voice.ogg",
+      mediaContentType: "audio/ogg",
+      cfg: echoCfg,
+      accountId: "ops",
+      chatType: "channel",
+      originatingTo: "room:!room:example.org",
+      sessionKey: "agent:main:matrix:channel:!room:example.org",
+    });
+    expect(result).toBeDefined();
+
+    if (result) {
+      await sendMatrixPreflightAudioTranscriptEcho({
+        transcript: result.transcript,
+        identity: result.identity,
+        cfg: echoCfg,
+        accountId: "ops",
+        originatingTo: "room:!room:example.org",
+      });
+    }
+
+    expect(sendTranscriptEchoMock).toHaveBeenCalledOnce();
   });
 });

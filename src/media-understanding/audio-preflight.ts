@@ -7,23 +7,34 @@ import { logVerbose, shouldLogVerbose } from "../globals.js";
 import { normalizeMediaFacts } from "../media/media-facts.js";
 import { isAudioAttachment } from "./attachments.js";
 import { runAudioTranscription } from "./audio-transcription-runner.js";
-import { matchesAudioEchoIdentity } from "./echo-filter.js";
+import { type AudioTranscriptionIdentity, matchesAudioEchoIdentity } from "./echo-filter.js";
 import { DEFAULT_ECHO_TRANSCRIPT_FORMAT, sendTranscriptEcho } from "./echo-transcript.js";
 import { normalizeMediaAttachments, resolveMediaAttachmentLocalRoots } from "./runner.js";
 import type { MediaUnderstandingProvider } from "./types.js";
 
-/**
- * Transcribes the first audio attachment BEFORE mention checking.
- * This allows voice notes to be processed in group chats with requireMention: true.
- * Returns the transcript or undefined if transcription fails or no audio is found.
- */
-export async function transcribeFirstAudio(params: {
+export type AudioPreflightResult = {
+  transcript: string;
+  identity?: AudioTranscriptionIdentity;
+};
+
+type AudioPreflightParams = {
   ctx: MsgContext;
   cfg: OpenClawConfig;
   agentDir?: string;
   providers?: Record<string, MediaUnderstandingProvider>;
   activeModel?: ActiveMediaModel;
-}): Promise<string | undefined> {
+  deferTranscriptEcho?: boolean;
+};
+
+/**
+ * Transcribes the first audio attachment BEFORE mention checking.
+ * This allows voice notes to be processed in group chats with requireMention: true.
+ * Returns the transcript plus executed backend identity, or undefined when
+ * transcription fails or no audio is found.
+ */
+export async function resolveAudioPreflight(
+  params: AudioPreflightParams,
+): Promise<AudioPreflightResult | undefined> {
   const { ctx, cfg } = params;
 
   const audioConfig = cfg.tools?.media?.audio;
@@ -63,10 +74,10 @@ export async function transcribeFirstAudio(params: {
     }
 
     const echoMatch = audioConfig?.echo?.match;
-    if (
+    const shouldEcho =
       audioConfig?.echoTranscript &&
-      matchesAudioEchoIdentity({ match: echoMatch, identity: identity ?? {} })
-    ) {
+      matchesAudioEchoIdentity({ match: echoMatch, identity: identity ?? {} });
+    if (shouldEcho && !params.deferTranscriptEcho) {
       await sendTranscriptEcho({
         ctx,
         cfg,
@@ -90,7 +101,7 @@ export async function transcribeFirstAudio(params: {
       );
     }
 
-    return transcript;
+    return { transcript, identity };
   } catch (err) {
     // Preflight cannot block message handling; mention checks can still run on text-only input.
     if (shouldLogVerbose()) {
@@ -98,4 +109,11 @@ export async function transcribeFirstAudio(params: {
     }
     return undefined;
   }
+}
+
+/** Compatibility wrapper returning only the transcript text. */
+export async function transcribeFirstAudio(
+  params: Omit<AudioPreflightParams, "deferTranscriptEcho">,
+): Promise<string | undefined> {
+  return (await resolveAudioPreflight(params))?.transcript;
 }

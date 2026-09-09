@@ -23,7 +23,7 @@ export const MEDIA_AUDIO_FIELD_HELP = {
   "tools.media.audio.echo.match":
     "Restrict transcript echo to successful transcription backends matched by provider, model, requestedBackend, or observedBackend. Use this to echo local Whisper results only instead of every successful transcription.",
   "tools.media.audio.echoFormat":
-    "Format the echoed transcript with a {transcript} placeholder. Keep the placeholder intact so delivery includes the transcript.",
+    'Format the echoed transcript with a {transcript} placeholder. Set this to "[Transcription]\\n{transcript}" for plain local Whisper replies.',
 } satisfies Record<string, string>;
 
 export const MEDIA_AUDIO_FIELD_LABELS: Record<keyof typeof MEDIA_AUDIO_FIELD_HELP, string> = {

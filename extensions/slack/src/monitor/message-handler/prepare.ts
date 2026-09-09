@@ -1192,6 +1192,9 @@ export async function prepareSlackMessage(params: {
   };
 
   let preflightAudioTranscript: string | undefined;
+  let preflightAudioIdentity:
+    | NonNullable<Awaited<ReturnType<typeof resolveSlackPreflightAudioTranscript>>>["identity"]
+    | undefined;
   let preflightAudioMedia: SlackMediaResult | undefined;
   const preflightAudioFile = findCaptionlessSlackAudioFile(message);
   const shouldPreflightAudioMention =
@@ -1232,6 +1235,7 @@ export async function prepareSlackMessage(params: {
       wasMentioned = resolveWasMentioned(mentionRegexes);
       if (wasMentioned) {
         preflightAudioTranscript = preflightResult.transcript;
+        preflightAudioIdentity = preflightResult.identity;
         preflightAudioMedia = preflightMedia?.[preflightResult.mediaIndex];
       }
     }
@@ -1771,6 +1775,7 @@ export async function prepareSlackMessage(params: {
   if (preflightAudioTranscript) {
     await sendSlackPreflightAudioTranscriptEcho({
       transcript: preflightAudioTranscript,
+      identity: preflightAudioIdentity,
       cfg,
       accountId: account.accountId,
       originatingTo: preflightChannelTarget,

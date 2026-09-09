@@ -10,9 +10,11 @@ import {
   findCaptionlessSlackAudioFile,
   formatSlackAudioTranscriptForAgent,
   resolveSlackPreflightAudioTranscript,
+  sendSlackPreflightAudioTranscriptEcho,
 } from "./preflight-audio.js";
 
-const { transcribeFirstAudioMock } = vi.hoisted(() => ({
+const { sendTranscriptEchoMock, transcribeFirstAudioMock } = vi.hoisted(() => ({
+  sendTranscriptEchoMock: vi.fn(),
   transcribeFirstAudioMock: vi.fn(),
 }));
 
@@ -26,7 +28,13 @@ vi.mock("openclaw/plugin-sdk/media-understanding-runtime", async (importOriginal
     ) =>
       actual.createChannelPreflightAudio({
         ...params,
-        transcribeFirstAudio: transcribeFirstAudioMock,
+        resolveAudioPreflight: async ({ deferTranscriptEcho: _deferred, ...request }) => {
+          const transcript = await transcribeFirstAudioMock(request);
+          return transcript
+            ? { transcript, identity: { provider: "whisper", requestedBackend: "cpu" } }
+            : undefined;
+        },
+        sendTranscriptEcho: sendTranscriptEchoMock,
       }),
   };
 });
@@ -45,6 +53,7 @@ function createSlackMessage(overrides: Partial<SlackMessageEvent>): SlackMessage
 
 describe("Slack captionless audio preflight", () => {
   beforeEach(() => {
+    sendTranscriptEchoMock.mockReset();
     transcribeFirstAudioMock.mockReset();
   });
 
@@ -100,7 +109,11 @@ describe("Slack captionless audio preflight", () => {
         sessionKey: "agent:main:slack:channel:c1",
         messageThreadId: "1.000",
       }),
-    ).resolves.toEqual({ transcript: "Bill please review this", mediaIndex: 1 });
+    ).resolves.toEqual({
+      transcript: "Bill please review this",
+      identity: { provider: "whisper", requestedBackend: "cpu" },
+      mediaIndex: 1,
+    });
 
     expect(transcribeFirstAudioMock).toHaveBeenCalledTimes(1);
     expect(transcribeFirstAudioMock).toHaveBeenCalledWith({
@@ -114,6 +127,40 @@ describe("Slack captionless audio preflight", () => {
       }),
       cfg,
     });
+  });
+
+  it("carries backend identity into deferred echo delivery", async () => {
+    transcribeFirstAudioMock.mockResolvedValue("Bill please review this");
+    const cfg = {
+      tools: {
+        media: {
+          audio: {
+            echoTranscript: true,
+            echo: { match: { provider: "whisper" } },
+          },
+        },
+      },
+    } as OpenClawConfig;
+    const result = await resolveSlackPreflightAudioTranscript({
+      media: [{ path: "/tmp/voice.mp4", contentType: "audio/mp4", placeholder: "[voice]" }],
+      cfg,
+      accountId: "work",
+      originatingTo: "channel:C1",
+      sessionKey: "agent:main:slack:channel:c1",
+    });
+    expect(result).not.toBeNull();
+
+    if (result) {
+      await sendSlackPreflightAudioTranscriptEcho({
+        transcript: result.transcript,
+        identity: result.identity,
+        cfg,
+        accountId: "work",
+        originatingTo: "channel:C1",
+      });
+    }
+
+    expect(sendTranscriptEchoMock).toHaveBeenCalledOnce();
   });
 
   it("removes preflight downloads when the transcript does not admit the message", async () => {

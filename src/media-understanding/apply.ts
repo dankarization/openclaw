@@ -233,9 +233,6 @@ export async function applyMediaUnderstanding(params: {
       ctx.MediaUnderstandingDecisions = [...(ctx.MediaUnderstandingDecisions ?? []), ...decisions];
     }
 
-    const syntheticAudioIndexes = new Set(
-      syntheticSkippedAudioOutputs.map((o) => o.attachmentIndex),
-    );
     if (outputs.length > 0) {
       const audioOutputs = outputs.filter((output) => output.kind === "audio.transcription");
       if (audioOutputs.length > 0) {
@@ -252,15 +249,10 @@ export async function applyMediaUnderstanding(params: {
         // Identity filtering restricts echo to successful backend matches (for
         // example local Whisper only); synthetic placeholder outputs never echo.
         const audioCfg = cfg.tools?.media?.audio;
-        const realAudioOutputs = audioOutputs.filter(
-          (output) => !syntheticAudioIndexes.has(output.attachmentIndex),
-        );
         const echoMatch = audioCfg?.echo?.match;
-        if (
-          audioCfg?.echoTranscript &&
-          transcript &&
-          realAudioOutputs.length > 0 &&
-          realAudioOutputs.every((output) =>
+        const eligibleAudioOutputs = audioOutputs.filter(
+          (output) =>
+            audioAttachmentIndexes.has(output.attachmentIndex) &&
             matchesAudioEchoIdentity({
               match: echoMatch,
               identity: {
@@ -270,12 +262,13 @@ export async function applyMediaUnderstanding(params: {
                 observedBackend: output.observedBackend,
               },
             }),
-          )
-        ) {
+        );
+        const echoTranscript = formatAudioTranscripts(eligibleAudioOutputs);
+        if (audioCfg?.echoTranscript && echoTranscript) {
           await sendTranscriptEcho({
             ctx,
             cfg,
-            transcript,
+            transcript: echoTranscript,
             format: audioCfg.echoFormat ?? DEFAULT_ECHO_TRANSCRIPT_FORMAT,
           });
         }

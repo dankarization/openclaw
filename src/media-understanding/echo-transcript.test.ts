@@ -4,7 +4,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MsgContext } from "../auto-reply/templating.js";
 import type { OpenClawConfig } from "../config/types.js";
 
-const mockDeliverOutboundPayloads = vi.hoisted(() => vi.fn());
+const { mockDeliverOutboundPayloads, resolveReplyDeliveryAccountIdMock, resolveReplyToModeMock } =
+  vi.hoisted(() => ({
+    mockDeliverOutboundPayloads: vi.fn(),
+    resolveReplyDeliveryAccountIdMock: vi.fn(),
+    resolveReplyToModeMock: vi.fn(),
+  }));
 
 vi.mock("../infra/outbound/deliver-runtime.js", () => ({
   deliverOutboundPayloads: (...args: unknown[]) => mockDeliverOutboundPayloads(...args),
@@ -18,6 +23,11 @@ vi.mock("../infra/outbound/deliver.js", () => ({
 
 vi.mock("../channels/message/runtime.js", () => ({
   sendDurableMessageBatchCore: (...args: unknown[]) => mockDeliverOutboundPayloads(...args),
+}));
+
+vi.mock("../auto-reply/reply/reply-threading.js", () => ({
+  resolveReplyDeliveryAccountId: (...args: unknown[]) => resolveReplyDeliveryAccountIdMock(...args),
+  resolveReplyToMode: (...args: unknown[]) => resolveReplyToModeMock(...args),
 }));
 
 vi.mock("../utils/message-channel.js", () => ({
@@ -46,6 +56,10 @@ describe("sendTranscriptEcho", () => {
       results: [{ channel: "voicechat", messageId: "echo-1" }],
       receipt: { platformMessageIds: ["echo-1"], parts: [], sentAt: 1 },
     });
+    resolveReplyDeliveryAccountIdMock.mockReset();
+    resolveReplyDeliveryAccountIdMock.mockReturnValue("acc1");
+    resolveReplyToModeMock.mockReset();
+    resolveReplyToModeMock.mockReturnValue("all");
   });
 
   it("sends the default formatted transcript to the resolved origin", async () => {
@@ -97,9 +111,7 @@ describe("sendTranscriptEcho", () => {
 
     expect(mockDeliverOutboundPayloads).toHaveBeenCalledWith(
       expect.objectContaining({
-        payloads: [
-          { text: "[Transcription]\ntickets cost $$40, wait for the deal & confirm with $&" },
-        ],
+        payloads: [{ text: '📝 "tickets cost $$40, wait for the deal & confirm with $&"' }],
       }),
     );
   });
@@ -170,7 +182,7 @@ describe("sendTranscriptEcho", () => {
     });
   });
 
-  it("replies to the source message when MessageSid is available", async () => {
+  it("passes the source id through implicit reply policy when threading is enabled", async () => {
     await sendTranscriptEcho({
       ctx: createCtx({
         Provider: "telegram",
@@ -187,17 +199,19 @@ describe("sendTranscriptEcho", () => {
       expect.objectContaining({
         channel: "telegram",
         to: "telegram:42",
+        replyToId: "telegram:42:501",
+        replyToMode: "all",
         payloads: [
           {
             text: DEFAULT_ECHO_TRANSCRIPT_FORMAT.replace("{transcript}", "reply target voice note"),
-            replyToId: "telegram:42:501",
           },
         ],
       }),
     );
   });
 
-  it("falls back to MessageSid when MessageSidFull is absent", async () => {
+  it("preserves single-use mode for inferred MessageSid replies", async () => {
+    resolveReplyToModeMock.mockReturnValue("first");
     await sendTranscriptEcho({
       ctx: createCtx({
         Provider: "telegram",
@@ -211,10 +225,41 @@ describe("sendTranscriptEcho", () => {
 
     expect(mockDeliverOutboundPayloads).toHaveBeenCalledWith(
       expect.objectContaining({
+        replyToId: "501",
+        replyToMode: "first",
         payloads: [
           {
             text: DEFAULT_ECHO_TRANSCRIPT_FORMAT.replace("{transcript}", "short sid voice note"),
-            replyToId: "501",
+          },
+        ],
+      }),
+    );
+  });
+
+  it("omits automatically inferred replies when channel threading is off", async () => {
+    resolveReplyToModeMock.mockReturnValue("off");
+    await sendTranscriptEcho({
+      ctx: createCtx({
+        Provider: "telegram",
+        From: undefined,
+        OriginatingTo: "telegram:42",
+        MessageSid: "501",
+      }),
+      cfg: EMPTY_CONFIG,
+      transcript: "unthreaded voice note",
+    });
+
+    expect(mockDeliverOutboundPayloads).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        replyToId: expect.anything(),
+        replyToMode: expect.anything(),
+      }),
+    );
+    expect(mockDeliverOutboundPayloads).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payloads: [
+          {
+            text: DEFAULT_ECHO_TRANSCRIPT_FORMAT.replace("{transcript}", "unthreaded voice note"),
           },
         ],
       }),

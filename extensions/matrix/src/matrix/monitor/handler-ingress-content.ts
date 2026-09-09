@@ -140,6 +140,9 @@ export async function resolveMatrixIngressContent(config: {
   let preflightMediaDownloadFailed = false;
   let preflightMediaSizeLimitExceeded = false;
   let preflightAudioTranscript: string | undefined;
+  let preflightAudioIdentity:
+    | NonNullable<Awaited<ReturnType<typeof resolveMatrixPreflightAudioTranscript>>>["identity"]
+    | undefined;
 
   const {
     route: _route,
@@ -219,7 +222,7 @@ export async function resolveMatrixIngressContent(config: {
       });
     }
     if (preflightMedia) {
-      preflightAudioTranscript = await resolveMatrixPreflightAudioTranscript({
+      const preflightAudioResult = await resolveMatrixPreflightAudioTranscript({
         mediaPath: preflightMedia.path,
         mediaContentType: preflightMedia.contentType,
         cfg,
@@ -229,6 +232,8 @@ export async function resolveMatrixIngressContent(config: {
         messageThreadId: thread.threadId,
         sessionKey: _route.sessionKey,
       });
+      preflightAudioTranscript = preflightAudioResult?.transcript;
+      preflightAudioIdentity = preflightAudioResult?.identity;
     }
   }
   const agentMentionRegexes = core.channel.mentions.buildMentionRegexes(cfg, _route.agentId, {
@@ -343,6 +348,7 @@ export async function resolveMatrixIngressContent(config: {
   if (preflightAudioTranscript) {
     await sendMatrixPreflightAudioTranscriptEcho({
       transcript: preflightAudioTranscript,
+      identity: preflightAudioIdentity,
       cfg,
       accountId,
       originatingTo: `room:${roomId}`,

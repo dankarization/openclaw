@@ -5,6 +5,7 @@ import { mimeTypeFromFilePath } from "openclaw/plugin-sdk/media-mime";
 import {
   createChannelPreflightAudio,
   formatAudioTranscriptForAgent,
+  type ChannelPreflightAudioResult,
 } from "openclaw/plugin-sdk/media-understanding-runtime";
 import type { SlackFile, SlackMessageEvent } from "../../types.js";
 import { MAX_SLACK_MEDIA_FILES, type SlackMediaResult } from "../media-types.js";
@@ -47,14 +48,14 @@ export async function resolveSlackPreflightAudioTranscript(params: {
   originatingTo: string;
   sessionKey: string;
   messageThreadId?: string;
-}): Promise<{ transcript: string; mediaIndex: number } | null> {
+}): Promise<(ChannelPreflightAudioResult & { mediaIndex: number }) | null> {
   const mediaIndex = params.media.findIndex((entry) =>
     entry.contentType?.toLowerCase().startsWith("audio/"),
   );
   if (mediaIndex < 0) {
     return null;
   }
-  const transcript = await slackPreflightAudio.resolve({
+  const result = await slackPreflightAudio.resolveDetailed({
     request: {
       ctx: {
         media: [...params.media],
@@ -70,11 +71,12 @@ export async function resolveSlackPreflightAudioTranscript(params: {
       cfg: params.cfg,
     },
   });
-  return transcript ? { transcript, mediaIndex } : null;
+  return result ? { ...result, mediaIndex } : null;
 }
 
 export async function sendSlackPreflightAudioTranscriptEcho(params: {
   transcript: string;
+  identity?: ChannelPreflightAudioResult["identity"];
   cfg: OpenClawConfig;
   accountId: string;
   originatingTo: string;

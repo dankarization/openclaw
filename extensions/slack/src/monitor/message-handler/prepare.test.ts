@@ -82,7 +82,10 @@ vi.mock("openclaw/plugin-sdk/media-understanding-runtime", async (importOriginal
       actual.createChannelPreflightAudio({
         ...params,
         sendTranscriptEcho: sendTranscriptEchoMock,
-        transcribeFirstAudio: transcribeFirstAudioMock,
+        resolveAudioPreflight: async ({ deferTranscriptEcho: _deferred, ...request }) => {
+          const transcript = await transcribeFirstAudioMock(request);
+          return transcript ? { transcript, identity: { provider: "whisper" } } : undefined;
+        },
       }),
   };
 });
@@ -4703,12 +4706,25 @@ Second paragraph should still reach the agent after Slack's preview cutoff.`;
     appClient?: App["client"];
     channelUsers?: string[];
     audioEnabled?: boolean;
+    echoTranscript?: boolean;
   }) {
     const cfg = {
       ...(params.storePath ? { session: { store: params.storePath } } : {}),
       commands: { allowFrom: { slack: ["user:U_BEK"] } },
       messages: { groupChat: { mentionPatterns: ["\\bbill\\b"] } },
-      tools: { media: { audio: { enabled: params.audioEnabled ?? true } } },
+      tools: {
+        media: {
+          audio: {
+            enabled: params.audioEnabled ?? true,
+            ...(params.echoTranscript
+              ? {
+                  echoTranscript: true,
+                  echo: { match: { provider: "whisper" } },
+                }
+              : {}),
+          },
+        },
+      },
       channels: {
         slack: {
           enabled: true,
@@ -4752,6 +4768,7 @@ Second paragraph should still reach the agent after Slack's preview cutoff.`;
     const slackCtx = createAudioMentionSlackCtx({
       storePath,
       appClient: { conversations: { replies } } as unknown as App["client"],
+      echoTranscript: true,
     });
     let downloadedPath: string | undefined;
     let downloadedPaths: string[] = [];
@@ -4807,6 +4824,16 @@ Second paragraph should still reach the agent after Slack's preview cutoff.`;
         ctx: expect.objectContaining({ SessionKey: expectedSessionKey }),
         cfg: expect.any(Object),
       });
+      expect(sendTranscriptEchoMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ctx: expect.objectContaining({
+            Provider: "slack",
+            OriginatingTo: "channel:C0AHZFCAS1K",
+          }),
+          transcript: "Bill /new please review this",
+          format: '📝 "{transcript}"',
+        }),
+      );
       const fetchedUrls = mockFetch.mock.calls.map(([input]) => resolveFetchInputUrl(input));
       expect(fetchedUrls).toHaveLength(2);
       expect(fetchedUrls.filter((url) => url.includes("FVOICE"))).toHaveLength(1);

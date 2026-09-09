@@ -2,7 +2,7 @@
 // delivery settings.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MsgContext } from "../auto-reply/templating.js";
-import { transcribeFirstAudio } from "./audio-preflight.js";
+import { resolveAudioPreflight, transcribeFirstAudio } from "./audio-preflight.js";
 
 const runAudioTranscriptionMock = vi.hoisted(() => vi.fn());
 const sendTranscriptEchoMock = vi.hoisted(() => vi.fn());
@@ -12,7 +12,7 @@ vi.mock("./audio-transcription-runner.js", () => ({
 }));
 
 vi.mock("./echo-transcript.js", () => ({
-  DEFAULT_ECHO_TRANSCRIPT_FORMAT: "[Transcription]\n{transcript}",
+  DEFAULT_ECHO_TRANSCRIPT_FORMAT: '📝 "{transcript}"',
   sendTranscriptEcho: (...args: unknown[]) => sendTranscriptEchoMock(...args),
 }));
 
@@ -143,5 +143,38 @@ describe("transcribeFirstAudio", () => {
       transcript: "hello from dm audio",
       format: "Heard: {transcript}",
     });
+  });
+
+  it("returns backend identity without echoing when delivery is deferred", async () => {
+    runAudioTranscriptionMock.mockResolvedValueOnce({
+      transcript: "deferred voice note",
+      attachments: [],
+      identity: { provider: "whisper", requestedBackend: "cpu" },
+    });
+    const cfg = {
+      tools: {
+        media: {
+          audio: {
+            echoTranscript: true,
+            echo: { match: { provider: "whisper" } },
+          },
+        },
+      },
+    };
+
+    await expect(
+      resolveAudioPreflight({
+        ctx: {
+          Body: "<media:audio>",
+          media: [{ path: "/tmp/voice.ogg", contentType: "audio/ogg" }],
+        },
+        cfg,
+        deferTranscriptEcho: true,
+      }),
+    ).resolves.toEqual({
+      transcript: "deferred voice note",
+      identity: { provider: "whisper", requestedBackend: "cpu" },
+    });
+    expect(sendTranscriptEchoMock).not.toHaveBeenCalled();
   });
 });
