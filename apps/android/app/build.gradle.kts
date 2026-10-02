@@ -407,7 +407,7 @@ android {
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
     }
     debug {
-      applicationIdSuffix = ".debugfork"
+      applicationIdSuffix = ".debug"
       versionNameSuffix = "-debug"
       isMinifyEnabled = false
     }

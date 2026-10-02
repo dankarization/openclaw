@@ -430,21 +430,32 @@ internal val defaultChatThinkingLevelSelection =
     isGatewayProvided = false,
   )
 
-/** Canonical effort order used to clamp unsupported levels to the nearest advertised option. */
-private val chatThinkingLevelRankOrder =
-  listOf("off", "minimal", "low", "medium", "adaptive", "high", "xhigh", "max", "ultra")
+/** Canonical effort ranks aligned with Gateway THINKING_LEVEL_RANKS. */
+private val chatThinkingLevelRanks =
+  mapOf(
+    "off" to 0,
+    "minimal" to 10,
+    "low" to 20,
+    "medium" to 30,
+    "adaptive" to 30,
+    "high" to 40,
+    "xhigh" to 60,
+    "max" to 70,
+    "ultra" to 80,
+  )
 
 internal fun chatThinkingLevelRank(level: String): Int =
-  chatThinkingLevelRankOrder.indexOf(level.trim().lowercase(Locale.US))
+  chatThinkingLevelRanks[level.trim().lowercase(Locale.US)] ?: -1
 
 /**
  * Clamps [level] onto Gateway-advertised [options].
  *
+ * Aligns with Gateway resolveSupportedThinkingLevelFromProfile:
  * - Membership wins.
- * - "ultra" may be omitted from lightweight picker metadata while still being the
- *   Gateway-validated effective level; preserve it so send/UI keep that contract.
- * - Otherwise pick the nearest option by rank. Equal distance prefers Off (lower rank).
- * - If Off is absent, the sole remaining non-off option (often Ultra) is used.
+ * - Explicit "ultra" is preserved (including when omitted from lightweight picker metadata).
+ * - Auto-fallback never opts into Ultra; Ultra is excluded from clamp candidates.
+ * - Among non-Ultra options: prefer highest non-off with rank <= requested; else lowest
+ *   non-off; else Off.
  */
 internal fun clampThinkingLevelToOptions(
   level: String,
@@ -463,22 +474,32 @@ internal fun clampThinkingLevelToOptions(
   if (normalized == "ultra") return "ultra"
 
   val requestedRank = chatThinkingLevelRank(normalized)
+  // Mirror Gateway: a fallback must never opt into proactive Ultra orchestration.
   val ranked =
     ids.mapNotNull { id ->
+      if (id == "ultra") return@mapNotNull null
       val rank = chatThinkingLevelRank(id)
       if (rank < 0) null else id to rank
     }
   if (ranked.isEmpty()) {
-    return ids.firstOrNull { it == "off" } ?: ids.first()
+    return ids.firstOrNull { it == "off" } ?: "off"
   }
   if (requestedRank < 0) {
     return ids.firstOrNull { it == "off" } ?: ranked.minBy { it.second }.first
   }
-  return ranked
-    .minWith(
-      compareBy<Pair<String, Int>> { (_, rank) -> kotlin.math.abs(rank - requestedRank) }
-        .thenBy { (_, rank) -> rank },
-    ).first
+
+  val floor =
+    ranked
+      .filter { (id, rank) -> id != "off" && rank <= requestedRank }
+      .maxByOrNull { it.second }
+      ?.first
+  if (floor != null) return floor
+
+  val lowestNonOff =
+    ranked.filter { (id, _) -> id != "off" }.minByOrNull { it.second }?.first
+  if (lowestNonOff != null) return lowestNonOff
+
+  return ids.firstOrNull { it == "off" } ?: "off"
 }
 
 internal data class ChatActiveRunPresentation(

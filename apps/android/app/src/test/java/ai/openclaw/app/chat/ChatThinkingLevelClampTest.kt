@@ -29,20 +29,29 @@ class ChatThinkingLevelClampTest {
 
   @Test
   fun ambiguousAdaptivePrefersOffOnOffUltraProfile() {
-    // Equal rank distance between Off and Ultra → prefer Off (safer / cheaper).
+    // Gateway excludes Ultra from auto-fallback; adaptive clamps to Off.
     assertEquals("off", clampThinkingLevelToOptions("adaptive", options("off", "ultra")))
   }
 
   @Test
-  fun highEffortClampsTowardUltraWhenCloser() {
-    assertEquals("ultra", clampThinkingLevelToOptions("high", options("off", "ultra")))
-    assertEquals("ultra", clampThinkingLevelToOptions("max", options("off", "ultra")))
-    assertEquals("ultra", clampThinkingLevelToOptions("xhigh", options("off", "ultra")))
+  fun highEffortClampsToOffOnOffUltraProfile() {
+    // Align with Gateway resolveSupportedThinkingLevelFromProfile: never auto-fallback to Ultra.
+    assertEquals("off", clampThinkingLevelToOptions("high", options("off", "ultra")))
+    assertEquals("off", clampThinkingLevelToOptions("max", options("off", "ultra")))
+    assertEquals("off", clampThinkingLevelToOptions("xhigh", options("off", "ultra")))
   }
 
   @Test
-  fun prefersSoleNonOffWhenOffAbsent() {
-    assertEquals("ultra", clampThinkingLevelToOptions("medium", options("ultra")))
+  fun prefersNearestNonUltraWhenAvailable() {
+    // Off/High/Ultra: medium floors onto High (Ultra excluded from fallback).
+    assertEquals("high", clampThinkingLevelToOptions("medium", options("off", "high", "ultra")))
+    assertEquals("high", clampThinkingLevelToOptions("xhigh", options("off", "high", "ultra")))
+  }
+
+  @Test
+  fun soleUltraAdvertisedDoesNotAutoSelectUltra() {
+    // Gateway never auto-opts into Ultra; explicit Ultra is membership-only.
+    assertEquals("off", clampThinkingLevelToOptions("medium", options("ultra")))
   }
 
   @Test
