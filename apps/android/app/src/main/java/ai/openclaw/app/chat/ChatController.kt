@@ -3283,7 +3283,7 @@ class ChatController internal constructor(
     // rejects; reconnect flushes with a cleared catalog fail open, matching pre-gating behavior.
     val thinking =
       if (shouldSendThinkingLevel()) {
-        normalizeThinking(thinkingLevel)
+        resolveSendableThinkingLevel(normalizeThinking(thinkingLevel))
       } else {
         "off"
       }
@@ -6112,7 +6112,11 @@ class ChatController internal constructor(
       }
       // Reconnect rechecks the visible model; other queued owners keep their captured level.
       val thinking =
-        if (direct == null && sessionKey == _sessionKey.value && !shouldSendThinkingLevel()) "off" else item.thinkingLevel
+        when {
+          direct == null && sessionKey == _sessionKey.value && !shouldSendThinkingLevel() -> "off"
+          direct == null && sessionKey == _sessionKey.value -> resolveSendableThinkingLevel(item.thinkingLevel)
+          else -> item.thinkingLevel
+        }
       val params = buildChatSendParams(sessionKey, ownerAgentId, item.text, thinking, item.id, attachments)
       return OutboxSendResult.Acknowledged(parseChatSendAck(json, requestGatewayBound(gatewayId, "chat.send", params)))
     }
@@ -8047,13 +8051,20 @@ class ChatController internal constructor(
     val selected = entry?.thinkingLevel?.let(::normalizeThinking)
     val currentLevel = normalizeThinking(fallbackLevel)
     val defaultLevel = advertisedDefault?.let(::normalizeThinking)
-    // Lightweight picker metadata can omit a Gateway-validated effective level.
-    // Preserve that send state; only local/default fallbacks require picker membership.
+    // Gateway-validated Ultra may be omitted from lightweight picker metadata and must
+    // stay selectable/sendable. Any other level outside advertised options (e.g. Medium
+    // on DeepSeek Flash Off/Ultra profiles via Growter) is clamped to nearest supported.
     _thinkingLevel.value =
-      selected
-        ?: listOf(defaultLevel, currentLevel).firstOrNull { candidate -> options.any { it.id == candidate } }
-        ?: options.firstOrNull()?.id
-        ?: "off"
+      when {
+        selected != null -> clampThinkingLevelToOptions(selected, options)
+        else ->
+          listOf(defaultLevel, currentLevel).firstOrNull { candidate ->
+            candidate != null && options.any { it.id == candidate }
+          }
+            ?: options.firstOrNull { it.id == "off" }?.id
+            ?: options.firstOrNull()?.id
+            ?: "off"
+      }
   }
 
   private fun shouldSendThinkingLevel(): Boolean {
@@ -8347,6 +8358,17 @@ class ChatController internal constructor(
     )
 
   private fun normalizeThinking(raw: String): String = raw.trim().lowercase(Locale.US).ifEmpty { "off" }
+
+  /** Clamps a send level onto Gateway-advertised options when the picker is authoritative. */
+  private fun resolveSendableThinkingLevel(raw: String): String {
+    val normalized = normalizeThinking(raw)
+    val selection = _thinkingLevelSelection.value
+    return if (selection.isGatewayProvided && selection.options.isNotEmpty()) {
+      clampThinkingLevelToOptions(normalized, selection.options)
+    } else {
+      normalized
+    }
+  }
 }
 
 // Group mutations enumerate whole stores; far past any realistic session count.

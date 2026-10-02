@@ -554,6 +554,45 @@ class ChatControllerModelSelectionTest {
     }
 
   @Test
+  fun unsupportedMediumOnOffUltraProfileClampsSelectionAndSend() =
+    runTest {
+      val sentThinkingLevels = mutableListOf<String>()
+      val controller =
+        createScriptedChatController {
+          respond(
+            "sessions.list",
+            // Growter / DeepSeek Flash: session still carries Medium from a prior model/default,
+            // while advertised picker options are only Off + Ultra.
+            """{"sessions":[{"key":"main","modelProvider":"growter","model":"deepseek-v4-flash",${thinkingFields("medium", "off", "ultra")}}]}""",
+          )
+          respond("chat.send") { paramsJson ->
+            val params = json.parseToJsonElement(paramsJson.orEmpty()) as JsonObject
+            sentThinkingLevels += (params["thinking"] as JsonPrimitive).content
+            """{"runId":"run-ok","status":"ok"}"""
+          }
+        }
+
+      controller.refreshSessions()
+      advanceUntilIdle()
+
+      assertEquals(
+        listOf("off", "ultra"),
+        controller.thinkingLevelSelection.value.options.map { it.id },
+      )
+      assertEquals("off", controller.thinkingLevel.value)
+      controller.handleGatewayEvent("health", null)
+      assertTrue(
+        controller.sendMessageAwaitAcceptance(
+          message = "clamp unsupported medium",
+          thinkingLevel = controller.thinkingLevel.value,
+          attachments = emptyList(),
+        ),
+      )
+      runCurrent()
+      assertEquals(listOf("off"), sentThinkingLevels)
+    }
+
+  @Test
   fun failedSelectionDoesNotRecordRecentOrUpdateSelectedModel() =
     runTest {
       val recents = mutableListOf<String>()
