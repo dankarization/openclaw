@@ -450,9 +450,16 @@ internal fun chatThinkingLevelRank(level: String): Int =
 /**
  * Clamps [level] onto Gateway-advertised [options].
  *
- * Aligns with Gateway resolveSupportedThinkingLevelFromProfile:
+ * Aligns with Gateway resolveGatewaySessionThinkingLevel /
+ * resolveSupportedThinkingLevelFromProfile:
  * - Membership wins.
- * - Explicit "ultra" is preserved (including when omitted from lightweight picker metadata).
+ * - Explicit "ultra" is always preserved (including when omitted from lightweight
+ *   picker metadata).
+ * - Other canonical Gateway-effective levels omitted from incomplete picker metadata
+ *   are also preserved. Lightweight / identity-only catalogs must not reinterpret an
+ *   already-validated level (see session-utils.metadata-perf medium + Off/High/Low/Ultra).
+ * - Clamp only when advertised options prove the level unsupported: complete restricted
+ *   profiles such as Off/Ultra (non-Ultra options are only Off), e.g. Growter stale Medium.
  * - Auto-fallback never opts into Ultra; Ultra is excluded from clamp candidates.
  * - Among non-Ultra options: prefer highest non-off with rank <= requested; else lowest
  *   non-off; else Off.
@@ -474,6 +481,12 @@ internal fun clampThinkingLevelToOptions(
   if (normalized == "ultra") return "ultra"
 
   val requestedRank = chatThinkingLevelRank(normalized)
+  // Incomplete picker metadata can omit a Gateway-validated canonical level. Preserve it
+  // unless options are a complete Off/Ultra-style restricted profile.
+  if (requestedRank >= 0 && !thinkingOptionsProveLevelUnsupported(ids)) {
+    return normalized
+  }
+
   // Mirror Gateway: a fallback must never opt into proactive Ultra orchestration.
   val ranked =
     ids.mapNotNull { id ->
@@ -500,6 +513,16 @@ internal fun clampThinkingLevelToOptions(
   if (lowestNonOff != null) return lowestNonOff
 
   return ids.firstOrNull { it == "off" } ?: "off"
+}
+
+/**
+ * Complete restricted picker sets (Off and/or Ultra only) prove non-member levels
+ * unsupported. Richer ladders may still be lightweight projections that omit a valid
+ * effective level, so they must not force a clamp.
+ */
+private fun thinkingOptionsProveLevelUnsupported(ids: List<String>): Boolean {
+  val nonUltra = ids.filter { it != "ultra" }
+  return nonUltra.isEmpty() || nonUltra.all { it == "off" }
 }
 
 internal data class ChatActiveRunPresentation(

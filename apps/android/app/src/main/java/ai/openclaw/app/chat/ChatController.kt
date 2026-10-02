@@ -8057,9 +8057,9 @@ class ChatController internal constructor(
     val selected = entry?.thinkingLevel?.let(::normalizeThinking)
     val currentLevel = normalizeThinking(fallbackLevel)
     val defaultLevel = advertisedDefault?.let(::normalizeThinking)
-    // Gateway-validated Ultra may be omitted from lightweight picker metadata and must
-    // stay selectable/sendable. Any other level outside advertised options (e.g. Medium
-    // on DeepSeek Flash Off/Ultra profiles via Growter) is clamped to nearest supported.
+    // Gateway-validated canonical levels may be omitted from lightweight picker metadata
+    // and must stay selectable/sendable. Clamp only when options prove unsupported
+    // (e.g. Growter DeepSeek Flash Off/Ultra + stale Medium → Off).
     _thinkingLevel.value =
       when {
         selected != null -> clampThinkingLevelToOptions(selected, options)
@@ -8365,7 +8365,7 @@ class ChatController internal constructor(
 
   private fun normalizeThinking(raw: String): String = raw.trim().lowercase(Locale.US).ifEmpty { "off" }
 
-  /** Clamps a send level onto Gateway-advertised options when the picker is authoritative. */
+  /** Clamps a send level onto Gateway options when the picker proves the level unsupported. */
   private fun resolveSendableThinkingLevel(raw: String): String {
     val normalized = normalizeThinking(raw)
     val selection = _thinkingLevelSelection.value
