@@ -53,10 +53,13 @@ export function withDurableDeliveryRuntime<T>(
   const channel = current.channels.find((entry) => entry.plugin.id === input.channel);
   const prepareRuntimeHandoff = input.prepareRuntimeHandoff;
   const admittedChannel = getPluginRegistryGatewayChannelRegistration(registry, input.channel);
+  // A hot reload allocates successor plugin objects even when the sender is unchanged.
+  // Continuity is the channel id plus unchanged channel, default, and plugin-entry config.
+  // prepareRuntimeHandoff still pins the admitted credential before any send.
   const retainedChannel =
-    channel &&
+    channel != null &&
     admittedChannel?.pluginId === channel.pluginId &&
-    admittedChannel.plugin === channel.plugin;
+    admittedChannel.plugin.id === channel.plugin.id;
   if (
     !cfg ||
     !isDeepStrictEqual(cfg.channels?.[input.channel], input.cfg.channels?.[input.channel]) ||
