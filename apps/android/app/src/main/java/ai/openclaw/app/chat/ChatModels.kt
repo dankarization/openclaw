@@ -430,6 +430,57 @@ internal val defaultChatThinkingLevelSelection =
     isGatewayProvided = false,
   )
 
+/** Canonical effort order used to clamp unsupported levels to the nearest advertised option. */
+private val chatThinkingLevelRankOrder =
+  listOf("off", "minimal", "low", "medium", "adaptive", "high", "xhigh", "max", "ultra")
+
+internal fun chatThinkingLevelRank(level: String): Int =
+  chatThinkingLevelRankOrder.indexOf(level.trim().lowercase(Locale.US))
+
+/**
+ * Clamps [level] onto Gateway-advertised [options].
+ *
+ * - Membership wins.
+ * - "ultra" may be omitted from lightweight picker metadata while still being the
+ *   Gateway-validated effective level; preserve it so send/UI keep that contract.
+ * - Otherwise pick the nearest option by rank. Equal distance prefers Off (lower rank).
+ * - If Off is absent, the sole remaining non-off option (often Ultra) is used.
+ */
+internal fun clampThinkingLevelToOptions(
+  level: String,
+  options: List<ChatThinkingLevelOption>,
+): String {
+  val normalized = level.trim().lowercase(Locale.US).ifEmpty { "off" }
+  if (options.isEmpty()) return normalized
+  val ids =
+    options
+      .map { it.id.trim().lowercase(Locale.US) }
+      .filter { it.isNotEmpty() }
+      .distinct()
+  if (ids.isEmpty()) return normalized
+  if (normalized in ids) return normalized
+  // Existing session contract: Ultra can be effective while omitted from advertised options.
+  if (normalized == "ultra") return "ultra"
+
+  val requestedRank = chatThinkingLevelRank(normalized)
+  val ranked =
+    ids.mapNotNull { id ->
+      val rank = chatThinkingLevelRank(id)
+      if (rank < 0) null else id to rank
+    }
+  if (ranked.isEmpty()) {
+    return ids.firstOrNull { it == "off" } ?: ids.first()
+  }
+  if (requestedRank < 0) {
+    return ids.firstOrNull { it == "off" } ?: ranked.minBy { it.second }.first
+  }
+  return ranked
+    .minWith(
+      compareBy<Pair<String, Int>> { (_, rank) -> kotlin.math.abs(rank - requestedRank) }
+        .thenBy { (_, rank) -> rank },
+    ).first
+}
+
 internal data class ChatActiveRunPresentation(
   val count: Int = 0,
   val runId: String? = null,
