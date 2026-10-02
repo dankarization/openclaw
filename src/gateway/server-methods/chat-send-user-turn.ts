@@ -2,12 +2,14 @@ import { normalizeOptionalString } from "@openclaw/normalization-core/string-coe
 import { bindRequesterProfile } from "../../auto-reply/requester-profile.js";
 import type { RuntimeMsgContext as MsgContext } from "../../auto-reply/templating.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
+import { DEFAULT_ECHO_TRANSCRIPT_FORMAT } from "../../media-understanding/echo-transcript.js";
 import { readPersistedMediaFacts, type MediaFact } from "../../media/media-facts.js";
 import { isProgressCardRefreshInputProvenance } from "../../sessions/input-provenance.js";
 import { prepareSessionParticipantInput } from "../../sessions/session-participant-input.js";
 import type { UserTurnInput } from "../../sessions/user-turn-transcript.js";
 import type { PersistedUserTurnMessage } from "../../sessions/user-turn-transcript.types.js";
-import { isBrowserOperatorUiClient } from "../../utils/message-channel.js";
+import { createLazyImportLoader } from "../../shared/lazy-promise.js";
+import { isBrowserOperatorUiClient, isWebchatClient } from "../../utils/message-channel.js";
 import {
   type ChatImageContent,
   type OffloadedRef,
@@ -38,6 +40,44 @@ type ChatSendUserTurnInputController = {
 type PersistedChatSendMedia = Awaited<
   ReturnType<typeof persistInboundImagesForTranscript>
 >["entries"];
+
+const audioPreflightLoader = createLazyImportLoader(
+  () => import("../../media-understanding/audio-preflight.js"),
+);
+
+async function resolveWebchatTranscriptEcho(params: {
+  clientInfo: NormalizedChatSendRequest["clientInfo"];
+  cfg: OpenClawConfig | undefined;
+  media: MediaFact[];
+}): Promise<string | undefined> {
+  const audio = params.cfg?.tools?.media?.audio;
+  if (!isWebchatClient(params.clientInfo) || !audio?.echoTranscript) {
+    return undefined;
+  }
+  const transcript = await audioPreflightLoader
+    .load()
+    .then(({ transcribeFirstAudio }) =>
+      transcribeFirstAudio({
+        ctx: { media: params.media },
+        // WebChat is internal-only. Persist the configured echo projection here
+        // instead of attempting outbound delivery from audio preflight.
+        cfg: {
+          ...params.cfg,
+          tools: {
+            ...params.cfg?.tools,
+            media: {
+              ...params.cfg?.tools?.media,
+              audio: { ...audio, echoTranscript: false },
+            },
+          },
+        },
+      }),
+    )
+    .catch(() => undefined);
+  return transcript
+    ? (audio.echoFormat ?? DEFAULT_ECHO_TRANSCRIPT_FORMAT).replace("{transcript}", () => transcript)
+    : undefined;
+}
 
 async function persistChatSendImages(params: {
   images: ChatImageContent[];
@@ -144,16 +184,24 @@ export function prepareChatSendUserTurn(params: {
     },
   });
   userTurn.setInputPromise(
-    persistedMediaForTranscriptPromise.then((result) => {
+    persistedMediaForTranscriptPromise.then(async (result) => {
       const media = result.entries.map((entry) => entry.fact);
       const slots = result.entries.flatMap((entry, factIndex) =>
         entry.imageKind ? [{ kind: entry.imageKind, factIndex }] : [],
       );
+      const transcriptEcho = await resolveWebchatTranscriptEcho({
+        clientInfo: request.clientInfo,
+        cfg: session.cfg,
+        media: result.entries.map((entry) => ({ ...entry.fact, path: entry.path })),
+      });
       return {
         ...userTurn.baseInput,
+        ...(transcriptEcho
+          ? { text: [userTurn.baseInput.text, transcriptEcho].filter(Boolean).join("\n") }
+          : {}),
         ...(result.omission === "inline-image-save-failed"
           ? {
-              text: [userTurn.baseInput.text, INLINE_IMAGE_DURABLE_OMISSION_MARKER]
+              text: [userTurn.baseInput.text, transcriptEcho, INLINE_IMAGE_DURABLE_OMISSION_MARKER]
                 .filter(Boolean)
                 .join("\n"),
             }
