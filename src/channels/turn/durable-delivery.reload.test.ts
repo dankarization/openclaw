@@ -62,6 +62,8 @@ async function replacementFixture(options?: {
   const current = createTestRegistry([
     {
       pluginId: "telegram",
+      pluginName: "Telegram (bundled)",
+      rootDir: "/test/bundled/telegram",
       source: "test",
       plugin: {
         ...createChannelTestPluginBase({ id: "telegram" }),
@@ -102,6 +104,10 @@ async function replacementFixture(options?: {
   const currentTelegramPlugin = current.channels.find(
     (entry) => entry.pluginId === "telegram",
   )?.plugin;
+  const admittedTelegramRegistration = old.channels.find((entry) => entry.pluginId === "telegram");
+  const currentTelegramRegistration = current.channels.find(
+    (entry) => entry.pluginId === "telegram",
+  );
   bindPluginRegistryGatewayOwner(old, owner);
   bindPluginRegistryGatewayOwner(current, owner);
   // Agent-only registries inherit ingress identity even when they expose no channels.
@@ -143,6 +149,8 @@ async function replacementFixture(options?: {
     current,
     admittedTelegramPlugin,
     currentTelegramPlugin,
+    admittedTelegramRegistration,
+    currentTelegramRegistration,
     publication,
     setConfig,
     sendText,
@@ -341,6 +349,19 @@ describe("final delivery after plugin replacement", () => {
     expect(fixture.currentTelegramPlugin).toBeDefined();
     expect(fixture.admittedTelegramPlugin).not.toBe(fixture.currentTelegramPlugin);
     expect(fixture.admittedTelegramPlugin?.id).toBe(fixture.currentTelegramPlugin?.id);
+    // Provenance must be identical across reload for the same registration;
+    // otherwise the strengthened continuity predicate would refuse delivery.
+    expect(fixture.admittedTelegramRegistration).toBeDefined();
+    expect(fixture.currentTelegramRegistration).toBeDefined();
+    expect(fixture.admittedTelegramRegistration?.source).toBe(
+      fixture.currentTelegramRegistration?.source,
+    );
+    expect(fixture.admittedTelegramRegistration?.rootDir).toBe(
+      fixture.currentTelegramRegistration?.rootDir,
+    );
+    expect(fixture.admittedTelegramRegistration?.pluginName).toBe(
+      fixture.currentTelegramRegistration?.pluginName,
+    );
     expect(turnCfg.channels?.telegram).toEqual(currentCfg.channels?.telegram);
     expect(turnCfg.channels?.defaults).toEqual(currentCfg.channels?.defaults);
     expect(turnCfg.plugins?.entries?.telegram).toEqual(currentCfg.plugins?.entries?.telegram);
@@ -372,6 +393,37 @@ describe("final delivery after plugin replacement", () => {
     expect(result).toMatchObject({
       status: "failed",
       error: { message },
+    });
+    expect(result.status === "failed" ? result.error : undefined).toBeInstanceOf(
+      PlatformMessageNotDispatchedError,
+    );
+    expect(fixture.sendText).not.toHaveBeenCalled();
+  });
+
+  it("refuses before send when the same-id registration has different owner provenance", async () => {
+    vi.stubEnv("OPENCLAW_STATE_DIR", state.tmpDir());
+    const fixture = await replacementFixture({ distinctPluginIdentity: true });
+    // The successor registration keeps the id and sender config but comes from
+    // another owner provenance (e.g. a reinstalled or relocated plugin).
+    const admitted = fixture.admittedTelegramRegistration;
+    expect(admitted).toBeDefined();
+    fixture.current.channels = fixture.current.channels.map((entry) =>
+      entry.pluginId === "telegram"
+        ? { ...entry, source: "other", rootDir: "/other/telegram" }
+        : entry,
+    );
+    const successor = fixture.current.channels.find((entry) => entry.pluginId === "telegram");
+    expect(successor?.source).not.toBe(admitted?.source);
+    expect(successor?.rootDir).not.toBe(admitted?.rootDir);
+
+    const result = await fixture.deliver();
+    expect(result).toMatchObject({
+      status: "failed",
+      error: {
+        message: expect.stringContaining(
+          "The reply channel changed or cannot preserve its sender; delivery was not started.",
+        ),
+      },
     });
     expect(result.status === "failed" ? result.error : undefined).toBeInstanceOf(
       PlatformMessageNotDispatchedError,
