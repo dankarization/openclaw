@@ -10,6 +10,49 @@ import { transcribeFirstAudio } from "./audio-preflight.js";
 import { createSafeAudioFixtureBuffer } from "./runner.test-utils.js";
 
 describe("audio preflight attachment handoff", () => {
+  it("runs one real CLI transcription for matching Telegram voice across accounts", async () => {
+    await withTestDir({ prefix: "openclaw-shared-voice-cli-" }, async (dir) => {
+      const callsPath = path.join(dir, "calls.txt");
+      const files = [path.join(dir, "alpha.wav"), path.join(dir, "beta.wav")] as const;
+      await Promise.all(files.map((file) => fs.writeFile(file, createSafeAudioFixtureBuffer())));
+      const cfg: OpenClawConfig = {
+        plugins: { enabled: false },
+        tools: {
+          media: {
+            models: [
+              {
+                type: "cli",
+                command: process.execPath,
+                args: [
+                  "-e",
+                  'require("node:fs").appendFileSync(process.argv[2], "called\\n"); process.stdout.write("@alpha @beta hello")',
+                  "{{AttachmentPath}}",
+                  callsPath,
+                ],
+                capabilities: ["audio"],
+              },
+            ],
+          },
+        },
+      };
+      const createRequest = (file: string, accountId: string) => ({
+        ctx: {
+          Provider: "telegram",
+          Surface: "telegram",
+          AccountId: accountId,
+          media: [{ path: file, contentType: "audio/wav", workspaceDir: dir }],
+        } satisfies MsgContext,
+        cfg,
+        telegramVoice: { chatId: "-123", messageId: "4242" },
+      });
+      const transcripts = await Promise.all([
+        transcribeFirstAudio(createRequest(files[0], "alpha")),
+        transcribeFirstAudio(createRequest(files[1], "beta")),
+      ]);
+      expect(transcripts).toEqual(["@alpha @beta hello", "@alpha @beta hello"]);
+      expect(await fs.readFile(callsPath, "utf8")).toBe("called\n");
+    });
+  });
   it("preserves prepared text when there is no media enrichment", async () => {
     const ctx: MsgContext = {
       Body: "transport envelope",

@@ -17,6 +17,22 @@ function createDatabase(): import("node:sqlite").DatabaseSync {
   return db;
 }
 
+function installDiagnosticClock() {
+  let wallTimeMs = 0;
+  let monotonicNs = 0n;
+  vi.spyOn(Date, "now").mockImplementation(() => wallTimeMs);
+  vi.spyOn(process.hrtime, "bigint").mockImplementation(() => monotonicNs);
+  return {
+    advance(milliseconds: number) {
+      wallTimeMs += milliseconds;
+      monotonicNs += BigInt(milliseconds) * 1_000_000n;
+    },
+    setWallTime(milliseconds: number) {
+      wallTimeMs = milliseconds;
+    },
+  };
+}
+
 function readEntries(db: import("node:sqlite").DatabaseSync) {
   return db
     .prepare("SELECT id FROM entries ORDER BY id")
@@ -38,9 +54,10 @@ describe("SQLite transaction diagnostics", () => {
     "logs one structured warning for a terminal lock failure (%s labels)",
     (labels) => {
       const execCalls: string[] = [];
-      const logger = { warn: vi.fn() };
-      let now = 0;
-      vi.spyOn(Date, "now").mockImplementation(() => now);
+      const logger = {
+        warn: vi.fn<(message: string, fields?: Record<string, unknown>) => void>(),
+      };
+      const clock = installDiagnosticClock();
       const lockError = Object.assign(new Error("database is locked"), {
         code: "ERR_SQLITE_ERROR",
         errcode: 5,
@@ -50,7 +67,7 @@ describe("SQLite transaction diagnostics", () => {
         exec(sql: string) {
           execCalls.push(sql);
           if (sql === "BEGIN IMMEDIATE") {
-            now += 7;
+            clock.advance(7);
             throw lockError;
           }
         },
@@ -87,7 +104,12 @@ describe("SQLite transaction diagnostics", () => {
           elapsedMs: 7,
           beginAdmission: { nativeAttempts: 1, nativeMs: 7, serviceCalls: 0, serviceMs: 0 },
           failureKind: "lock-contention",
+          startedAtWallTimeMs: 0,
+          endedAtWallTimeMs: 7,
           isMainThread,
+          operationLabel: labels === "explicit" ? "session.patch" : null,
+          readerOwnerOperation: labels === "unlabeled" ? null : "worker.patch",
+          readerOwnerKind: labels === "unlabeled" ? null : "worker",
           operation:
             labels === "explicit"
               ? "session.patch"
@@ -101,25 +123,38 @@ describe("SQLite transaction diagnostics", () => {
           threadId,
         }),
       );
+      const lockCall = logger.warn.mock.calls[0];
+      if (!lockCall?.[1]) {
+        throw new Error("expected lock diagnostic fields");
+      }
+      const lockFields = lockCall[1];
+      expect(String(lockFields.transactionId).split(":").slice(0, 2)).toEqual([
+        String(process.pid),
+        String(threadId),
+      ]);
+      expect(BigInt(String(lockFields.startedAtMonotonicNs))).toBeLessThanOrEqual(
+        BigInt(String(lockFields.endedAtMonotonicNs)),
+      );
     },
   );
 
   it("does not warn for busyTimeoutMs: 0 with fast successful transactions (regression)", () => {
-    const logger = { warn: vi.fn() };
-    let now = 0;
-    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const logger = {
+      warn: vi.fn<(message: string, fields?: Record<string, unknown>) => void>(),
+    };
+    const clock = installDiagnosticClock();
     const db = createDatabase();
     const location = vi.spyOn(db, "location");
     const exec = db.exec.bind(db);
     vi.spyOn(db, "exec").mockImplementation((sql) => {
       exec(sql);
-      now += 5;
+      clock.advance(5);
     });
 
     runSqliteImmediateTransactionSync(
       db,
       () => {
-        now += 5;
+        clock.advance(5);
         return "committed";
       },
       { busyTimeoutMs: 0, logger },
@@ -133,14 +168,15 @@ describe("SQLite transaction diagnostics", () => {
   });
 
   it("still warns for busyTimeoutMs: 0 when transaction crosses the default 1000ms threshold", () => {
-    const logger = { warn: vi.fn() };
-    let now = 0;
-    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const logger = {
+      warn: vi.fn<(message: string, fields?: Record<string, unknown>) => void>(),
+    };
+    const clock = installDiagnosticClock();
     const db = createDatabase();
     const exec = db.exec.bind(db);
     vi.spyOn(db, "exec").mockImplementation((sql) => {
       exec(sql);
-      now += 1_500;
+      clock.advance(1_500);
     });
 
     runSqliteImmediateTransactionSync(db, () => "committed", {
@@ -154,17 +190,61 @@ describe("SQLite transaction diagnostics", () => {
     expect(logger.warn).toHaveBeenCalledWith("slow SQLite transaction step", expect.anything());
   });
 
+  it("reports monotonic slow intervals despite a backwards wall-clock adjustment", () => {
+    const logger = {
+      warn: vi.fn<(message: string, fields?: Record<string, unknown>) => void>(),
+    };
+    const clock = installDiagnosticClock();
+    const db = createDatabase();
+    const exec = db.exec.bind(db);
+    vi.spyOn(db, "exec").mockImplementation((sql) => {
+      exec(sql);
+      if (sql === "BEGIN IMMEDIATE") {
+        clock.advance(5_000);
+      }
+    });
+
+    runSqliteImmediateTransactionSync(
+      db,
+      () => {
+        clock.advance(5_000);
+        clock.setWallTime(0);
+        return "completed";
+      },
+      { logger },
+    );
+
+    const beginCall = logger.warn.mock.calls.find(
+      ([message, fields]) => message === "slow SQLite transaction step" && fields?.step === "begin",
+    );
+    if (!beginCall?.[1]) {
+      throw new Error("expected slow BEGIN diagnostic fields");
+    }
+    expect(beginCall[1].elapsedMs).toBe(5_000);
+
+    const holdCall = logger.warn.mock.calls.find(
+      ([message]) => message === "slow SQLite transaction hold",
+    );
+    if (!holdCall?.[1]) {
+      throw new Error("expected monotonic slow transaction hold fields");
+    }
+    expect(holdCall[1].elapsedMs).toBe(5_000);
+    expect(holdCall[1].beginSucceededAtWallTimeMs).toBe(5_000);
+    expect(holdCall[1].terminalWallTimeMs).toBe(0);
+  });
+
   it.each(["immediate", "deferred"] as const)(
     "logs slow successful %s transaction steps without attributing lock contention",
     (mode) => {
-      const logger = { warn: vi.fn() };
-      let now = 0;
-      vi.spyOn(Date, "now").mockImplementation(() => now);
+      const logger = {
+        warn: vi.fn<(message: string, fields?: Record<string, unknown>) => void>(),
+      };
+      const clock = installDiagnosticClock();
       const db = createDatabase();
       const exec = db.exec.bind(db);
       vi.spyOn(db, "exec").mockImplementation((sql) => {
         exec(sql);
-        now += 1_500;
+        clock.advance(1_500);
       });
 
       const run =
@@ -174,7 +254,7 @@ describe("SQLite transaction diagnostics", () => {
           db,
           () => {
             db.prepare("INSERT INTO entries VALUES ('committed', 'value')").run();
-            now += 1_500;
+            clock.advance(1_500);
             return "committed";
           },
           { busyTimeoutMs: 5_000, logger, slowTransactionHoldMs: 0 },
@@ -200,22 +280,31 @@ describe("SQLite transaction diagnostics", () => {
             : {}),
           isMainThread,
           operation: "worker.entries",
+          operationLabel: null,
+          readerOwnerOperation: "worker.entries",
+          readerOwnerKind: "worker",
           pid: process.pid,
           step: "begin",
           threadId,
         }),
       );
-      expect(logger.warn).toHaveBeenCalledWith("slow SQLite transaction step", {
-        async: false,
-        busyTimeoutMs: 5_000,
-        database: ":memory:",
-        elapsedMs: 1_500,
-        isMainThread,
-        operation: "worker.entries",
-        pid: process.pid,
-        step: "commit",
-        threadId,
-      });
+      expect(logger.warn).toHaveBeenCalledWith(
+        "slow SQLite transaction step",
+        expect.objectContaining({
+          async: false,
+          busyTimeoutMs: 5_000,
+          database: ":memory:",
+          elapsedMs: 1_500,
+          isMainThread,
+          operation: "worker.entries",
+          operationLabel: null,
+          readerOwnerOperation: "worker.entries",
+          readerOwnerKind: "worker",
+          pid: process.pid,
+          step: "commit",
+          threadId,
+        }),
+      );
       expect(logger.warn).toHaveBeenCalledWith(
         "slow SQLite transaction hold",
         expect.objectContaining({
@@ -225,19 +314,132 @@ describe("SQLite transaction diagnostics", () => {
           isMainThread,
           mode,
           operation: "worker.entries",
+          operationLabel: null,
+          readerOwnerOperation: "worker.entries",
+          readerOwnerKind: "worker",
           pid: process.pid,
           threadId,
+          terminal: "returned",
+          connectionState: "open",
+          transactionState: "inactive",
         }),
       );
+      const beginCall = logger.warn.mock.calls.find(
+        ([message, fields]) =>
+          message === "slow SQLite transaction step" && fields?.step === "begin",
+      );
+      if (!beginCall?.[1]) {
+        throw new Error("expected slow BEGIN diagnostic fields");
+      }
+      const beginStep = beginCall[1];
+      const commitCall = logger.warn.mock.calls.find(
+        ([message, fields]) =>
+          message === "slow SQLite transaction step" && fields?.step === "commit",
+      );
+      if (!commitCall?.[1]) {
+        throw new Error("expected slow COMMIT diagnostic fields");
+      }
+      const commitStep = commitCall[1];
+      const holdCall = logger.warn.mock.calls.find(
+        ([message]) => message === "slow SQLite transaction hold",
+      );
+      if (!holdCall?.[1]) {
+        throw new Error("expected slow transaction hold diagnostic fields");
+      }
+      const hold = holdCall[1];
+      expect(String(beginStep.transactionId).split(":").slice(0, 2)).toEqual([
+        String(process.pid),
+        String(threadId),
+      ]);
+      expect(commitStep.transactionId).toBe(beginStep.transactionId);
+      expect(hold.transactionId).toBe(beginStep.transactionId);
+      expect(BigInt(String(hold.beginAttemptStartedAtMonotonicNs))).toBeLessThanOrEqual(
+        BigInt(String(hold.beginSucceededAtMonotonicNs)),
+      );
+      expect(BigInt(String(hold.beginSucceededAtMonotonicNs))).toBeLessThanOrEqual(
+        BigInt(String(hold.terminalMonotonicNs)),
+      );
+      const beginAttemptWallTimeMs = hold.beginAttemptStartedAtWallTimeMs;
+      const beginSucceededWallTimeMs = hold.beginSucceededAtWallTimeMs;
+      const terminalWallTimeMs = hold.terminalWallTimeMs;
+      if (
+        typeof beginAttemptWallTimeMs !== "number" ||
+        typeof beginSucceededWallTimeMs !== "number" ||
+        typeof terminalWallTimeMs !== "number"
+      ) {
+        throw new Error("expected wall-clock timestamps in transaction hold diagnostics");
+      }
+      expect(beginAttemptWallTimeMs).toBeLessThanOrEqual(beginSucceededWallTimeMs);
+      expect(beginSucceededWallTimeMs).toBeLessThanOrEqual(terminalWallTimeMs);
+    },
+  );
+
+  it.each(["release", "rollback"] as const)(
+    "logs only the outer hold after a nested savepoint %s",
+    (nestedOutcome) => {
+      const logger = {
+        warn: vi.fn<(message: string, fields?: Record<string, unknown>) => void>(),
+      };
+      const clock = installDiagnosticClock();
+      const db = createDatabase();
+      const exec = db.exec.bind(db);
+      vi.spyOn(db, "exec").mockImplementation((sql) => {
+        exec(sql);
+        clock.advance(1_500);
+      });
+
+      runSqliteImmediateTransactionSync(
+        db,
+        () => {
+          try {
+            runSqliteImmediateTransactionSync(
+              db,
+              () => {
+                db.prepare("INSERT INTO entries VALUES ('nested', 'value')").run();
+                if (nestedOutcome === "rollback") {
+                  throw new Error("nested operation rejected");
+                }
+                return "nested";
+              },
+              { logger, slowTransactionHoldMs: 0 },
+            );
+          } catch {
+            // The outer transaction deliberately handles the nested rollback.
+          }
+          return "outer";
+        },
+        { logger, slowTransactionHoldMs: 0 },
+      );
+
+      expect(readEntries(db)).toEqual(nestedOutcome === "release" ? ["nested"] : []);
+      const holds = logger.warn.mock.calls.filter(
+        ([message]) => message === "slow SQLite transaction hold",
+      );
+      expect(holds).toHaveLength(1);
+      const beginCall = logger.warn.mock.calls.find(
+        ([message, fields]) =>
+          message === "slow SQLite transaction step" && fields?.step === "begin",
+      );
+      if (!beginCall?.[1]) {
+        throw new Error("expected outer BEGIN diagnostic fields");
+      }
+      const holdCall = holds[0];
+      if (!holdCall?.[1]) {
+        throw new Error("expected outer hold diagnostic fields");
+      }
+      expect(holdCall[1].transactionId).toBe(beginCall[1].transactionId);
+      expect(holdCall[1].terminal).toBe("returned");
+      expect(holdCall[1].transactionState).toBe("inactive");
     },
   );
 
   it.each([false, true])(
     "names a slow failed transaction holder (rollback fails: %s)",
     (rollbackFails) => {
-      const logger = { warn: vi.fn() };
-      let now = 0;
-      vi.spyOn(Date, "now").mockImplementation(() => now);
+      const logger = {
+        warn: vi.fn<(message: string, fields?: Record<string, unknown>) => void>(),
+      };
+      const clock = installDiagnosticClock();
       const db = createDatabase();
       if (rollbackFails) {
         const exec = db.exec.bind(db);
@@ -252,7 +454,7 @@ describe("SQLite transaction diagnostics", () => {
         runSqliteImmediateTransactionSync(
           db,
           () => {
-            now += 5_100;
+            clock.advance(5_100);
             throw new Error("rejected mutation");
           },
           {
@@ -274,8 +476,51 @@ describe("SQLite transaction diagnostics", () => {
           isMainThread,
           mode: "immediate",
           operation: "session.write",
+          operationLabel: "session.write",
+          terminal: "threw",
+          connectionState: rollbackFails ? "retired" : "open",
+          transactionState: rollbackFails ? "unavailable" : "inactive",
         }),
       );
     },
   );
+
+  it("does not report a commit when the commit guard throws after COMMIT returns", () => {
+    const logger = {
+      warn: vi.fn<(message: string, fields?: Record<string, unknown>) => void>(),
+    };
+    const clock = installDiagnosticClock();
+    const db = createDatabase();
+
+    expect(() =>
+      runSqliteImmediateTransactionSync(
+        db,
+        () => {
+          clock.advance(1_500);
+          return "guard-rejected";
+        },
+        {
+          logger,
+          operationLabel: "diagnostic.guard",
+          slowTransactionHoldMs: 0,
+          withCommit(commit) {
+            commit();
+            throw new Error("post-commit guard failure");
+          },
+        },
+      ),
+    ).toThrow("post-commit guard failure");
+
+    expect(db.isOpen).toBe(false);
+    const holdCall = logger.warn.mock.calls.find(
+      ([message]) => message === "slow SQLite transaction hold",
+    );
+    if (!holdCall?.[1]) {
+      throw new Error("expected post-guard transaction hold diagnostic fields");
+    }
+    const hold = holdCall[1];
+    expect(hold.terminal).toBe("threw");
+    expect(hold.connectionState).toBe("retired");
+    expect(hold.transactionState).toBe("unavailable");
+  });
 });

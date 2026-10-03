@@ -41,6 +41,19 @@ function readEntries(db: import("node:sqlite").DatabaseSync): string[] {
     .map((row) => (row as { id: string }).id);
 }
 
+function installDiagnosticClock() {
+  let wallTimeMs = 0;
+  let monotonicNs = 0n;
+  vi.spyOn(Date, "now").mockImplementation(() => wallTimeMs);
+  vi.spyOn(process.hrtime, "bigint").mockImplementation(() => monotonicNs);
+  return {
+    advance(milliseconds: number) {
+      wallTimeMs += milliseconds;
+      monotonicNs += BigInt(milliseconds) * 1_000_000n;
+    },
+  };
+}
+
 function startWriterLockChild(databasePath: string, holdMs: number): WriterLockChild {
   const child = spawn(
     process.execPath,
@@ -443,22 +456,21 @@ describe("runSqliteImmediateTransactionSync", () => {
   it("counts no-op admission services separately from retried native BEGIN attempts", async () => {
     const { db, writer } = createContendedDatabase();
     const logger = { warn: vi.fn() };
-    // Advance diagnostic wall time at real operations; the native admission deadline stays real.
-    let now = 0;
-    vi.spyOn(Date, "now").mockImplementation(() => now);
+    // Advance diagnostic clocks at real operations; the native admission deadline stays real.
+    const clock = installDiagnosticClock();
     const exec = db.exec.bind(db);
     vi.spyOn(db, "exec").mockImplementation((sql) => {
       if (sql === "BEGIN IMMEDIATE") {
-        now += 10;
+        clock.advance(10);
       }
       exec(sql);
     });
     const noWork = vi.fn(() => {
-      now += 25;
+      clock.advance(25);
     });
     const releaseWriter = vi.fn(() => {
       writer.exec("COMMIT");
-      now += 1_200;
+      clock.advance(1_200);
     });
     const write = vi.fn(() => db.prepare("INSERT INTO entries VALUES ('committed')").run());
 
@@ -497,12 +509,11 @@ describe("runSqliteImmediateTransactionSync", () => {
     async (lockError) => {
       const { db, writer } = createContendedDatabase();
       const logger = { warn: vi.fn() };
-      let now = 0;
-      vi.spyOn(Date, "now").mockImplementation(() => now);
+      const clock = installDiagnosticClock();
       const exec = db.exec.bind(db);
       vi.spyOn(db, "exec").mockImplementation((sql) => {
         if (sql === "BEGIN IMMEDIATE") {
-          now += 11;
+          clock.advance(11);
         }
         exec(sql);
       });
@@ -510,7 +521,7 @@ describe("runSqliteImmediateTransactionSync", () => {
         ? Object.assign(new Error("service lock failure"), { code: "SQLITE_BUSY", errcode: 5 })
         : new Error("service authority refused");
       const service = vi.fn(() => {
-        now += 1_300;
+        clock.advance(1_300);
         throw failure;
       });
       const write = vi.fn();

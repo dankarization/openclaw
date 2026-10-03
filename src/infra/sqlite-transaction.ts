@@ -115,13 +115,17 @@ type SqliteBeginAdmissionDiagnostics = {
   serviceMs: number;
 };
 
+function elapsedMonotonicMs(startedAtNs: bigint, endedAtNs = process.hrtime.bigint()): number {
+  return Number(endedAtNs - startedAtNs) / 1_000_000;
+}
+
 function execNativeBegin(db: DatabaseSync, diagnostics: SqliteBeginAdmissionDiagnostics): void {
-  const startedAt = Date.now();
+  const startedAtNs = process.hrtime.bigint();
   diagnostics.nativeAttempts += 1;
   try {
     db.exec("BEGIN IMMEDIATE");
   } finally {
-    diagnostics.nativeMs += Date.now() - startedAt;
+    diagnostics.nativeMs += elapsedMonotonicMs(startedAtNs);
   }
 }
 
@@ -151,12 +155,12 @@ function beginImmediateTransaction(
       // Only admission repeats. Services retain their own authority and settlement
       // rules; caller mutations and postcommit publication have not started yet.
       for (const service of services) {
-        const startedAt = Date.now();
+        const startedAtNs = process.hrtime.bigint();
         diagnostics.serviceCalls += 1;
         try {
           service();
         } finally {
-          diagnostics.serviceMs += Date.now() - startedAt;
+          diagnostics.serviceMs += elapsedMonotonicMs(startedAtNs);
         }
       }
       if (performance.now() >= deadline) {
@@ -180,6 +184,10 @@ export type SqliteTransactionOptions = {
 
 type SqliteTransactionStep = "begin" | "commit";
 type SqliteTransactionMode = "deferred" | "immediate";
+type SqliteTransactionStepEnd = {
+  endedAtWallTimeMs: number;
+  endedAtMonotonicNs: bigint;
+};
 
 function assertSyncTransactionResult(value: unknown): void {
   if (isPromiseLike(value)) {
@@ -219,25 +227,59 @@ function transactionDiagnosticLabels(
       database = "unavailable";
     }
   }
+  const readerOwner = captureSqliteReaderOwner();
   return {
     database,
-    operation: options?.operationLabel || captureSqliteReaderOwner()?.operation || "unlabeled",
+    // Preserve the existing display label while making its source explicit.
+    operation: options?.operationLabel || readerOwner?.operation || "unlabeled",
+    operationLabel: options?.operationLabel ?? null,
+    readerOwnerOperation: readerOwner?.operation ?? null,
+    readerOwnerKind: readerOwner?.ownerKind ?? null,
   };
 }
 
 function logSlowTransactionHold(params: {
   db: DatabaseSync;
-  elapsedMs: number;
   mode: SqliteTransactionMode;
   options?: SqliteTransactionOptions;
+  transactionId: string;
+  beginAttemptStartedAtWallTimeMs: number;
+  beginAttemptStartedAtMonotonicNs: bigint;
+  beginSucceededAtWallTimeMs: number;
+  beginSucceededAtMonotonicNs: bigint;
+  // This is the helper's exit path, not an inference about durable COMMIT or rollback.
+  terminal: "returned" | "threw";
 }): void {
-  if (params.elapsedMs < slowTransactionHoldThresholdMs(params.options)) {
+  const terminalWallTimeMs = Date.now();
+  const terminalMonotonicNs = process.hrtime.bigint();
+  const elapsedMs = elapsedMonotonicMs(params.beginSucceededAtMonotonicNs, terminalMonotonicNs);
+  if (elapsedMs < slowTransactionHoldThresholdMs(params.options)) {
     return;
+  }
+  let connectionState: "open" | "retired" | "unavailable" = "unavailable";
+  let transactionState: "active" | "inactive" | "unavailable" = "unavailable";
+  try {
+    connectionState = params.db.isOpen ? "open" : "retired";
+    if (connectionState === "open") {
+      transactionState = params.db.isTransaction ? "active" : "inactive";
+    }
+  } catch {
+    // The native connection may have been retired while settling a failed holder.
   }
   transactionLogger(params.options).warn("slow SQLite transaction hold", {
     async: false,
     ...transactionDiagnosticLabels(params.db, params.options),
-    elapsedMs: params.elapsedMs,
+    elapsedMs,
+    beginAttemptStartedAtWallTimeMs: params.beginAttemptStartedAtWallTimeMs,
+    beginAttemptStartedAtMonotonicNs: params.beginAttemptStartedAtMonotonicNs.toString(),
+    beginSucceededAtWallTimeMs: params.beginSucceededAtWallTimeMs,
+    beginSucceededAtMonotonicNs: params.beginSucceededAtMonotonicNs.toString(),
+    terminalWallTimeMs,
+    terminalMonotonicNs: terminalMonotonicNs.toString(),
+    transactionId: params.transactionId,
+    terminal: params.terminal,
+    connectionState,
+    transactionState,
     isMainThread,
     mode: params.mode,
     pid: process.pid,
@@ -252,6 +294,11 @@ function logSlowTransactionStep(params: {
   elapsedMs: number;
   options?: SqliteTransactionOptions;
   step: SqliteTransactionStep;
+  startedAtWallTimeMs: number;
+  startedAtMonotonicNs: bigint;
+  endedAtWallTimeMs: number;
+  endedAtMonotonicNs: bigint;
+  transactionId: string;
 }): void {
   if (params.elapsedMs < slowBusyWaitThresholdMs(params.options)) {
     return;
@@ -263,6 +310,11 @@ function logSlowTransactionStep(params: {
       : {}),
     ...transactionDiagnosticLabels(params.db, params.options),
     elapsedMs: params.elapsedMs,
+    startedAtWallTimeMs: params.startedAtWallTimeMs,
+    startedAtMonotonicNs: params.startedAtMonotonicNs.toString(),
+    endedAtWallTimeMs: params.endedAtWallTimeMs,
+    endedAtMonotonicNs: params.endedAtMonotonicNs.toString(),
+    transactionId: params.transactionId,
     isMainThread,
     pid: process.pid,
     step: params.step,
@@ -276,8 +328,11 @@ function execTimedTransactionStep(params: {
   options?: SqliteTransactionOptions;
   sql: string;
   step: SqliteTransactionStep;
-}): number {
+  transactionId: string;
+}): SqliteTransactionStepEnd {
   const startedAt = Date.now();
+  const startedAtWallTimeMs = startedAt;
+  const startedAtMonotonicNs = process.hrtime.bigint();
   const beginAdmission =
     params.sql === "BEGIN IMMEDIATE"
       ? { nativeAttempts: 0, nativeMs: 0, serviceCalls: 0, serviceMs: 0 }
@@ -288,17 +343,26 @@ function execTimedTransactionStep(params: {
     } else {
       params.db.exec(params.sql);
     }
-    const elapsedMs = Date.now() - startedAt;
+    const endedAtWallTimeMs = Date.now();
+    const endedAtMonotonicNs = process.hrtime.bigint();
+    const elapsedMs = elapsedMonotonicMs(startedAtMonotonicNs, endedAtMonotonicNs);
     logSlowTransactionStep({
       beginAdmission,
       db: params.db,
       elapsedMs,
       options: params.options,
       step: params.step,
+      startedAtWallTimeMs,
+      startedAtMonotonicNs,
+      endedAtWallTimeMs,
+      endedAtMonotonicNs,
+      transactionId: params.transactionId,
     });
-    return elapsedMs;
+    return { endedAtWallTimeMs, endedAtMonotonicNs };
   } catch (error) {
-    const elapsedMs = Date.now() - startedAt;
+    const endedAtWallTimeMs = Date.now();
+    const endedAtMonotonicNs = process.hrtime.bigint();
+    const elapsedMs = elapsedMonotonicMs(startedAtMonotonicNs, endedAtMonotonicNs);
     if (isSqliteLockError(error) && shouldReportSqliteLockFailure(params.db)) {
       const sqliteErrcode = sqliteExtendedResultCode(error);
       const sqlitePrimaryCode = sqlitePrimaryResultCode(error);
@@ -310,6 +374,11 @@ function execTimedTransactionStep(params: {
         ...transactionDiagnosticLabels(params.db, params.options),
         code: sqliteErrorCode(error),
         elapsedMs,
+        startedAtWallTimeMs,
+        startedAtMonotonicNs: startedAtMonotonicNs.toString(),
+        endedAtWallTimeMs,
+        endedAtMonotonicNs: endedAtMonotonicNs.toString(),
+        transactionId: params.transactionId,
         failureKind: "lock-contention",
         isMainThread,
         pid: process.pid,
@@ -328,24 +397,28 @@ function beginTransaction(
   db: DatabaseSync,
   options: SqliteTransactionOptions | undefined,
   mode: SqliteTransactionMode,
-): void {
-  execTimedTransactionStep({
+  transactionId: string,
+): SqliteTransactionStepEnd {
+  return execTimedTransactionStep({
     db,
     options,
     sql: mode === "immediate" ? "BEGIN IMMEDIATE" : "BEGIN",
     step: "begin",
+    transactionId,
   });
 }
 
 function commitImmediateTransaction(
   db: DatabaseSync,
   options: SqliteTransactionOptions | undefined,
+  transactionId: string,
 ): void {
   execTimedTransactionStep({
     db,
     options,
     sql: "COMMIT",
     step: "commit",
+    transactionId,
   });
 }
 
@@ -418,9 +491,14 @@ function runSqliteTransactionSync<T>(
     }
   }
 
-  beginTransaction(db, options, mode);
-  const transactionStartedAt = Date.now();
+  const beginAttemptStartedAtWallTimeMs = Date.now();
+  const beginAttemptStartedAtMonotonicNs = process.hrtime.bigint();
+  const transactionId = `${process.pid}:${threadId}:${beginAttemptStartedAtMonotonicNs}`;
+  const beginSucceeded = beginTransaction(db, options, mode, transactionId);
+  const beginSucceededAtWallTimeMs = beginSucceeded.endedAtWallTimeMs;
+  const beginSucceededAtMonotonicNs = beginSucceeded.endedAtMonotonicNs;
   let commitStarted = false;
+  let terminal: "returned" | "threw" = "threw";
   try {
     const result = operation();
     assertSyncTransactionResult(result);
@@ -428,11 +506,12 @@ function runSqliteTransactionSync<T>(
     commitStarted = true;
     if (options?.withCommit) {
       assertSyncTransactionResult(
-        options.withCommit(() => commitImmediateTransaction(db, options)),
+        options.withCommit(() => commitImmediateTransaction(db, options, transactionId)),
       );
     } else {
-      commitImmediateTransaction(db, options);
+      commitImmediateTransaction(db, options, transactionId);
     }
+    terminal = "returned";
     return result;
   } catch (error) {
     abortImmediateTransaction(db, error, commitStarted);
@@ -443,9 +522,14 @@ function runSqliteTransactionSync<T>(
     try {
       logSlowTransactionHold({
         db,
-        elapsedMs: Date.now() - transactionStartedAt,
         mode,
         options,
+        transactionId,
+        beginAttemptStartedAtWallTimeMs,
+        beginAttemptStartedAtMonotonicNs,
+        beginSucceededAtWallTimeMs,
+        beginSucceededAtMonotonicNs,
+        terminal,
       });
     } catch {
       // Diagnostics cannot change an already-settled transaction's outcome.

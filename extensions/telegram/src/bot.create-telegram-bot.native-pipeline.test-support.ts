@@ -73,6 +73,7 @@ export const harness = {
     return state;
   },
   replySpy,
+  saveRemoteMedia,
   transcribeFirstAudio,
   settleUpdates,
   listSkillCommandsForAgents,

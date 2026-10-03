@@ -291,6 +291,12 @@ On channels that support audio preflight, OpenClaw transcribes audio **before** 
 2. The transcript is checked for mention patterns (for example `@BotName`, emoji triggers).
 3. If a mention is found, the message proceeds through the full reply pipeline.
 
+Within one Gateway, Telegram preflight reuses a successful transcript for the same
+chat message and audio bytes when transcription settings and trust context match.
+The reuse window is 30 seconds (up to 128 entries); failures retry normally.
+Each bot still applies its own sender and mention admission rules. Transcript echoes are sent only after an account
+admits the message; accounts that skip it do not echo the shared transcript.
+
 **Fallback behavior:** if preflight transcription fails (timeout, API error, etc.), the message falls back to text-only mention detection so mixed messages (text + audio) are never dropped.
 
 **Opt-out per Telegram group/topic:**

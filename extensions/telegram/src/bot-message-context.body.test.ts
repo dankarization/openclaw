@@ -1,3 +1,4 @@
+import fs from "node:fs/promises";
 import path from "node:path";
 import type { Bot } from "grammy";
 import type { ChatFullInfo, Message, Update } from "grammy/types";
@@ -503,6 +504,91 @@ describe("Telegram admitted model input", () => {
     },
   );
 
+  it("admits one addressed account and emits one echo for a shared native voice update", async () => {
+    const mediaDir = harness.state.statePath("media", "inbound");
+    await fs.mkdir(mediaDir, { recursive: true });
+    const file = path.join(mediaDir, "voice.wav");
+    const calls = path.join(mediaDir, "stt-calls.txt");
+    const wav = Buffer.alloc(32044);
+    wav.write("RIFF", 0);
+    wav.writeUInt32LE(wav.length - 8, 4);
+    wav.write("WAVEfmt ", 8);
+    wav.writeUInt32LE(16, 16);
+    wav.writeUInt16LE(1, 20);
+    wav.writeUInt16LE(1, 22);
+    wav.writeUInt32LE(16000, 24);
+    wav.writeUInt32LE(32000, 28);
+    wav.writeUInt16LE(2, 32);
+    wav.writeUInt16LE(16, 34);
+    wav.write("data", 36);
+    wav.writeUInt32LE(wav.length - 44, 40);
+    await fs.writeFile(file, wav);
+    harness.saveRemoteMedia.mockResolvedValue({
+      id: "shared-voice",
+      path: file,
+      size: wav.length,
+      contentType: "audio/wav",
+    });
+    const actual = await vi.importActual<typeof import("openclaw/plugin-sdk/media-runtime")>(
+      "openclaw/plugin-sdk/media-runtime",
+    );
+    transcribe.mockImplementation((...args) => actual.transcribeFirstAudio(...args));
+    const cfg = config({ requireMention: true });
+    // This CLI-only fixture installs Telegram through the native harness.
+    // Avoid unrelated media provider discovery while preserving real CLI STT.
+    cfg.plugins = { enabled: false };
+    cfg.channels!.telegram!.accounts = { default: {}, beta: {} };
+    cfg.agents = {
+      entries: { main: { identity: { name: "Alpha" } }, beta: { identity: { name: "Beta" } } },
+    };
+    cfg.bindings = [
+      { agentId: "main", match: { channel: "telegram", accountId: "default" } },
+      { agentId: "beta", match: { channel: "telegram", accountId: "beta" } },
+    ];
+    cfg.tools = {
+      media: {
+        audio: { enabled: true, echoTranscript: true, echoFormat: "[voice echo] {transcript}" },
+        models: [
+          {
+            type: "cli",
+            command: process.execPath,
+            args: [
+              "-e",
+              'require("node:fs").appendFileSync(process.argv[2], "called" + String.fromCharCode(10)); process.stdout.write("Alpha please help")',
+              "{{AttachmentPath}}",
+              calls,
+            ],
+            capabilities: ["audio"],
+          },
+        ],
+      },
+    };
+    const alpha = await createBot(false, true, cfg, false, "default");
+    const beta = await createBot(false, true, cfg, false, "beta");
+    const voice = {
+      ...textMessage(""),
+      text: undefined,
+      voice: { file_id: "shared-voice", file_unique_id: "shared-voice-u", duration: 1 },
+    } satisfies NonNullable<Update["message"]>;
+    const update = { update_id: ++updateId, message: voice };
+    await deliverTelegramUpdate(alpha, update);
+    await deliverTelegramUpdate(beta, update);
+    expect(transcribe).toHaveBeenCalledTimes(2);
+    expect(await fs.readFile(calls, "utf8")).toBe("called\n");
+    expect(harness.replySpy).toHaveBeenCalledTimes(1);
+    expect(harness.replySpy.mock.calls[0]?.[0].AccountId).toBe("default");
+    const echoes = apiCalls.mock.calls.filter(
+      ([method, payload]) =>
+        method === "sendMessage" &&
+        typeof payload === "object" &&
+        payload !== null &&
+        "text" in payload &&
+        payload.text === "[voice echo] Alpha please help",
+    );
+    expect(echoes).toHaveLength(1);
+    expect(echoes[0]?.[1]).toMatchObject({ chat_id: "-10042001", message_thread_id: 99 });
+  });
+
   it("transcribes only an authorized voice sender with forum echo routing and untrusted framing", async () => {
     const cfg = config({ requireMention: true, allowFrom: ["42001"] });
     cfg.agents = {
@@ -530,6 +616,10 @@ describe("Telegram admitted model input", () => {
       OriginatingTo: "telegram:-10042001:topic:99",
       AccountId: "default",
       MessageThreadId: 99,
+    });
+    expect(transcribe.mock.calls[0]?.[0].telegramVoice).toEqual({
+      chatId: "-10042001",
+      messageId: String(voice.message_id + 1),
     });
     expect(harness.replySpy.mock.calls[0]?.[0]).toMatchObject({
       BodyForAgent:

@@ -6,6 +6,11 @@ import type { OpenClawConfig } from "../config/types.js";
 import { logVerbose, shouldLogVerbose } from "../globals.js";
 import { normalizeMediaFacts } from "../media/media-facts.js";
 import { isAudioAttachment } from "./attachments.js";
+import {
+  shareTelegramVoiceTranscript,
+  telegramVoiceShareKey,
+  type TelegramVoiceIdentity,
+} from "./audio-preflight-share.js";
 import { runAudioTranscription } from "./audio-transcription-runner.js";
 import { DEFAULT_ECHO_TRANSCRIPT_FORMAT, sendTranscriptEcho } from "./echo-transcript.js";
 import { normalizeMediaAttachments, resolveMediaAttachmentLocalRoots } from "./runner.js";
@@ -22,6 +27,8 @@ export async function transcribeFirstAudio(params: {
   agentDir?: string;
   providers?: Record<string, MediaUnderstandingProvider>;
   activeModel?: ActiveMediaModel;
+  telegramVoice?: TelegramVoiceIdentity;
+  signal?: AbortSignal;
 }): Promise<string | undefined> {
   const { ctx, cfg } = params;
 
@@ -48,15 +55,40 @@ export async function transcribeFirstAudio(params: {
   }
 
   try {
-    const { transcript } = await runAudioTranscription({
-      ctx,
-      cfg,
-      attachments: [firstAudio],
-      agentDir: params.agentDir,
-      providers: params.providers,
-      activeModel: params.activeModel,
-      localPathRoots: resolveMediaAttachmentLocalRoots({ cfg, ctx }),
-    });
+    const localPathRoots = resolveMediaAttachmentLocalRoots({ cfg, ctx });
+    const transcribe = async () =>
+      (
+        await runAudioTranscription({
+          ctx,
+          cfg,
+          attachments: [firstAudio],
+          agentDir: params.agentDir,
+          providers: params.providers,
+          activeModel: params.activeModel,
+          localPathRoots,
+        })
+      ).transcript;
+    const key =
+      params.telegramVoice &&
+      ctx.Provider === "telegram" &&
+      ctx.Surface === "telegram" &&
+      !params.agentDir &&
+      !params.providers &&
+      !params.activeModel
+        ? await telegramVoiceShareKey({
+            identity: params.telegramVoice,
+            attachment: firstAudio,
+            cfg,
+            sessionKey: ctx.SessionKey,
+            chatType: ctx.ChatType,
+            localPathRoots,
+          })
+        : undefined;
+    const shared = key ? shareTelegramVoiceTranscript(key, transcribe) : transcribe();
+    // A waiter may stop waiting, but its signal never reaches the shared runner.
+    const transcript = params.signal
+      ? await waitForTranscript(shared, params.signal)
+      : await shared;
     if (!transcript) {
       return undefined;
     }
@@ -93,4 +125,18 @@ export async function transcribeFirstAudio(params: {
     }
     return undefined;
   }
+}
+
+function waitForTranscript(
+  transcript: Promise<string | undefined>,
+  signal: AbortSignal,
+): Promise<string | undefined> {
+  if (signal.aborted) {
+    return Promise.resolve(undefined);
+  }
+  return new Promise((resolve, reject) => {
+    const onAbort = () => resolve(undefined);
+    signal.addEventListener("abort", onAbort, { once: true });
+    transcript.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+  });
 }
