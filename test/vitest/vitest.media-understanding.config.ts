@@ -9,6 +9,7 @@ export function createMediaUnderstandingVitestConfig(env?: Record<string, string
     includeOpenClawRuntimeSetup: false,
     name: "media-understanding",
     passWithNoTests: true,
+    pool: "forks",
   });
 }
 
