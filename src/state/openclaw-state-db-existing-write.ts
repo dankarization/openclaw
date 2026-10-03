@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { clearNodeSqliteKyselyCacheForDatabase } from "../infra/kysely-sync-cache-state.js";
+import { readSqliteDataVersion } from "../infra/node-sqlite.js";
 import { setSqliteBusyTimeout } from "../infra/sqlite-busy-timeout.js";
 import {
   assertSqliteIntegrity,
@@ -12,6 +13,7 @@ import {
   getCanonicalSqliteTableNames,
   readSqliteSchemaCookie,
 } from "../infra/sqlite-schema-contract.js";
+import { runSqliteDeferredTransactionSync } from "../infra/sqlite-transaction.js";
 import { readSqliteUserVersion } from "../infra/sqlite-user-version.js";
 import { withStateDatabaseSchemaMaintenance } from "../infra/state-database-maintenance.js";
 import { openClawStateDatabaseCache } from "./openclaw-state-db-cache.js";
@@ -35,16 +37,21 @@ import { assertOpenClawStateWriteAllowed } from "./openclaw-state-ownership.js";
 /** Validate only the stable storage subset used by an existing-schema owner.
  * This read neither repairs nor grants write authority; callers retain their
  * actual handle, generation, lease and publication checks. */
-function assertExistingOpenClawStateSchema(
-  db: DatabaseSync,
-  pathname: string,
-  schemaSql: string,
-): number {
+function assertExistingOpenClawStateSchemaMetadata(db: DatabaseSync, pathname: string): number {
   const version = assertSupportedStateSchemaVersion(db, pathname);
   const metadata = assertOpenClawStateDatabaseOwner(db, { pathname });
   if (version < 1 || metadata?.schema_version !== version) {
     throw new Error("Existing-state schema metadata is inconsistent.");
   }
+  return version;
+}
+
+function assertExistingOpenClawStateSchema(
+  db: DatabaseSync,
+  pathname: string,
+  schemaSql: string,
+): number {
+  const version = assertExistingOpenClawStateSchemaMetadata(db, pathname);
   assertSqliteIntegrity(db, pathname);
   assertSqliteSchemaContains(db, pathname, schemaSql);
   return version;
@@ -87,6 +94,8 @@ export function runExistingOpenClawStateWriteTransaction<T>(
       throw new Error("Existing-state database generation changed.");
     }
   };
+  const canPreflightIntegrity =
+    !contract.initializeAdditiveSchema && !contract.recoverTaskDeliveryOrphans;
   const write = () => {
     assertSameFile();
     openClawStateDatabaseCache.assertOpenClawStateDatabaseFreshOpenAllowedAtPath(pathname, env);
@@ -97,20 +106,84 @@ export function runExistingOpenClawStateWriteTransaction<T>(
     });
     try {
       setSqliteBusyTimeout(db, busyTimeoutMs);
+      let integrityReceipt:
+        | {
+            dataVersion: number;
+            schemaCookie: number;
+            schemaVersion: number;
+            userVersion: number;
+          }
+        | undefined;
+      if (canPreflightIntegrity) {
+        assertSameFile();
+        const dataVersionBefore = readSqliteDataVersion(db);
+        try {
+          const checked = runSqliteDeferredTransactionSync(
+            db,
+            () => {
+              assertSameFile();
+              if (existingSchema) {
+                assertExistingOpenClawStateRuntimeSchema(db, pathname);
+              }
+              const schemaVersion = assertExistingOpenClawStateSchema(
+                db,
+                pathname,
+                contract.schemaSql,
+              );
+              return {
+                schemaCookie: readSqliteSchemaCookie(db),
+                schemaVersion,
+                userVersion: readSqliteUserVersion(db),
+              };
+            },
+            {
+              databaseLabel: pathname,
+              operationLabel: contract.operationLabel + ".integrity-preflight",
+            },
+          );
+          const dataVersionAfter = readSqliteDataVersion(db);
+          const schemaCookie = checked.schemaCookie;
+          if (dataVersionBefore === dataVersionAfter && typeof schemaCookie === "number") {
+            integrityReceipt = {
+              dataVersion: dataVersionAfter,
+              schemaCookie,
+              schemaVersion: checked.schemaVersion,
+              userVersion: checked.userVersion,
+            };
+          }
+        } catch {
+          // The preflight is advisory. Revalidate under the original admitted writer
+          // transaction so concurrent repair can settle before the authoritative check.
+        }
+      }
       return runManagedStateTransaction(
         db,
         () => {
           assertSameFile();
           assertOpenClawStateWriteAllowed({ database: db, databasePath: pathname, env });
-          if (existingSchema) {
+          const receiptMatches = (() => {
+            if (!integrityReceipt) {
+              return false;
+            }
+            return (
+              readSqliteDataVersion(db) === integrityReceipt.dataVersion &&
+              readSqliteSchemaCookie(db) === integrityReceipt.schemaCookie &&
+              readSqliteUserVersion(db) === integrityReceipt.userVersion
+            );
+          })();
+          if (existingSchema && !receiptMatches) {
+            // Keep runtime validation outside the repair catch, as on the
+            // original path. Repair authority covers only the feature check.
             assertExistingOpenClawStateRuntimeSchema(db, pathname);
           }
           const validate = () =>
-            assertExistingOpenClawStateSchema(
-              db,
-              pathname,
-              contract.initializeAdditiveSchema ? "" : contract.schemaSql,
-            );
+            receiptMatches
+              ? assertExistingOpenClawStateSchemaMetadata(db, pathname)
+              : assertExistingOpenClawStateSchema(
+                  db,
+                  pathname,
+                  contract.initializeAdditiveSchema ? "" : contract.schemaSql,
+                );
           let version: number;
           let recoveryChanges: string[] = [];
           try {

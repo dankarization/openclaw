@@ -2000,7 +2000,18 @@ unchanged does not exempt a change to these contracts:
 
 Internal transaction boundaries, writer admission, locking, and lifecycle
 mechanics are engineering decisions within an authorized repair when they
-preserve those contracts. Prove FIFO ordering, current authority after awaited
+preserve those contracts.
+
+Existing-schema update-ledger writes on an unchanged database run the full integrity
+and feature-subset checks in a deferred snapshot on the same newly opened write
+connection before acquiring the writer lock. Callers in runtime-schema scope also run
+their existing full runtime-schema check in that snapshot. The call retains only a local
+receipt and accepts it after writer admission when the connection's data version,
+schema and user-version markers, and original file identity still match. Any failed
+check or intervening commit falls back to the original full validation under the
+writer lock. Owner and write-authority checks remain inside admission; repair and
+additive-schema writes keep their original path. The receipt is never shared across
+handles or calls, and no schema or storage contract changes. Prove FIFO ordering, current authority after awaited
 work, integrity checks, publication fencing, and settlement of write-capable
 work. Assess performance and storage costs as part of that verification.
 
