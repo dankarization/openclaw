@@ -1293,6 +1293,42 @@ describe("gateway session utils", () => {
     expect(row.displayName).toBe("openclaw-tui");
   });
 
+  test("buildGatewaySessionRow projects private Telegram topic labels and preserves manual labels", () => {
+    const cfg = { agents: { list: [{ id: "main", default: true }] } } as OpenClawConfig;
+    const key = "agent:main:main:thread:42001:77";
+    const entry: SessionEntry = {
+      sessionId: "private-topic-77",
+      updatedAt: 1,
+      chatType: "direct",
+      delivery: normalizeSessionDeliveryState({
+        context: { channel: "telegram", to: "telegram:42001", threadId: "77" },
+        origin: {
+          provider: "telegram",
+          from: "telegram:direct:42001",
+          to: "telegram:42001",
+          threadId: "77",
+          label: "Renamed personal topic",
+        },
+      }),
+    };
+    const row = buildGatewaySessionRow({
+      cfg,
+      store: { [key]: entry },
+      key,
+      entry,
+    });
+    expect(row.displayName).toBe("Renamed personal topic");
+
+    const manuallyNamed = { ...entry, label: "Operator label" };
+    const manualRow = buildGatewaySessionRow({
+      cfg,
+      store: { [key]: manuallyNamed },
+      key,
+      entry: manuallyNamed,
+    });
+    expect(manualRow.displayName).toBe("Operator label");
+  });
+
   test("buildGatewaySessionRow does not promote direct route identities as display names", () => {
     const cfg = { agents: { list: [{ id: "main", default: true }] } } as OpenClawConfig;
     const entry: SessionEntry = {

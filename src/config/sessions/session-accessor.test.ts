@@ -13,6 +13,7 @@ import {
   readSessionProgressCard,
   writeSessionProgressCard,
 } from "../../session-cards/progress-card-store.js";
+import { onSessionLifecycleEvent } from "../../sessions/session-lifecycle-events.js";
 import {
   onInternalSessionTranscriptUpdate,
   onSessionTranscriptUpdate,
@@ -506,6 +507,77 @@ describe("session accessor seam", () => {
     expect(deliveryContextFromSession(afterRoute)).toBeUndefined();
     expect(sessionDeliveryRoute(afterRoute)).toBeUndefined();
     expect(afterRoute?.updatedAt).toBe(anchorUpdatedAt);
+  });
+
+  it("publishes a lifecycle rename only after an existing direct topic label changes", async () => {
+    const sessionKey = "agent:main:main:thread:42001:77";
+    await replaceSessionEntry(
+      { sessionKey, storePath },
+      {
+        sessionId: "topic-session",
+        updatedAt: 10,
+        delivery: {
+          kind: "external",
+          route: {
+            channel: "telegram",
+            accountId: "default",
+            target: { to: "telegram:42001" },
+            thread: { id: "77" },
+          },
+          context: {
+            channel: "telegram",
+            accountId: "default",
+            to: "telegram:42001",
+            threadId: "77",
+          },
+          origin: {
+            provider: "telegram",
+            chatType: "direct",
+            accountId: "default",
+            from: "telegram:direct:42001",
+            to: "telegram:42001",
+            threadId: "77",
+            label: "Old title",
+          },
+        },
+      },
+    );
+    const received: Array<{ sessionKey: string; agentId?: string; reason: string }> = [];
+    const stop = onSessionLifecycleEvent((event) => {
+      if (event.reason === "rename") {
+        received.push(event);
+      }
+    });
+    try {
+      const ctx = {
+        Provider: "telegram",
+        Surface: "telegram",
+        ChatType: "direct",
+        From: "telegram:direct:42001",
+        To: "telegram:42001",
+        SessionKey: sessionKey,
+        MessageThreadId: "77",
+        ThreadLabel: "New title",
+      };
+      await recordInboundSessionMeta({ storePath, sessionKey, ctx, createIfMissing: false });
+      expect(loadSessionEntry({ sessionKey, storePath })?.delivery?.origin?.label).toBe(
+        "New title",
+      );
+      expect(received).toEqual([{ sessionKey, agentId: "main", reason: "rename" }]);
+
+      await recordInboundSessionMeta({ storePath, sessionKey, ctx, createIfMissing: false });
+      expect(received).toHaveLength(1);
+
+      await recordInboundSessionMeta({
+        storePath,
+        sessionKey,
+        createIfMissing: false,
+        ctx: { ...ctx, ChatType: "group", ThreadLabel: "Group topic" },
+      });
+      expect(received).toHaveLength(1);
+    } finally {
+      stop();
+    }
   });
 
   it("preserves the conversation route when public metadata callers supply legacy heartbeat context", async () => {

@@ -97,7 +97,11 @@ export function deriveSessionOrigin(
   if (opts?.skipSystemEventOrigin && ctx.InternalTurnSource !== undefined) {
     return undefined;
   }
-  const label = normalizeOptionalString(resolveConversationLabel(ctx));
+  const threadLabel = normalizeOptionalString(ctx.ThreadLabel);
+  const label =
+    ctx.ChatType === "direct" && ctx.MessageThreadId != null && threadLabel
+      ? threadLabel
+      : normalizeOptionalString(resolveConversationLabel(ctx));
   const providerRaw =
     (typeof ctx.OriginatingChannel === "string" && ctx.OriginatingChannel) ||
     ctx.Surface ||

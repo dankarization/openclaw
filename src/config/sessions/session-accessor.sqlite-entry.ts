@@ -4,6 +4,8 @@ import {
   executeSqliteQueryTakeFirstSync,
 } from "../../infra/kysely-sync.js";
 import { coerceRequiredSqliteNumber as sqliteNumber } from "../../infra/sqlite-number.js";
+import { resolveAgentIdFromSessionKey } from "../../routing/session-key.js";
+import { emitSessionLifecycleEvent } from "../../sessions/session-lifecycle-events.js";
 import { OpenClawAgentDatabaseReadOnlyScope } from "../../state/openclaw-agent-db-readonly-scope.js";
 import { withOpenClawAgentDatabaseReadOnly } from "../../state/openclaw-agent-db-readonly.js";
 import { runOpenClawAgentWriteWithYieldingAdmission } from "../../state/openclaw-agent-db-transaction.js";
@@ -586,16 +588,21 @@ export async function recordInboundSessionMeta(
 ): Promise<SessionEntry | null> {
   normalizeInternalTurnContext(params.ctx);
   const createIfMissing = params.createIfMissing ?? true;
-  return await patchSessionEntryCore(
+  let hadExistingEntry = false;
+  let previousOriginLabel: string | undefined;
+  const updated = await patchSessionEntryCore(
     { sessionKey: params.sessionKey, storePath: params.storePath },
     (_entry, context) => {
+      const existing = context.existingEntry;
+      hadExistingEntry = existing !== undefined;
+      previousOriginLabel = existing?.delivery?.origin?.label;
       const metadataPatch = deriveSessionMetaPatch({
         ctx: params.ctx,
         sessionKey: params.sessionKey,
-        existing: context.existingEntry,
+        existing,
         groupResolution: params.groupResolution,
       });
-      if (context.existingEntry) {
+      if (existing) {
         return metadataPatch;
       }
       return {
@@ -610,6 +617,27 @@ export async function recordInboundSessionMeta(
       ...(createIfMissing ? { fallbackEntry: mergeSessionEntry(undefined, {}) } : {}),
     },
   );
+  const topicLabel =
+    params.ctx.ChatType === "direct" &&
+    params.ctx.MessageThreadId != null &&
+    typeof params.ctx.ThreadLabel === "string"
+      ? params.ctx.ThreadLabel.trim()
+      : "";
+  if (
+    hadExistingEntry &&
+    topicLabel &&
+    updated?.delivery?.origin?.label === topicLabel &&
+    previousOriginLabel !== topicLabel
+  ) {
+    // Metadata changes are committed before this point. The Gateway's lifecycle
+    // subscriber refreshes the projected session row and emits sessions.changed.
+    emitSessionLifecycleEvent({
+      sessionKey: params.sessionKey,
+      agentId: resolveAgentIdFromSessionKey(params.sessionKey),
+      reason: "rename",
+    });
+  }
+  return updated;
 }
 
 /** Updates last-route/delivery metadata without refreshing activity timestamps. */
