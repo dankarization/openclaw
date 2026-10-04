@@ -24,7 +24,10 @@ import ai.openclaw.app.chat.SessionForkResult
 import ai.openclaw.app.chat.SessionRewindResult
 import ai.openclaw.app.chat.decideSessionGroupMigration
 import ai.openclaw.app.chat.defaultChatThinkingLevelSelection
+import ai.openclaw.app.chat.moveSidebarSectionByDirection
+import ai.openclaw.app.chat.normalizeSidebarSectionOrder
 import ai.openclaw.app.chat.resolveChatComposerOwner
+import ai.openclaw.app.chat.sidebarCategoryNames
 import ai.openclaw.app.chat.unionSessionGroupNames
 import ai.openclaw.app.gateway.GatewayEndpoint
 import ai.openclaw.app.gateway.GatewayMediaKind
@@ -727,6 +730,9 @@ class MainViewModel private constructor(
   val chatQuestions: StateFlow<List<ChatQuestionPrompt>> = runtimeState(initial = emptyList()) { it.chat.questions }
   val chatProgressCard: StateFlow<ChatProgressCard?> = runtimeState(initial = null) { it.chat.progressCard }
   val chatSessions: StateFlow<List<ChatSessionEntry>> = runtimeState(initial = emptyList()) { it.chat.sessions }
+  val chatSessionRosterHasMore: StateFlow<Boolean> = runtimeState(initial = false) { it.chat.sessionRosterHasMore }
+  val chatSessionRosterSettled: StateFlow<Boolean> = runtimeState(initial = false) { it.chat.sessionRosterSettled }
+  val chatSessionRosterLoadingMore: StateFlow<Boolean> = runtimeState(initial = false) { it.chat.sessionRosterLoadingMore }
   val chatSwarmGroups: StateFlow<List<ChatSwarmGroup>> = runtimeState(initial = emptyList()) { it.chat.swarmGroups }
   val chatSessionBranches: StateFlow<List<SessionBranch>> = runtimeState(initial = emptyList()) { it.chat.sessionBranches }
   val chatSessionBranchesLoading: StateFlow<Boolean> = runtimeState(initial = false) { it.chat.sessionBranchesLoading }
@@ -1732,6 +1738,55 @@ class MainViewModel private constructor(
     archived: Boolean = false,
   ) {
     ensureRuntime().chat.refreshSessions(limit = limit, archived = archived)
+  }
+
+  /** Fetches the next `sessions.list` page into the same sidebar roster. */
+  suspend fun loadMoreChatSessions(): Boolean = ensureRuntime().chat.loadMoreSessions()
+
+  /**
+   * Moves one sidebar section one step in the shared gateway `sectionOrder`.
+   * Names and order are the catalog the computer already reads; this is not a phone-only list.
+   */
+  suspend fun moveChatSessionSection(
+    sourceToken: String,
+    direction: Int,
+    visibleTokens: List<String>,
+    knownGroups: List<String>,
+    catalogIds: List<String>,
+    expectedGatewayStableId: String,
+  ) {
+    val gatewayId = expectedGatewayStableId.trim().takeIf { it.isNotEmpty() } ?: return
+    if (activeGatewayStableId.value != gatewayId) return
+    sessionGroupsMutex.withLock {
+      if (activeGatewayStableId.value != gatewayId) return@withLock
+      val chat = ensureRuntime().chat
+      val lease = chat.captureSessionCatalogLease(gatewayId) ?: return@withLock
+      val listed = chat.listSessionGroups(lease) ?: return@withLock
+      if (!ownsSessionGroupLease(lease, gatewayId)) return@withLock
+      val normalized =
+        normalizeSidebarSectionOrder(
+          stored = listed.sectionOrder,
+          knownGroups = knownGroups,
+          catalogIds = catalogIds,
+        )
+      val next =
+        moveSidebarSectionByDirection(
+          order = normalized,
+          visibleTokens = visibleTokens,
+          source = sourceToken,
+          direction = direction,
+        ) ?: return@withLock
+      val updated = chat.putSessionGroups(sidebarCategoryNames(next), lease, sectionOrder = next) ?: return@withLock
+      if (!ownsSessionGroupLease(lease, gatewayId)) return@withLock
+      publishSessionGroupCatalog(
+        lease,
+        gatewayId,
+        updated.groups.map { it.name },
+        updated.sectionOrder.ifEmpty { next },
+        markMigrated = true,
+        consumeLegacy = false,
+      )
+    }
   }
 
   suspend fun patchChatSession(

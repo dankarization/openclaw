@@ -6,6 +6,7 @@ import ai.openclaw.app.node.asStringOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import kotlin.math.sign
 
 /** One gateway session-group catalog entry (`sessions.groups.*`). */
 internal data class GatewaySessionGroup(
@@ -150,4 +151,57 @@ private fun sidebarSectionToken(raw: String): String? {
     return if (name.isEmpty()) null else prefix + name
   }
   return trimmed.takeIf { it in sidebarBuiltInSections }
+}
+
+/**
+ * Web `moveArrayEntry`: move [source] before or after [target] and keep every
+ * other token, including hidden `work`, so the phone writes the same
+ * `sectionOrder` the computer already displays.
+ */
+internal fun moveSidebarSection(
+  order: List<String>,
+  source: String,
+  target: String,
+  after: Boolean,
+): List<String> {
+  if (source == target) return order
+  val ordered = order.toMutableList()
+  val sourceIndex = ordered.indexOf(source)
+  val targetIndex = ordered.indexOf(target)
+  if (sourceIndex < 0 || targetIndex < 0) return order
+  val moved = ordered.removeAt(sourceIndex)
+  val insertion = ordered.indexOf(target) + if (after) 1 else 0
+  ordered.add(insertion, moved)
+  return ordered
+}
+
+/**
+ * One step along the sections the sidebar actually shows. Hidden tokens stay
+ * put, so a folder moves onto its visible neighbor instead of landing inside
+ * Groups or under a provider catalog by skipping a row the phone does not draw.
+ */
+internal fun moveSidebarSectionByDirection(
+  order: List<String>,
+  visibleTokens: List<String>,
+  source: String,
+  direction: Int,
+): List<String>? {
+  if (direction == 0) return null
+  val visible = visibleTokens.filter { it in order }.distinct()
+  val index = visible.indexOf(source)
+  if (index < 0) return null
+  val target = visible.getOrNull(index + direction.sign) ?: return null
+  val next = moveSidebarSection(order, source, target, after = direction > 0)
+  return next.takeIf { it != order }
+}
+
+/** Category names in shared section order. Built-ins and catalogs are not names. */
+internal fun sidebarCategoryNames(order: List<String>): List<String> {
+  val names = mutableListOf<String>()
+  for (token in order) {
+    if (!token.startsWith("category:")) continue
+    val name = token.removePrefix("category:").trim()
+    if (name.isNotEmpty() && name !in names) names.add(name)
+  }
+  return names
 }
