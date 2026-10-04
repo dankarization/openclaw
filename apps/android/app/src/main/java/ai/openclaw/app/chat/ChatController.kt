@@ -1373,7 +1373,10 @@ class ChatController internal constructor(
     }
   }
 
-  /** Renames a session group everywhere: every member session moves to the new category. */
+  /**
+   * Legacy client sweep. Catalog UI uses [renameSessionGroupCatalog]; the gateway method
+   * repoints members, so new callers must not list sessions to rename or delete a group.
+   */
   suspend fun renameSessionGroup(
     from: String,
     to: String,
@@ -1392,6 +1395,70 @@ class ChatController internal constructor(
     val groupName = group.trim().takeIf { it.isNotEmpty() } ?: return
     patchSessionGroupMembers(group = groupName, category = null, expectedGatewayId = expectedGatewayId)
   }
+
+  /** Gateway catalog. Failures stay quiet so a missing method does not toast on every sidebar open. */
+  internal suspend fun listSessionGroups(): List<GatewaySessionGroup>? =
+    try {
+      parseSessionGroupsPayload(requestGateway("sessions.groups.list", "{}"))
+    } catch (err: CancellationException) {
+      throw err
+    } catch (_: Throwable) {
+      null
+    }
+
+  internal suspend fun putSessionGroups(names: List<String>): List<GatewaySessionGroup>? {
+    val cleaned = names.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+    return requestSessionGroups(
+      "sessions.groups.put",
+      buildJsonObject { put("names", JsonArray(cleaned.map(::JsonPrimitive))) },
+    )
+  }
+
+  /** Renames a catalog group. The gateway repoints members; this does not sweep sessions.list. */
+  internal suspend fun renameSessionGroupCatalog(
+    from: String,
+    to: String,
+  ): List<GatewaySessionGroup>? {
+    val fromName = from.trim()
+    val toName = to.trim()
+    if (fromName.isEmpty() || toName.isEmpty() || fromName == toName) return null
+    val updated =
+      requestSessionGroups(
+        "sessions.groups.rename",
+        buildJsonObject {
+          put("name", JsonPrimitive(fromName))
+          put("to", JsonPrimitive(toName))
+        },
+      ) ?: return null
+    fetchSessionsForCurrentWindow()
+    return updated
+  }
+
+  /** Deletes a catalog group. The gateway clears member categories; this does not sweep sessions.list. */
+  internal suspend fun deleteSessionGroupCatalog(name: String): List<GatewaySessionGroup>? {
+    val groupName = name.trim()
+    if (groupName.isEmpty()) return null
+    val updated =
+      requestSessionGroups(
+        "sessions.groups.delete",
+        buildJsonObject { put("name", JsonPrimitive(groupName)) },
+      ) ?: return null
+    fetchSessionsForCurrentWindow()
+    return updated
+  }
+
+  private suspend fun requestSessionGroups(
+    method: String,
+    params: JsonObject,
+  ): List<GatewaySessionGroup>? =
+    try {
+      parseSessionGroupsPayload(requestGateway(method, params.toString()))
+    } catch (err: CancellationException) {
+      throw err
+    } catch (err: Throwable) {
+      updateErrorText(err.message)
+      null
+    }
 
   private suspend fun patchSessionGroupMembers(
     group: String,

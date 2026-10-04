@@ -561,6 +561,8 @@ class MainViewModel private constructor(
   val modelFavorites: StateFlow<List<String>> = prefs.modelFavorites
   val modelRecents: StateFlow<List<String>> = prefs.modelRecents
   val sessionCustomGroups: StateFlow<List<String>> = prefs.sessionCustomGroups
+  private val sessionGroupsMutex = Mutex()
+  private var sessionGroupsLoadedGatewayId: String? = null
   val sidebarPageOrder: StateFlow<List<String>> = prefs.sidebarPageOrder
   val sidebarVisiblePages: StateFlow<List<String>> = prefs.sidebarVisiblePages
   val sessionCatalogAvailable: StateFlow<Boolean> =
@@ -1763,11 +1765,26 @@ class MainViewModel private constructor(
     }
   }
 
-  /** Remembers a custom session group locally so it renders as an empty section. */
-  fun addChatSessionGroup(name: String) {
+  /**
+   * Loads `sessions.groups.list`. Local names migrate once when the gateway catalog is empty,
+   * matching the web one-time move off browser storage. Failures leave the cache in place.
+   */
+  suspend fun refreshSessionGroups() {
+    sessionGroupsMutex.withLock { refreshSessionGroupsLocked() }
+  }
+
+  /** Creates an empty catalog group via `sessions.groups.put`. Does not start a chat. */
+  suspend fun addChatSessionGroup(name: String) {
     val trimmed = name.trim()
     if (trimmed.isEmpty()) return
-    prefs.setSessionCustomGroups(prefs.sessionCustomGroups.value + trimmed)
+    sessionGroupsMutex.withLock {
+      if (sessionGroupsLoadedGatewayId != activeGatewayStableId.value) refreshSessionGroupsLocked()
+      if (sessionGroupsLoadedGatewayId != activeGatewayStableId.value) return@withLock
+      val current = prefs.sessionCustomGroups.value
+      if (current.any { it == trimmed }) return@withLock
+      val updated = ensureRuntime().chat.putSessionGroups(current + trimmed) ?: return@withLock
+      prefs.setSessionCustomGroups(updated.map { it.name })
+    }
   }
 
   suspend fun renameChatSessionGroup(
@@ -1776,10 +1793,12 @@ class MainViewModel private constructor(
     expectedGatewayStableId: String?,
   ) {
     if (activeGatewayStableId.value != expectedGatewayStableId) return
-    val stored = prefs.sessionCustomGroups.value
-    // Web semantics: replace a stored name in place, otherwise remember the new name.
-    prefs.setSessionCustomGroups(if (from in stored) stored.map { if (it == from) to else it } else stored + to)
-    ensureRuntime().chat.renameSessionGroup(from = from, to = to, expectedGatewayId = expectedGatewayStableId)
+    sessionGroupsMutex.withLock {
+      if (activeGatewayStableId.value != expectedGatewayStableId) return@withLock
+      val updated = ensureRuntime().chat.renameSessionGroupCatalog(from = from, to = to) ?: return@withLock
+      prefs.setSessionCustomGroups(updated.map { it.name })
+      sessionGroupsLoadedGatewayId = activeGatewayStableId.value
+    }
   }
 
   suspend fun deleteChatSessionGroup(
@@ -1787,8 +1806,29 @@ class MainViewModel private constructor(
     expectedGatewayStableId: String?,
   ) {
     if (activeGatewayStableId.value != expectedGatewayStableId) return
-    prefs.setSessionCustomGroups(prefs.sessionCustomGroups.value.filterNot { it == group })
-    ensureRuntime().chat.dissolveSessionGroup(group, expectedGatewayId = expectedGatewayStableId)
+    sessionGroupsMutex.withLock {
+      if (activeGatewayStableId.value != expectedGatewayStableId) return@withLock
+      val updated = ensureRuntime().chat.deleteSessionGroupCatalog(group) ?: return@withLock
+      prefs.setSessionCustomGroups(updated.map { it.name })
+      sessionGroupsLoadedGatewayId = activeGatewayStableId.value
+    }
+  }
+
+  private suspend fun refreshSessionGroupsLocked() {
+    val gatewayId = activeGatewayStableId.value
+    val listed = ensureRuntime().chat.listSessionGroups() ?: return
+    val names = listed.map { it.name }
+    val legacy = prefs.sessionCustomGroups.value
+    if (names.isEmpty() && legacy.isNotEmpty() && gatewayId != null && !prefs.isSessionGroupCatalogMigrated(gatewayId)) {
+      val migrated = ensureRuntime().chat.putSessionGroups(legacy) ?: return
+      prefs.setSessionCustomGroups(migrated.map { it.name })
+      prefs.markSessionGroupCatalogMigrated(gatewayId)
+      sessionGroupsLoadedGatewayId = gatewayId
+      return
+    }
+    prefs.setSessionCustomGroups(names)
+    if (gatewayId != null) prefs.markSessionGroupCatalogMigrated(gatewayId)
+    sessionGroupsLoadedGatewayId = gatewayId
   }
 
   suspend fun forkChatSession(

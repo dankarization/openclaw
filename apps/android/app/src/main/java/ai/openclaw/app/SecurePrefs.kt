@@ -120,6 +120,7 @@ class SecurePrefs(
     private const val chatModelFavoritesKey = "chat.modelFavorites"
     private const val chatModelRecentsKey = "chat.modelRecents"
     private const val sessionCustomGroupsKey = "sessions.customGroups"
+    private const val sessionGroupCatalogMigratedKey = "sessions.customGroups.migratedGateways"
     private const val sidebarPageOrderKey = "sidebar.pageOrder"
     private const val sidebarVisiblePagesKey = "sidebar.visiblePages"
     private val appearanceSyncKeys = setOf("ui.theme", "ui.themeMode", "ui.accent")
@@ -299,8 +300,8 @@ class SecurePrefs(
   private val _modelRecents = MutableStateFlow(loadStringList(chatModelRecentsKey))
   val modelRecents: StateFlow<List<String>> = _modelRecents
 
-  // Custom session group names the user created locally; assigned groups also
-  // persist server-side via the session category field (mirrors web localStorage).
+  // Cache of the gateway session-group catalog (sessions.groups.list). Names and
+  // order are replaced from the gateway; this list is only the offline copy.
   private val _sessionCustomGroups = MutableStateFlow(loadStringList(sessionCustomGroupsKey))
   val sessionCustomGroups: StateFlow<List<String>> = _sessionCustomGroups
 
@@ -1049,6 +1050,14 @@ class SecurePrefs(
   }
 
   fun setSessionCustomGroups(groups: List<String>) = _sessionCustomGroups.persistStringList(sessionCustomGroupsKey, groups.map(String::trim).filter { it.isNotEmpty() }.distinct())
+
+  fun isSessionGroupCatalogMigrated(gatewayId: String): Boolean = gatewayId in loadStringList(sessionGroupCatalogMigratedKey)
+
+  fun markSessionGroupCatalogMigrated(gatewayId: String) {
+    val trimmed = gatewayId.trim()
+    if (trimmed.isEmpty() || isSessionGroupCatalogMigrated(trimmed)) return
+    persistStringList(sessionGroupCatalogMigratedKey, loadStringList(sessionGroupCatalogMigratedKey) + trimmed)
+  }
 
   fun setSidebarPageOrder(pageIds: List<String>) = _sidebarPageOrder.persistStringList(sidebarPageOrderKey, sanitizeSidebarPageOrder(pageIds))
 

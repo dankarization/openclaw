@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.DesktopWindows
 import androidx.compose.material.icons.outlined.ErrorOutline
@@ -189,8 +190,14 @@ internal fun updateSidebarDestinationVisibility(
 
 private const val SIDEBAR_SESSION_LIMIT = 8
 
+internal data class SidebarSessionGroupSection(
+  val name: String,
+  val entries: List<ChatSessionEntry>,
+)
+
 internal data class SidebarSessionPresentation(
   val pinned: List<ChatSessionEntry>,
+  val groups: List<SidebarSessionGroupSection>,
   val recentSections: List<SessionSection>,
   val canExpandRecent: Boolean,
 )
@@ -209,6 +216,34 @@ internal fun sidebarRecentSessions(
         .thenBy { it.key },
     ).toList()
 
+/**
+ * Category folders follow the gateway catalog order, then unknown categories.
+ * Empty catalog folders stay. Pinned rows stay in Pinned. Recent is only uncategorized
+ * sessions, so the Recent cap does not hide group members.
+ */
+internal fun sidebarSessionGroupSections(
+  sessions: List<ChatSessionEntry>,
+  knownGroups: List<String>,
+): List<SidebarSessionGroupSection> {
+  val byCategory = linkedMapOf<String, MutableList<ChatSessionEntry>>()
+  val known =
+    knownGroups.mapNotNull { name ->
+      val trimmed = name.trim()
+      if (trimmed.isEmpty() || byCategory.containsKey(trimmed)) {
+        null
+      } else {
+        byCategory[trimmed] = mutableListOf()
+        trimmed
+      }
+    }
+  for (session in sessions) {
+    val category = session.category?.trim()?.takeIf { it.isNotEmpty() } ?: continue
+    byCategory.getOrPut(category) { mutableListOf() }.add(session)
+  }
+  val extras = byCategory.keys.filter { it !in known }.sortedWith(String.CASE_INSENSITIVE_ORDER)
+  return (known + extras).map { name -> SidebarSessionGroupSection(name, byCategory[name].orEmpty()) }
+}
+
 internal fun sidebarSessionPresentation(
   sessions: List<ChatSessionEntry>,
   knownGroups: List<String>,
@@ -219,15 +254,23 @@ internal fun sidebarSessionPresentation(
 ): SidebarSessionPresentation {
   val activeSessions = sidebarRecentSessions(sessions, currentSessionKey, nowMs)
   val pinned = activeSessions.filter { it.pinned == true }
-  val recent =
+  val navigable =
     activeSessions.filter { session ->
       session.pinned != true && session.key !in excludedSessionKeys
     }
-  val visibleRecent = if (expanded) recent else recent.take(SIDEBAR_SESSION_LIMIT)
+  val grouped = navigable.filter { !it.category.isNullOrBlank() }
+  val ungrouped = navigable.filter { it.category.isNullOrBlank() }
+  val visibleRecent = if (expanded) ungrouped else ungrouped.take(SIDEBAR_SESSION_LIMIT)
   return SidebarSessionPresentation(
     pinned = pinned,
-    recentSections = groupSessionEntries(visibleRecent, knownGroups).filter { it.entries.isNotEmpty() },
-    canExpandRecent = recent.size > SIDEBAR_SESSION_LIMIT,
+    groups = sidebarSessionGroupSections(grouped, knownGroups),
+    recentSections =
+      if (visibleRecent.isEmpty()) {
+        emptyList()
+      } else {
+        listOf(SessionSection(title = null, entries = visibleRecent))
+      },
+    canExpandRecent = ungrouped.size > SIDEBAR_SESSION_LIMIT,
   )
 }
 
@@ -468,7 +511,13 @@ internal fun OpenClawSidebar(
   var sessionsExpanded by rememberSaveable { mutableStateOf(false) }
   var expandedCatalogIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
   var pinnedExpanded by rememberSaveable { mutableStateOf(false) }
+  var groupsExpanded by rememberSaveable { mutableStateOf(true) }
+  var collapsedGroupNames by rememberSaveable { mutableStateOf(emptyList<String>()) }
   var recentExpanded by rememberSaveable { mutableStateOf(false) }
+  var newGroupDialogVisible by rememberSaveable { mutableStateOf(false) }
+  var renameGroupName by rememberSaveable { mutableStateOf("") }
+  var deleteGroupName by rememberSaveable { mutableStateOf("") }
+  var newGroupForSessionKey by rememberSaveable { mutableStateOf("") }
   var collapsedCatalogHostIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
   var collapsedCatalogWorkspaceIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
   val catalogSections = sidebarCatalogSections(catalogState.catalogs, expandedCatalogIds)
@@ -493,6 +542,7 @@ internal fun OpenClawSidebar(
       nowMs = sessionNowMs,
     )
   val pinnedSessions = recentPresentation.pinned
+  val groupSections = recentPresentation.groups
   val recentSections = recentPresentation.recentSections
   val desktopObserveAvailable by viewModel.desktopObserveAvailable.collectAsState()
   val orderedPages = orderedSidebarDestinations(pageOrder).filter { it.settingsRoute?.isAvailable(desktopObserveAvailable) != false }
@@ -546,6 +596,28 @@ internal fun OpenClawSidebar(
               null
             },
           onDragActiveChange = if (dragSource == null) ({}) else onDragActiveChange,
+          groupNames = if (canMutateSessions) storedGroups else emptyList(),
+          onMoveToGroup =
+            if (canMutateSessions) {
+              { category ->
+                scope.launch {
+                  viewModel.patchChatSession(key = session.key, ownerAgentId = session.ownerAgentId, category = category)
+                }
+              }
+            } else {
+              null
+            },
+          onRemoveFromGroup =
+            if (canMutateSessions && !session.category.isNullOrBlank()) {
+              {
+                scope.launch {
+                  viewModel.patchChatSession(key = session.key, ownerAgentId = session.ownerAgentId, clearCategory = true)
+                }
+              }
+            } else {
+              null
+            },
+          onNewGroup = if (canMutateSessions) {{ newGroupForSessionKey = session.key }} else null,
         )
       }
     }
@@ -574,6 +646,12 @@ internal fun OpenClawSidebar(
         delay(SIDEBAR_CATALOG_REFRESH_MS)
         viewModel.refreshSessionCatalog(selectedAgentId)
       }
+    }
+  }
+  LaunchedEffect(connection.isConnected, gatewayStableId, visible, lifecycle) {
+    if (!connection.isConnected || !visible) return@LaunchedEffect
+    lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+      viewModel.refreshSessionGroups()
     }
   }
   // Canonical debounced gateway search shared with the Sessions browser; the
@@ -879,9 +957,86 @@ internal fun OpenClawSidebar(
             }
           }
 
+          // Web puts category folders immediately before Other. Android provider
+          // catalogs stay above that pair; Groups is not buried inside Recent.
+          if (groupSections.isNotEmpty() || canMutateSessions) {
+          SidebarCollapsibleHeader(
+            label = nativeString("Groups"),
+            attention =
+              if (groupsExpanded) {
+                null
+              } else {
+                attentionFor(groupSections.flatMap { section -> section.entries.map { sidebarAttentionSessionKey(it.key, it.ownerAgentId ?: selectedAgentId ?: defaultAgentId) } })
+              },
+            expanded = groupsExpanded,
+            palette = palette,
+            modifier = Modifier.padding(top = 10.dp),
+            trailingContent =
+              if (canMutateSessions) {
+                {
+                  IconButton(
+                    onClick = { newGroupDialogVisible = true },
+                    modifier = Modifier.size(40.dp),
+                  ) {
+                    Icon(
+                      imageVector = Icons.Default.Add,
+                      contentDescription = nativeString("New group"),
+                      tint = palette.text,
+                      modifier = Modifier.size(18.dp),
+                    )
+                  }
+                }
+              } else {
+                null
+              },
+            onClick = { groupsExpanded = !groupsExpanded },
+          )
+          if (groupsExpanded) {
+            groupSections.forEach { section ->
+              val collapsed = section.name in collapsedGroupNames
+              key("group:${section.name}") {
+                SidebarCollapsibleHeader(
+                  label = section.name,
+                  attention =
+                    if (collapsed) {
+                      attentionFor(section.entries.map { sidebarAttentionSessionKey(it.key, it.ownerAgentId ?: selectedAgentId ?: defaultAgentId) })
+                    } else {
+                      null
+                    },
+                  expanded = !collapsed,
+                  palette = palette,
+                  modifier = Modifier.padding(start = 12.dp),
+                  iconContent = {
+                    Icon(
+                      imageVector = Icons.Outlined.Folder,
+                      contentDescription = null,
+                      tint = palette.muted,
+                      modifier = Modifier.size(16.dp),
+                    )
+                  },
+                  trailingContent = {
+                    if (canMutateSessions) {
+                      SidebarGroupFolderMenu(
+                        palette = palette,
+                        onRename = { renameGroupName = section.name },
+                        onNewGroup = { newGroupDialogVisible = true },
+                        onDelete = { deleteGroupName = section.name },
+                      )
+                    }
+                  },
+                  onClick = { collapsedGroupNames = toggleSidebarExpansion(collapsedGroupNames, section.name) },
+                )
+                if (!collapsed && section.entries.isNotEmpty()) {
+                  sessionRows(section.entries, SidebarSessionDragSource.Recent)
+                }
+              }
+            }
+          }
+          }
+
           SidebarCollapsibleHeader(
             label = nativeString("Recent"),
-            attention = if (recentExpanded) null else attentionFor(sidebarRecentSessions(sessions, activeSessionKey, sessionNowMs).filter { it.pinned != true && it.key !in catalogSessionKeys }.map { it.key }),
+            attention = if (recentExpanded) null else attentionFor(sidebarRecentSessions(sessions, activeSessionKey, sessionNowMs).filter { it.pinned != true && it.key !in catalogSessionKeys && it.category.isNullOrBlank() }.map { it.key }),
             expanded = recentExpanded,
             palette = palette,
             onClick = { recentExpanded = !recentExpanded },
@@ -936,6 +1091,114 @@ internal fun OpenClawSidebar(
           modifier = Modifier.size(20.dp),
         )
       }
+    }
+  }
+  if (newGroupDialogVisible) {
+    SessionTextDialog(
+      title = nativeString("New group"),
+      stateKey = "sidebar-group-new",
+      initialValue = "",
+      confirmLabel = nativeString("Create"),
+      allowEmpty = false,
+      onDismiss = { newGroupDialogVisible = false },
+      onConfirm = { value ->
+        newGroupDialogVisible = false
+        scope.launch { viewModel.addChatSessionGroup(value) }
+      },
+    )
+  }
+  renameGroupName.takeIf { it.isNotEmpty() }?.let { name ->
+    SessionTextDialog(
+      title = nativeString("Rename group"),
+      stateKey = "sidebar-group-rename:$gatewayStableId:$name",
+      initialValue = name,
+      confirmLabel = nativeString("Rename"),
+      allowEmpty = false,
+      onDismiss = { renameGroupName = "" },
+      onConfirm = { value ->
+        val current = name
+        renameGroupName = ""
+        val next = value.trim()
+        if (next.isNotEmpty() && next != current) {
+          scope.launch {
+            viewModel.renameChatSessionGroup(from = current, to = next, expectedGatewayStableId = gatewayStableId)
+          }
+        }
+      },
+    )
+  }
+  deleteGroupName.takeIf { it.isNotEmpty() }?.let { name ->
+    SessionDeleteDialog(
+      title = nativeString("Delete group?"),
+      text = nativeString("Threads in \"\$group\" are kept and move back to Ungrouped.", name),
+      onDismiss = { deleteGroupName = "" },
+      onConfirm = {
+        val current = name
+        deleteGroupName = ""
+        scope.launch { viewModel.deleteChatSessionGroup(current, expectedGatewayStableId = gatewayStableId) }
+      },
+    )
+  }
+  newGroupForSessionKey.takeIf { it.isNotEmpty() }?.let { key ->
+    val session = sessions.firstOrNull { it.key == key }
+    SessionTextDialog(
+      title = nativeString("New group"),
+      stateKey = "sidebar-group-for:$gatewayStableId:$key",
+      initialValue = "",
+      confirmLabel = nativeString("Create"),
+      allowEmpty = false,
+      onDismiss = { newGroupForSessionKey = "" },
+      onConfirm = { value ->
+        newGroupForSessionKey = ""
+        val target = session ?: return@SessionTextDialog
+        scope.launch {
+          viewModel.addChatSessionGroup(value)
+          viewModel.patchChatSession(key = target.key, ownerAgentId = target.ownerAgentId, category = value.trim())
+        }
+      },
+    )
+  }
+}
+
+@Composable
+private fun SidebarGroupFolderMenu(
+  palette: SidebarPalette,
+  onRename: () -> Unit,
+  onNewGroup: () -> Unit,
+  onDelete: () -> Unit,
+) {
+  var expanded by remember { mutableStateOf(false) }
+  Box {
+    IconButton(onClick = { expanded = true }, modifier = Modifier.size(40.dp)) {
+      Icon(
+        imageVector = Icons.Default.MoreVert,
+        contentDescription = nativeString("Group menu"),
+        tint = palette.text,
+        modifier = Modifier.size(18.dp),
+      )
+    }
+    AppDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+      DropdownMenuItem(
+        text = { Text(nativeString("Rename group…"), style = ClawTheme.type.body) },
+        onClick = {
+          expanded = false
+          onRename()
+        },
+      )
+      DropdownMenuItem(
+        text = { Text(nativeString("New group…"), style = ClawTheme.type.body) },
+        onClick = {
+          expanded = false
+          onNewGroup()
+        },
+      )
+      DropdownMenuItem(
+        text = { Text(nativeString("Delete group…"), style = ClawTheme.type.body) },
+        onClick = {
+          expanded = false
+          onDelete()
+        },
+      )
     }
   }
 }
