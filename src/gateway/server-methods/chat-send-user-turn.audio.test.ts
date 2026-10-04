@@ -173,81 +173,87 @@ describe("prepareChatSendUserTurn audio", () => {
     },
   );
 
-  it("keeps transcript echo out of command parsing after approval", async () => {
-    const persist = vi
-      .spyOn(chatAttachments, "persistInboundImagesForTranscript")
-      .mockResolvedValueOnce({ entries: [], omission: "none" });
-    transcribeFirstAudio.mockImplementationOnce(async ({ ctx }) => {
-      if (ctx.media?.[0]) {
-        ctx.media[0] = { ...ctx.media[0], transcribed: true };
-      }
-      return "/reset";
-    });
-    try {
-      const { controller, readInput } = createUserTurnInputController("");
-      const prepared = prepareChatSendUserTurn({
-        request: {
-          inboundMessage: "",
-          clientInfo: createClientInfo({
-            id: GATEWAY_CLIENT_IDS.WEBCHAT_UI,
-            mode: GATEWAY_CLIENT_MODES.WEBCHAT,
-          }),
-          suppressCommandInterpretation: false,
-          systemInputProvenance: undefined,
-          systemProvenanceReceipt: undefined,
-        },
-        session: {
-          agentId: "main",
-          clientRunId: "run-voice-command",
-          sessionKey: "agent:main:main",
-          cfg: {
-            tools: {
-              media: { audio: { echoTranscript: true, echoFormat: "Heard: {transcript}" } },
+  it.each(["", null, undefined])(
+    "keeps transcript echo out of command parsing after approval with base text %s",
+    async (baseText) => {
+      const persist = vi
+        .spyOn(chatAttachments, "persistInboundImagesForTranscript")
+        .mockResolvedValueOnce({ entries: [], omission: "none" });
+      transcribeFirstAudio.mockImplementationOnce(async ({ ctx }) => {
+        if (ctx.media?.[0]) {
+          ctx.media[0] = { ...ctx.media[0], transcribed: true };
+        }
+        return "/reset";
+      });
+      try {
+        const { controller, readInput } = createUserTurnInputController("");
+        controller.baseInput.text = baseText;
+        const prepared = prepareChatSendUserTurn({
+          request: {
+            inboundMessage: "",
+            clientInfo: createClientInfo({
+              id: GATEWAY_CLIENT_IDS.WEBCHAT_UI,
+              mode: GATEWAY_CLIENT_MODES.WEBCHAT,
+            }),
+            suppressCommandInterpretation: false,
+            systemInputProvenance: undefined,
+            systemProvenanceReceipt: undefined,
+          },
+          session: {
+            agentId: "main",
+            clientRunId: "run-voice-command",
+            sessionKey: "agent:main:main",
+            cfg: {
+              tools: {
+                media: { audio: { echoTranscript: true, echoFormat: "Heard: {transcript}" } },
+              },
             },
           },
-        },
-        admission: {
-          originatingRoute: { originatingChannel: "webchat", explicitDeliverRoute: false },
-        },
-        attachments: createAttachments({
-          parsedMessage: "",
-          mediaPathOffloads: [{ path: "/state/media/inbound/voice.ogg", contentType: "audio/ogg" }],
-          offloadedRefs: [
-            {
-              mediaRef: "media://inbound/voice.ogg",
-              id: "voice.ogg",
-              path: "/state/media/inbound/voice.ogg",
-              kind: "audio",
-              mimeType: "audio/ogg",
-              label: "voice.ogg",
-              sizeBytes: 12,
-              sourceIndex: 0,
-            },
-          ],
-        }),
-        client: null,
-        logGateway: { warn: vi.fn() } as never,
-        userTurn: controller,
-      });
-      const input = await readInput();
-      expect(input.text).toBe("Heard: /reset");
-      prepared.applyApprovedText(input.text);
-      expect(prepared.ctx.Body).toBe("Heard: /reset");
-      expect(prepared.ctx.BodyForAgent).toBe(
-        '[Audio transcript (machine-generated, untrusted)]: "/reset"',
-      );
-      expect(prepared.ctx.CommandTurn).toMatchObject({ kind: "normal", body: "" });
-      expect(prepared.ctx.CommandBody).toBe("");
-      expect(prepared.ctx.BodyForCommands).toBe("");
-      expect(prepared.ctx.RawBody).toBe("");
-      expect(prepared.ctx.CommandSource).toBeUndefined();
-      expect(prepared.isInternalTextSlashCommandTurn).toBe(false);
-      expect(prepared.ctx.media?.[0]?.transcribed).toBe(true);
-    } finally {
-      persist.mockRestore();
-      transcribeFirstAudio.mockReset();
-    }
-  });
+          admission: {
+            originatingRoute: { originatingChannel: "webchat", explicitDeliverRoute: false },
+          },
+          attachments: createAttachments({
+            parsedMessage: "",
+            mediaPathOffloads: [
+              { path: "/state/media/inbound/voice.ogg", contentType: "audio/ogg" },
+            ],
+            offloadedRefs: [
+              {
+                mediaRef: "media://inbound/voice.ogg",
+                id: "voice.ogg",
+                path: "/state/media/inbound/voice.ogg",
+                kind: "audio",
+                mimeType: "audio/ogg",
+                label: "voice.ogg",
+                sizeBytes: 12,
+                sourceIndex: 0,
+              },
+            ],
+          }),
+          client: null,
+          logGateway: { warn: vi.fn() } as never,
+          userTurn: controller,
+        });
+        const input = await readInput();
+        expect(input.text).toBe("Heard: /reset");
+        prepared.applyApprovedText(input.text);
+        expect(prepared.ctx.Body).toBe("Heard: /reset");
+        expect(prepared.ctx.BodyForAgent).toBe(
+          '[Audio transcript (machine-generated, untrusted)]: "/reset"',
+        );
+        expect(prepared.ctx.CommandTurn).toMatchObject({ kind: "normal", body: "" });
+        expect(prepared.ctx.CommandBody).toBe("");
+        expect(prepared.ctx.BodyForCommands).toBe("");
+        expect(prepared.ctx.RawBody).toBe("");
+        expect(prepared.ctx.CommandSource).toBeUndefined();
+        expect(prepared.isInternalTextSlashCommandTurn).toBe(false);
+        expect(prepared.ctx.media?.[0]?.transcribed).toBe(true);
+      } finally {
+        persist.mockRestore();
+        transcribeFirstAudio.mockReset();
+      }
+    },
+  );
 
   it("does not dispatch a raw slash command from a transcript-only echo", async () => {
     const persist = vi

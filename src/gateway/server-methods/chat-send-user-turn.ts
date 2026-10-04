@@ -403,7 +403,7 @@ export function prepareChatSendUserTurn(params: {
         let agentBaseText = text;
         if (transcriptEchoForAgent) {
           const echoMarker = "\n" + transcriptEchoForAgent;
-          const echoIndex = text.indexOf(echoMarker, userTurn.baseInput.text.length);
+          const echoIndex = text.indexOf(echoMarker, userTurn.baseInput.text?.length ?? 0);
           agentBaseText =
             echoIndex >= 0
               ? text.slice(0, echoIndex) + text.slice(echoIndex + echoMarker.length)
