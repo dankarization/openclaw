@@ -372,6 +372,10 @@ describe("previous-boot artifact quarantine", () => {
           { env: state.env },
         )?.value.phase,
       ).toBe("committed");
+      expect(observeGateway).toHaveBeenCalledWith(
+        { version: "2026.9.8", buildId: "fixture-build" },
+        expect.objectContaining({ installedRoot: fixture.packageRoot }),
+      );
       expect(() => assertNoPendingUpdateRecovery({ env: state.env })).not.toThrow();
     } finally {
       log.mockRestore();

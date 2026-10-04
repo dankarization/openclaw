@@ -1,3 +1,4 @@
+import path from "node:path";
 import {
   GatewayRestartDeadlineError,
   type GatewayRestartCleanup,
@@ -36,7 +37,13 @@ export type InterruptedUpdateGatewayObservation = {
 /** Read-only settlement shares one deadline, including setup and final identity checks. */
 export async function observeInterruptedUpdateGateway(
   candidate: InstalledUpdateCandidate,
-  input: { env?: NodeJS.ProcessEnv; signal?: AbortSignal; deadline: GatewayRestartDeadline },
+  input: {
+    env?: NodeJS.ProcessEnv;
+    signal?: AbortSignal;
+    deadline: GatewayRestartDeadline;
+    /** Loaded install root already matched to the service command by the caller. */
+    installedRoot?: string;
+  },
 ): Promise<InterruptedUpdateGatewayObservation> {
   const { deadline } = input;
   let waitOutcome: GatewayRestartWaitOutcome | undefined;
@@ -48,9 +55,14 @@ export async function observeInterruptedUpdateGateway(
   });
   try {
     const env = input.env ?? process.env;
-    const root = await deadline.read("setup:package-root", () =>
-      resolveOpenClawPackageRoot({ argv1: process.argv[1], moduleUrl: import.meta.url }),
-    );
+    if (input.installedRoot !== undefined && !path.isAbsolute(input.installedRoot)) {
+      return result("unverified");
+    }
+    const root =
+      input.installedRoot ??
+      (await deadline.read("setup:package-root", () =>
+        resolveOpenClawPackageRoot({ argv1: process.argv[1], moduleUrl: import.meta.url }),
+      ));
     if (!root) {
       return result("unverified");
     }

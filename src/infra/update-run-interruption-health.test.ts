@@ -32,12 +32,12 @@ vi.mock("./update-git-runtime.js", () => ({ readBuiltGatewayBuildId: probes.buil
 
 const { observeInterruptedUpdateGateway } = await import("./update-run-interruption-health.js");
 const candidate = { version: "1.0.0", buildId: "b1" };
-async function observe() {
+async function observe(input: { installedRoot?: string } = {}) {
   const deadline = createGatewayRestartDeadline({
     timeoutMs: INTERRUPTED_UPDATE_SETTLE_TIMEOUT_MS,
   });
   try {
-    return await observeInterruptedUpdateGateway(candidate, { deadline });
+    return await observeInterruptedUpdateGateway(candidate, { ...input, deadline });
   } finally {
     deadline.dispose();
   }
@@ -146,6 +146,24 @@ it("does not grant new HTTP or inspection budgets after a slow healthy settle", 
   });
   await vi.advanceTimersByTimeAsync(4_000);
   expect(probes.inspect).toHaveBeenCalledTimes(1);
+});
+
+it("checks the loaded service root when the recovery command runs from another package", async () => {
+  const installedRoot = "/loaded-service-root";
+  probes.root.mockResolvedValue("/recovery-cli-root");
+  probes.version.mockImplementation(async (root: string) =>
+    root === installedRoot ? candidate.version : "recovery-cli-version",
+  );
+  probes.build.mockImplementation(async (root: string) =>
+    root === installedRoot ? candidate.buildId : "recovery-cli-build",
+  );
+
+  const result = await observe({ installedRoot });
+
+  expect(result.outcome).toBe("settled");
+  expect(probes.root).not.toHaveBeenCalled();
+  expect(probes.version).toHaveBeenCalledWith(installedRoot);
+  expect(probes.build).toHaveBeenCalledWith(installedRoot);
 });
 
 it("records an early identity mismatch as unverified rather than a timeout", async () => {

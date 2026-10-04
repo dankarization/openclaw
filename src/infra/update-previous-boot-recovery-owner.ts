@@ -132,7 +132,10 @@ async function observeCurrentReadiness(
   }
   const deadline = createGatewayRestartDeadline({ timeoutMs });
   try {
-    const observed = await observeInterruptedUpdateGateway({ version, buildId }, { deadline });
+    const observed = await observeInterruptedUpdateGateway(
+      { version, buildId },
+      { deadline, installedRoot: expectedRoot },
+    );
     if (
       observed.outcome !== "settled" ||
       !observed.verification ||
