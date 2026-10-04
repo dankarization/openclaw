@@ -6,8 +6,11 @@ import ai.openclaw.app.MainViewModel
 import ai.openclaw.app.R
 import ai.openclaw.app.SessionCatalog
 import ai.openclaw.app.SessionCatalogEntry
+import ai.openclaw.app.SessionCatalogHost
 import ai.openclaw.app.SessionCatalogState
 import ai.openclaw.app.chat.ChatSessionEntry
+import ai.openclaw.app.chat.SIDEBAR_SESSION_PAGE_SIZE
+import ai.openclaw.app.chat.SIDEBAR_SESSION_SEE_LESS_THRESHOLD
 import ai.openclaw.app.chat.SessionSnooze
 import ai.openclaw.app.chat.normalizeSidebarSectionOrder
 import ai.openclaw.app.defaultSidebarPageOrder
@@ -63,6 +66,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -343,6 +347,79 @@ internal fun sidebarCatalogSessionCreationEnabled(
   canMutateSessions: Boolean,
 ): Boolean = catalog.canCreateSession && canMutateSessions
 
+internal data class SidebarSectionWindow(
+  val rows: List<ChatSessionEntry>,
+  val totalCount: Int,
+  val canShowMore: Boolean,
+  val canShowLess: Boolean,
+)
+
+/**
+ * Reveals a page of rows the roster already holds. [totalCount] is the loaded
+ * membership, not the page, so a collapsed badge matches the web section count.
+ * The active row stays visible past the cap the way the web projection keeps it.
+ */
+internal fun sidebarSectionWindow(
+  entries: List<ChatSessionEntry>,
+  visibleLimit: Int,
+  activeSessionKey: String,
+): SidebarSectionWindow {
+  val limit = visibleLimit.coerceAtLeast(0)
+  val total = entries.size
+  val canShowLess = limit > SIDEBAR_SESSION_PAGE_SIZE && total > SIDEBAR_SESSION_SEE_LESS_THRESHOLD
+  if (limit >= total) {
+    return SidebarSectionWindow(
+      rows = entries,
+      totalCount = total,
+      canShowMore = false,
+      canShowLess = canShowLess,
+    )
+  }
+  val page = entries.take(limit).toMutableList()
+  val shown = page.mapTo(HashSet()) { it.key }
+  val active = entries.firstOrNull { it.key == activeSessionKey && it.key !in shown }
+  if (active != null) page.add(active)
+  return SidebarSectionWindow(
+    rows = page,
+    totalCount = total,
+    canShowMore = true,
+    canShowLess = canShowLess && page.size > SIDEBAR_SESSION_SEE_LESS_THRESHOLD,
+  )
+}
+
+/** Sections the drawer draws. Hidden work stays in the stored order but is not a move step. */
+internal fun sidebarReorderVisibleTokens(
+  sectionTokens: List<String>,
+  categoryNames: Set<String>,
+  showGroupsZone: Boolean,
+  catalogIds: Set<String>,
+): List<String> =
+  sectionTokens.mapNotNull { token ->
+    when {
+      token.startsWith("category:") -> token.takeIf { token.removePrefix("category:") in categoryNames }
+      token == "ungrouped" -> token
+      token == "groups" -> token.takeIf { showGroupsZone }
+      token.startsWith("catalog:") -> token.takeIf { token.removePrefix("catalog:") in catalogIds }
+      else -> null
+    }
+  }
+
+/**
+ * Collapsed badge. A catalog still paging, or a roster that still has another
+ * `sessions.list` page, is not a finished total — omit it instead of showing a partial as complete.
+ */
+internal fun sidebarCollapsedCount(
+  loadedCount: Int,
+  rosterComplete: Boolean,
+): Int? = loadedCount.takeIf { rosterComplete && it > 0 }
+
+internal fun sidebarCatalogLoadedCount(
+  hosts: List<SessionCatalogHost>,
+): Int? {
+  if (hosts.any { it.nextCursor != null }) return null
+  return hosts.sumOf { host -> host.sessions.count { !it.archived } }
+}
+
 internal fun toggleSidebarExpansion(
   ids: List<String>,
   id: String,
@@ -517,7 +594,10 @@ internal fun OpenClawSidebar(
   }
   var pagesExpanded by rememberSaveable { mutableStateOf(true) }
   var pagesMenuMode by rememberSaveable { mutableStateOf(SidebarPagesMenuMode.Closed) }
-  var sessionsExpanded by rememberSaveable { mutableStateOf(false) }
+  val sectionVisibleLimits = remember { mutableStateMapOf<String, Int>() }
+  val rosterHasMore by viewModel.chatSessionRosterHasMore.collectAsState()
+  val rosterSettled by viewModel.chatSessionRosterSettled.collectAsState()
+  val rosterLoadingMore by viewModel.chatSessionRosterLoadingMore.collectAsState()
   var expandedCatalogIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
   var pinnedExpanded by rememberSaveable { mutableStateOf(false) }
   var groupsExpanded by rememberSaveable { mutableStateOf(true) }
@@ -546,7 +626,7 @@ internal fun OpenClawSidebar(
     sidebarSessionPresentation(
       sessions = sessions,
       knownGroups = storedGroups,
-      expanded = sessionsExpanded,
+      expanded = true,
       excludedSessionKeys = catalogSessionKeys,
       currentSessionKey = activeSessionKey,
       nowMs = sessionNowMs,
@@ -917,12 +997,56 @@ internal fun OpenClawSidebar(
               },
             )
           }
+          val visibleReorderTokens =
+            sidebarReorderVisibleTokens(
+              sectionTokens = sectionTokens,
+              categoryNames = groupsByName.keys,
+              showGroupsZone = showGroupsZone,
+              catalogIds = catalogsById.keys,
+            )
+          val rosterComplete = rosterSettled && !rosterHasMore
+
+          fun limitFor(token: String): Int = sectionVisibleLimits[token] ?: SIDEBAR_SESSION_PAGE_SIZE
+
+          fun revealAnotherPage(token: String) {
+            sectionVisibleLimits[token] = limitFor(token) + SIDEBAR_SESSION_PAGE_SIZE
+          }
+
+          fun collapseToFirstPage(token: String) {
+            sectionVisibleLimits[token] = SIDEBAR_SESSION_PAGE_SIZE
+          }
+
+          fun moveSection(
+            token: String,
+            direction: Int,
+          ) {
+            val gatewayId = gatewayStableId ?: return
+            scope.launch {
+              viewModel.moveChatSessionSection(
+                sourceToken = token,
+                direction = direction,
+                visibleTokens = visibleReorderTokens,
+                knownGroups = groupSections.map { it.name },
+                catalogIds = if (catalogAvailable) catalogSections.map { it.catalog.id } else emptyList(),
+                expectedGatewayStableId = gatewayId,
+              )
+            }
+          }
+
+          fun canMove(
+            token: String,
+            direction: Int,
+          ): Boolean {
+            val index = visibleReorderTokens.indexOf(token)
+            return index >= 0 && visibleReorderTokens.getOrNull(index + direction) != null
+          }
           var showedCatalogChrome = false
           for (token in sectionTokens) {
             when {
               token.startsWith("category:") -> {
                 val section = groupsByName[token.removePrefix("category:")] ?: continue
                 val collapsed = section.name in collapsedGroupNames
+                val window = sidebarSectionWindow(section.entries, limitFor(token), activeSessionKey)
                 key("group:${section.name}") {
                   SidebarCollapsibleHeader(
                     label = section.name,
@@ -935,6 +1059,7 @@ internal fun OpenClawSidebar(
                     expanded = !collapsed,
                     palette = palette,
                     modifier = Modifier.padding(top = 10.dp),
+                    count = sidebarCollapsedCount(window.totalCount, rosterComplete),
                     iconContent = {
                       Icon(
                         imageVector = Icons.Outlined.Folder,
@@ -947,6 +1072,9 @@ internal fun OpenClawSidebar(
                       if (canMutateSessions) {
                         SidebarGroupFolderMenu(
                           palette = palette,
+                          canMoveUp = canMove(token, -1),
+                          canMoveDown = canMove(token, 1),
+                          onMove = { direction -> moveSection(token, direction) },
                           onRename = { renameGroupTarget = SessionGroupActionTarget(gatewayStableId, section.name) },
                           onNewGroup = {
                             pendingNewGroupGatewayId = gatewayStableId
@@ -958,22 +1086,52 @@ internal fun OpenClawSidebar(
                     },
                     onClick = { collapsedGroupNames = toggleSidebarExpansion(collapsedGroupNames, section.name) },
                   )
-                  if (!collapsed && section.entries.isNotEmpty()) {
-                    sessionRows(section.entries, SidebarSessionDragSource.Recent)
+                  if (!collapsed && window.rows.isNotEmpty()) {
+                    sessionRows(window.rows, SidebarSessionDragSource.Recent)
+                  }
+                  if (!collapsed) {
+                    SidebarSectionPageControls(
+                      window = window,
+                      palette = palette,
+                      onShowMore = { revealAnotherPage(token) },
+                      onShowLess = { collapseToFirstPage(token) },
+                    )
                   }
                 }
               }
 
               token == "ungrouped" -> {
+                val recentEntries = recentSections.flatMap { it.entries }
+                val window = sidebarSectionWindow(recentEntries, limitFor(token), activeSessionKey)
                 SidebarCollapsibleHeader(
                   label = nativeString("Other"),
-                  attention = if (recentExpanded) null else attentionFor(sidebarRecentSessions(sessions, activeSessionKey, sessionNowMs).filter { it.pinned != true && it.key !in catalogSessionKeys && it.category.isNullOrBlank() && it.kind != "group" }.map { it.key }),
+                  attention =
+                    if (recentExpanded) {
+                      null
+                    } else {
+                      attentionFor(
+                        recentEntries.map {
+                          sidebarAttentionSessionKey(it.key, it.ownerAgentId ?: selectedAgentId ?: defaultAgentId)
+                        },
+                      )
+                    },
                   expanded = recentExpanded,
                   palette = palette,
+                  count = sidebarCollapsedCount(window.totalCount, rosterComplete),
+                  trailingContent = {
+                    if (canMutateSessions) {
+                      SidebarSectionMoveMenu(
+                        palette = palette,
+                        canMoveUp = canMove(token, -1),
+                        canMoveDown = canMove(token, 1),
+                        onMove = { direction -> moveSection(token, direction) },
+                      )
+                    }
+                  },
                   onClick = { recentExpanded = !recentExpanded },
                 )
                 if (recentExpanded) {
-                  if (recentSections.isEmpty()) {
+                  if (window.rows.isEmpty()) {
                     Text(
                       text = nativeString("No recent sessions"),
                       style = ClawTheme.type.caption,
@@ -981,28 +1139,19 @@ internal fun OpenClawSidebar(
                       modifier = Modifier.padding(horizontal = 40.dp, vertical = 10.dp),
                     )
                   } else {
-                    recentSections.forEach { section ->
-                      section.title?.let { title -> SidebarSectionTitle(title, palette, Modifier.padding(start = 24.dp)) }
-                      sessionRows(section.entries, SidebarSessionDragSource.Recent)
-                    }
+                    sessionRows(window.rows, SidebarSessionDragSource.Recent)
                   }
-                  if (recentPresentation.canExpandRecent) {
-                    SidebarActionRow(
-                      label = nativeString(if (sessionsExpanded) "Show less" else "Show more"),
-                      icon =
-                        if (sessionsExpanded) {
-                          Icons.Default.KeyboardArrowUp
-                        } else {
-                          Icons.Default.KeyboardArrowDown
-                        },
-                      palette = palette,
-                      onClick = { sessionsExpanded = !sessionsExpanded },
-                    )
-                  }
+                  SidebarSectionPageControls(
+                    window = window,
+                    palette = palette,
+                    onShowMore = { revealAnotherPage(token) },
+                    onShowLess = { collapseToFirstPage(token) },
+                  )
                 }
               }
 
               token == "groups" && showGroupsZone -> {
+                val window = sidebarSectionWindow(chatGroups, limitFor(token), activeSessionKey)
                 SidebarCollapsibleHeader(
                   label = nativeString("Groups"),
                   attention =
@@ -1014,15 +1163,34 @@ internal fun OpenClawSidebar(
                   expanded = groupsExpanded,
                   palette = palette,
                   modifier = Modifier.padding(top = 10.dp),
+                  count = sidebarCollapsedCount(window.totalCount, rosterComplete),
+                  trailingContent = {
+                    if (canMutateSessions) {
+                      SidebarSectionMoveMenu(
+                        palette = palette,
+                        canMoveUp = canMove(token, -1),
+                        canMoveDown = canMove(token, 1),
+                        onMove = { direction -> moveSection(token, direction) },
+                      )
+                    }
+                  },
                   onClick = { groupsExpanded = !groupsExpanded },
                 )
                 if (groupsExpanded) {
-                  sessionRows(chatGroups, SidebarSessionDragSource.Recent)
+                  if (window.rows.isNotEmpty()) {
+                    sessionRows(window.rows, SidebarSessionDragSource.Recent)
+                  }
+                  SidebarSectionPageControls(
+                    window = window,
+                    palette = palette,
+                    onShowMore = { revealAnotherPage(token) },
+                    onShowLess = { collapseToFirstPage(token) },
+                  )
                 }
               }
 
               token == "work" -> {
-                Unit
+                // Empty coding section stays a stored token. Android does not draw it.
               }
 
               token.startsWith("catalog:") -> {
@@ -1038,15 +1206,24 @@ internal fun OpenClawSidebar(
                     attention = if (section.expanded) null else attentionFor(sidebarVisibleCatalogSessionKeys(listOf(catalog))),
                     expanded = section.expanded,
                     palette = palette,
+                    count = sidebarCatalogLoadedCount(catalog.hosts),
                     iconContent = {
                       ProviderBrandIcon(provider = catalog.id, size = 18.dp)
                     },
-                    trailingContent =
-                      if (
-                        sidebarCatalogSessionCreationEnabled(catalog, canMutateSessions) &&
-                        catalogState.continuingEntryId == null
-                      ) {
-                        {
+                    trailingContent = {
+                      Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (canMutateSessions) {
+                          SidebarSectionMoveMenu(
+                            palette = palette,
+                            canMoveUp = canMove(token, -1),
+                            canMoveDown = canMove(token, 1),
+                            onMove = { direction -> moveSection(token, direction) },
+                          )
+                        }
+                        if (
+                          sidebarCatalogSessionCreationEnabled(catalog, canMutateSessions) &&
+                          catalogState.continuingEntryId == null
+                        ) {
                           IconButton(
                             onClick = { onCreateCatalogSession(catalog.id) },
                             enabled = !sessionCreating,
@@ -1060,9 +1237,8 @@ internal fun OpenClawSidebar(
                             )
                           }
                         }
-                      } else {
-                        null
-                      },
+                      }
+                    },
                     onClick = {
                       expandedCatalogIds = toggleSidebarExpansion(expandedCatalogIds, catalog.id)
                     },
@@ -1094,6 +1270,22 @@ internal fun OpenClawSidebar(
                 }
               }
             }
+          }
+          if (rosterHasMore) {
+            SidebarActionRow(
+              label = nativeString(if (rosterLoadingMore) "Loading" else "Load more sessions"),
+              icon = Icons.Default.KeyboardArrowDown,
+              palette = palette,
+              onClick = {
+                if (rosterLoadingMore) return@SidebarActionRow
+                scope.launch {
+                  if (viewModel.loadMoreChatSessions()) {
+                    // A new roster page is useless if every section keeps its old cap.
+                    for (token in sectionTokens) revealAnotherPage(token)
+                  }
+                }
+              },
+            )
           }
           if (catalogAvailable && catalogSections.isEmpty()) {
             when {
@@ -1201,11 +1393,80 @@ internal fun OpenClawSidebar(
 }
 
 @Composable
+private fun SidebarSectionPageControls(
+  window: SidebarSectionWindow,
+  palette: SidebarPalette,
+  onShowMore: () -> Unit,
+  onShowLess: () -> Unit,
+) {
+  if (window.canShowMore) {
+    SidebarActionRow(
+      label = nativeString("Show more"),
+      icon = Icons.Default.KeyboardArrowDown,
+      palette = palette,
+      onClick = onShowMore,
+    )
+  }
+  if (window.canShowLess) {
+    SidebarActionRow(
+      label = nativeString("Show less"),
+      icon = Icons.Default.KeyboardArrowUp,
+      palette = palette,
+      onClick = onShowLess,
+    )
+  }
+}
+
+@Composable
+private fun SidebarSectionMoveMenu(
+  palette: SidebarPalette,
+  canMoveUp: Boolean,
+  canMoveDown: Boolean,
+  onMove: (Int) -> Unit,
+) {
+  if (!canMoveUp && !canMoveDown) return
+  var expanded by remember { mutableStateOf(false) }
+  Box {
+    IconButton(onClick = { expanded = true }, modifier = Modifier.size(40.dp)) {
+      Icon(
+        imageVector = Icons.Default.MoreVert,
+        contentDescription = nativeString("Reorder"),
+        tint = palette.text,
+        modifier = Modifier.size(18.dp),
+      )
+    }
+    AppDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+      if (canMoveUp) {
+        DropdownMenuItem(
+          text = { Text(nativeString("Move up"), style = ClawTheme.type.body) },
+          onClick = {
+            expanded = false
+            onMove(-1)
+          },
+        )
+      }
+      if (canMoveDown) {
+        DropdownMenuItem(
+          text = { Text(nativeString("Move down"), style = ClawTheme.type.body) },
+          onClick = {
+            expanded = false
+            onMove(1)
+          },
+        )
+      }
+    }
+  }
+}
+
+@Composable
 private fun SidebarGroupFolderMenu(
   palette: SidebarPalette,
   onRename: () -> Unit,
   onNewGroup: () -> Unit,
   onDelete: () -> Unit,
+  canMoveUp: Boolean = false,
+  canMoveDown: Boolean = false,
+  onMove: (Int) -> Unit = {},
 ) {
   var expanded by remember { mutableStateOf(false) }
   Box {
@@ -1218,6 +1479,24 @@ private fun SidebarGroupFolderMenu(
       )
     }
     AppDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+      if (canMoveUp) {
+        DropdownMenuItem(
+          text = { Text(nativeString("Move up"), style = ClawTheme.type.body) },
+          onClick = {
+            expanded = false
+            onMove(-1)
+          },
+        )
+      }
+      if (canMoveDown) {
+        DropdownMenuItem(
+          text = { Text(nativeString("Move down"), style = ClawTheme.type.body) },
+          onClick = {
+            expanded = false
+            onMove(1)
+          },
+        )
+      }
       DropdownMenuItem(
         text = { Text(nativeString("Rename group…"), style = ClawTheme.type.body) },
         onClick = {

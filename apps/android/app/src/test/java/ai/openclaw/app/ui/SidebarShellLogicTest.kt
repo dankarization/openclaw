@@ -474,6 +474,42 @@ class SidebarShellLogicTest {
     )
   }
 
+  @Test
+  fun sectionWindowCountsLoadedMembersNotTheVisiblePage() {
+    val entries = (1L..14L).map { session("s-$it", activity = it) }
+    val window = sidebarSectionWindow(entries, visibleLimit = 10, activeSessionKey = "s-14")
+
+    assertEquals(14, window.totalCount)
+    assertEquals(11, window.rows.size)
+    assertEquals("s-14", window.rows.last().key)
+    assertTrue(window.canShowMore)
+    assertEquals(14, sidebarCollapsedCount(window.totalCount, rosterComplete = true))
+    assertEquals(null, sidebarCollapsedCount(window.totalCount, rosterComplete = false))
+  }
+
+  @Test
+  fun reorderStepsSkipHiddenWorkAndUnrenderedCatalogs() {
+    val tokens =
+      listOf(
+        "category:Alpha",
+        "ungrouped",
+        "groups",
+        "work",
+        "catalog:codex",
+        "catalog:extra",
+      )
+
+    assertEquals(
+      listOf("category:Alpha", "ungrouped", "catalog:codex"),
+      sidebarReorderVisibleTokens(
+        sectionTokens = tokens,
+        categoryNames = setOf("Alpha"),
+        showGroupsZone = false,
+        catalogIds = setOf("codex"),
+      ),
+    )
+  }
+
   private fun agent(
     id: String,
     kind: String? = null,

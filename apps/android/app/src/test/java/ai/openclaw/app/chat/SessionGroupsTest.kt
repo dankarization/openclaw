@@ -62,3 +62,49 @@ class SessionGroupsTest {
     assertEquals(listOf("Work", "Extra"), unionSessionGroupNames(listOf("Work"), listOf("Extra", "Work")))
   }
 }
+
+@Test
+fun moveDownStepsOntoTheNextVisibleSection() {
+  val order =
+    listOf(
+      "category:Alpha",
+      "category:Beta",
+      "ungrouped",
+      "groups",
+      "work",
+      "catalog:codex",
+    )
+  val visible =
+    listOf(
+      "category:Alpha",
+      "category:Beta",
+      "ungrouped",
+      "groups",
+      "catalog:codex",
+    )
+
+  assertEquals(
+    listOf("category:Alpha", "ungrouped", "category:Beta", "groups", "work", "catalog:codex"),
+    moveSidebarSectionByDirection(order, visible, "category:Beta", direction = 1),
+  )
+  assertEquals(
+    listOf("category:Beta", "category:Alpha", "ungrouped", "groups", "work", "catalog:codex"),
+    moveSidebarSectionByDirection(order, visible, "category:Beta", direction = -1),
+  )
+  assertEquals(null, moveSidebarSectionByDirection(order, visible, "category:Alpha", direction = -1))
+}
+
+@Test
+fun movePastGroupsKeepsHiddenWorkBesideTheCatalog() {
+  val order = listOf("ungrouped", "groups", "work", "catalog:codex")
+  val visible = listOf("ungrouped", "groups", "catalog:codex")
+
+  assertEquals(
+    listOf("ungrouped", "work", "catalog:codex", "groups"),
+    moveSidebarSectionByDirection(order, visible, "groups", direction = 1),
+  )
+  assertEquals(
+    listOf("Alpha", "Beta"),
+    sidebarCategoryNames(listOf("category:Alpha", "ungrouped", "category:Beta", "catalog:codex")),
+  )
+}

@@ -158,6 +158,8 @@ internal fun SidebarCollapsibleHeader(
   iconContent: (@Composable () -> Unit)? = null,
   trailingContent: (@Composable () -> Unit)? = null,
   attention: SidebarAttention? = null,
+  /** Loaded membership. Null hides the badge so a partial page is not shown as complete. */
+  count: Int? = null,
 ) {
   Row(
     modifier =
@@ -191,6 +193,14 @@ internal fun SidebarCollapsibleHeader(
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,
     )
+    if (!expanded && count != null && count > 0) {
+      Text(
+        text = count.toString(),
+        style = ClawTheme.type.caption,
+        color = palette.muted,
+        maxLines = 1,
+      )
+    }
     attention?.let { SidebarAttentionIndicator(it, palette) }
     trailingContent?.invoke()
   }
