@@ -14,6 +14,8 @@ import ai.openclaw.app.chat.ChatReactionSummary
 import ai.openclaw.app.chat.ChatSessionEntry
 import ai.openclaw.app.chat.ChatSwarmGroup
 import ai.openclaw.app.chat.ChatThinkingLevelSelection
+import ai.openclaw.app.chat.decideSessionGroupMigration
+import ai.openclaw.app.chat.unionSessionGroupNames
 import ai.openclaw.app.chat.ChatTranscriptAnchorState
 import ai.openclaw.app.chat.ChatWidgetResource
 import ai.openclaw.app.chat.GatewayDefaultAgentOwner
@@ -25,6 +27,7 @@ import ai.openclaw.app.chat.SessionRewindResult
 import ai.openclaw.app.chat.defaultChatThinkingLevelSelection
 import ai.openclaw.app.chat.resolveChatComposerOwner
 import ai.openclaw.app.gateway.GatewayEndpoint
+import ai.openclaw.app.gateway.GatewaySession
 import ai.openclaw.app.gateway.GatewayMediaKind
 import ai.openclaw.app.gateway.GatewayRegistryEntry
 import ai.openclaw.app.gateway.GatewayRegistryEntryKind
@@ -64,6 +67,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -560,9 +564,11 @@ class MainViewModel private constructor(
   val modelAuthProviders: StateFlow<List<GatewayModelProviderSummary>> = runtimeState(initial = emptyList()) { it.modelAuthProviders }
   val modelFavorites: StateFlow<List<String>> = prefs.modelFavorites
   val modelRecents: StateFlow<List<String>> = prefs.modelRecents
-  val sessionCustomGroups: StateFlow<List<String>> = prefs.sessionCustomGroups
+  private val sessionGroupCatalogState = MutableStateFlow<List<String>>(emptyList())
+  val sessionCustomGroups: StateFlow<List<String>> = sessionGroupCatalogState.asStateFlow()
+  private val sessionSectionOrderState = MutableStateFlow<List<String>>(emptyList())
+  val sessionSectionOrder: StateFlow<List<String>> = sessionSectionOrderState.asStateFlow()
   private val sessionGroupsMutex = Mutex()
-  private var sessionGroupsLoadedGatewayId: String? = null
   val sidebarPageOrder: StateFlow<List<String>> = prefs.sidebarPageOrder
   val sidebarVisiblePages: StateFlow<List<String>> = prefs.sidebarVisiblePages
   val sessionCatalogAvailable: StateFlow<Boolean> =
@@ -636,7 +642,19 @@ class MainViewModel private constructor(
 
   init {
     viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
-      activeGatewayStableId.drop(1).collect { pendingTalkSetupMessageMutable.value = null }
+      sessionGroupCatalogState.value = displayedSessionGroups(activeGatewayStableId.value)
+      sessionSectionOrderState.value = displayedSessionSectionOrder(activeGatewayStableId.value)
+      activeGatewayStableId.drop(1).collect { gatewayId ->
+        pendingTalkSetupMessageMutable.value = null
+        sessionGroupCatalogState.value = displayedSessionGroups(gatewayId)
+        sessionSectionOrderState.value = displayedSessionSectionOrder(gatewayId)
+      }
+    }
+    viewModelScope.launch {
+      runtimeRef.collectLatest { runtime ->
+        val invalidations = runtime?.chat?.sessionGroupCatalogInvalidations ?: return@collectLatest
+        invalidations.collect { refreshSessionGroups() }
+      }
     }
   }
 
@@ -1766,24 +1784,75 @@ class MainViewModel private constructor(
   }
 
   /**
-   * Loads `sessions.groups.list`. Local names migrate once when the gateway catalog is empty,
-   * matching the web one-time move off browser storage. Failures leave the cache in place.
+   * Loads `sessions.groups.list` on the gateway that was active when the refresh started.
+   * Device-local names migrate once into an empty catalog. A catalog cached from another
+   * gateway is not treated as that legacy input.
    */
   suspend fun refreshSessionGroups() {
     sessionGroupsMutex.withLock { refreshSessionGroupsLocked() }
   }
 
   /** Creates an empty catalog group via `sessions.groups.put`. Does not start a chat. */
-  suspend fun addChatSessionGroup(name: String) {
+  suspend fun addChatSessionGroup(
+    name: String,
+    expectedGatewayStableId: String? = null,
+  ) {
     val trimmed = name.trim()
     if (trimmed.isEmpty()) return
+    val gatewayId = (expectedGatewayStableId ?: activeGatewayStableId.value)?.trim()?.takeIf { it.isNotEmpty() } ?: return
+    if (activeGatewayStableId.value != gatewayId) return
     sessionGroupsMutex.withLock {
-      if (sessionGroupsLoadedGatewayId != activeGatewayStableId.value) refreshSessionGroupsLocked()
-      if (sessionGroupsLoadedGatewayId != activeGatewayStableId.value) return@withLock
-      val current = prefs.sessionCustomGroups.value
-      if (current.any { it == trimmed }) return@withLock
-      val updated = ensureRuntime().chat.putSessionGroups(current + trimmed) ?: return@withLock
-      prefs.setSessionCustomGroups(updated.map { it.name })
+      if (activeGatewayStableId.value != gatewayId) return@withLock
+      val chat = ensureRuntime().chat
+      val lease = chat.captureSessionCatalogLease(gatewayId) ?: return@withLock
+      val listed = chat.listSessionGroups(lease) ?: return@withLock
+      if (!ownsSessionGroupLease(lease, gatewayId)) return@withLock
+      val authoritative = listed.groups.map { it.name }
+      if (authoritative.any { it == trimmed }) {
+        publishSessionGroupCatalog(
+          lease,
+          gatewayId,
+          authoritative,
+          listed.sectionOrder,
+          markMigrated = true,
+          consumeLegacy = false,
+        )
+        return@withLock
+      }
+      val includeLegacy =
+        authoritative.isEmpty() &&
+          !prefs.isSessionGroupCatalogMigrated(gatewayId) &&
+          !prefs.isSessionGroupLegacyConsumed()
+      val base =
+        if (includeLegacy) {
+          unionSessionGroupNames(authoritative, prefs.legacySessionCustomGroups())
+        } else {
+          authoritative
+        }
+      val next = unionSessionGroupNames(base, listOf(trimmed))
+      val updated = chat.putSessionGroups(next, lease)
+      if (updated == null) {
+        val retry = chat.listSessionGroups(lease) ?: return@withLock
+        if (!ownsSessionGroupLease(lease, gatewayId)) return@withLock
+        publishSessionGroupCatalog(
+          lease,
+          gatewayId,
+          retry.groups.map { it.name },
+          retry.sectionOrder,
+          markMigrated = false,
+          consumeLegacy = false,
+        )
+        return@withLock
+      }
+      if (!ownsSessionGroupLease(lease, gatewayId)) return@withLock
+      publishSessionGroupCatalog(
+        lease,
+        gatewayId,
+        updated.groups.map { it.name },
+        updated.sectionOrder,
+        markMigrated = true,
+        consumeLegacy = includeLegacy,
+      )
     }
   }
 
@@ -1792,12 +1861,21 @@ class MainViewModel private constructor(
     to: String,
     expectedGatewayStableId: String?,
   ) {
-    if (activeGatewayStableId.value != expectedGatewayStableId) return
+    val gatewayId = expectedGatewayStableId?.trim()?.takeIf { it.isNotEmpty() } ?: return
+    if (activeGatewayStableId.value != gatewayId) return
     sessionGroupsMutex.withLock {
-      if (activeGatewayStableId.value != expectedGatewayStableId) return@withLock
-      val updated = ensureRuntime().chat.renameSessionGroupCatalog(from = from, to = to) ?: return@withLock
-      prefs.setSessionCustomGroups(updated.map { it.name })
-      sessionGroupsLoadedGatewayId = activeGatewayStableId.value
+      if (activeGatewayStableId.value != gatewayId) return@withLock
+      val chat = ensureRuntime().chat
+      val lease = chat.captureSessionCatalogLease(gatewayId) ?: return@withLock
+      val updated = chat.renameSessionGroupCatalog(from = from, to = to, lease = lease) ?: return@withLock
+      publishSessionGroupCatalog(
+        lease,
+        gatewayId,
+        updated.groups.map { it.name },
+        updated.sectionOrder,
+        markMigrated = true,
+        consumeLegacy = false,
+      )
     }
   }
 
@@ -1805,31 +1883,101 @@ class MainViewModel private constructor(
     group: String,
     expectedGatewayStableId: String?,
   ) {
-    if (activeGatewayStableId.value != expectedGatewayStableId) return
+    val gatewayId = expectedGatewayStableId?.trim()?.takeIf { it.isNotEmpty() } ?: return
+    if (activeGatewayStableId.value != gatewayId) return
     sessionGroupsMutex.withLock {
-      if (activeGatewayStableId.value != expectedGatewayStableId) return@withLock
-      val updated = ensureRuntime().chat.deleteSessionGroupCatalog(group) ?: return@withLock
-      prefs.setSessionCustomGroups(updated.map { it.name })
-      sessionGroupsLoadedGatewayId = activeGatewayStableId.value
+      if (activeGatewayStableId.value != gatewayId) return@withLock
+      val chat = ensureRuntime().chat
+      val lease = chat.captureSessionCatalogLease(gatewayId) ?: return@withLock
+      val updated = chat.deleteSessionGroupCatalog(group, lease) ?: return@withLock
+      publishSessionGroupCatalog(
+        lease,
+        gatewayId,
+        updated.groups.map { it.name },
+        updated.sectionOrder,
+        markMigrated = true,
+        consumeLegacy = false,
+      )
     }
   }
 
   private suspend fun refreshSessionGroupsLocked() {
-    val gatewayId = activeGatewayStableId.value
-    val listed = ensureRuntime().chat.listSessionGroups() ?: return
-    val names = listed.map { it.name }
-    val legacy = prefs.sessionCustomGroups.value
-    if (names.isEmpty() && legacy.isNotEmpty() && gatewayId != null && !prefs.isSessionGroupCatalogMigrated(gatewayId)) {
-      val migrated = ensureRuntime().chat.putSessionGroups(legacy) ?: return
-      prefs.setSessionCustomGroups(migrated.map { it.name })
-      prefs.markSessionGroupCatalogMigrated(gatewayId)
-      sessionGroupsLoadedGatewayId = gatewayId
+    val gatewayId = activeGatewayStableId.value?.trim()?.takeIf { it.isNotEmpty() } ?: return
+    val chat = ensureRuntime().chat
+    val lease = chat.captureSessionCatalogLease(gatewayId) ?: return
+    val listed = chat.listSessionGroups(lease) ?: return
+    if (!ownsSessionGroupLease(lease, gatewayId)) return
+    val listedNames = listed.groups.map { it.name }
+    val legacy = prefs.legacySessionCustomGroups()
+    val decision =
+      decideSessionGroupMigration(
+        listedNames = listedNames,
+        legacyNames = legacy,
+        alreadyMigrated = prefs.isSessionGroupCatalogMigrated(gatewayId),
+        canPut = lease.canPutSessionGroups(),
+      )
+    if (decision.putLegacy) {
+      val migrated = chat.putSessionGroups(legacy, lease) ?: return
+      if (!ownsSessionGroupLease(lease, gatewayId)) return
+      publishSessionGroupCatalog(
+        lease,
+        gatewayId,
+        migrated.groups.map { it.name },
+        migrated.sectionOrder,
+        markMigrated = true,
+        consumeLegacy = true,
+      )
       return
     }
-    prefs.setSessionCustomGroups(names)
-    if (gatewayId != null) prefs.markSessionGroupCatalogMigrated(gatewayId)
-    sessionGroupsLoadedGatewayId = gatewayId
+    if (listedNames.isEmpty() && legacy.isNotEmpty() && !decision.markMigrated) return
+    publishSessionGroupCatalog(
+      lease,
+      gatewayId,
+      listedNames,
+      listed.sectionOrder,
+      markMigrated = decision.markMigrated,
+      consumeLegacy = decision.consumeLegacy,
+    )
   }
+
+  private fun displayedSessionGroups(gatewayId: String?): List<String> {
+    val id = gatewayId?.trim()?.takeIf { it.isNotEmpty() } ?: return emptyList()
+    prefs.storedSessionGroupCatalog(id)?.let { return it }
+    if (prefs.isSessionGroupLegacyConsumed() || prefs.isSessionGroupCatalogMigrated(id)) return emptyList()
+    return prefs.legacySessionCustomGroups()
+  }
+
+  private fun displayedSessionSectionOrder(gatewayId: String?): List<String> {
+    val id = gatewayId?.trim()?.takeIf { it.isNotEmpty() } ?: return emptyList()
+    return prefs.storedSessionGroupSectionOrder(id)
+  }
+
+  private fun ownsSessionGroupLease(
+    lease: GatewaySession.RequestLease,
+    gatewayId: String,
+  ): Boolean = lease.isCurrent() && activeGatewayStableId.value == gatewayId
+
+  private fun publishSessionGroupCatalog(
+    lease: GatewaySession.RequestLease,
+    gatewayId: String,
+    names: List<String>,
+    sectionOrder: List<String>,
+    markMigrated: Boolean,
+    consumeLegacy: Boolean,
+  ) {
+    lease.commitIfCurrent {
+      if (activeGatewayStableId.value != gatewayId) return@commitIfCurrent
+      prefs.setStoredSessionGroupCatalog(gatewayId, names)
+      prefs.setStoredSessionGroupSectionOrder(gatewayId, sectionOrder)
+      if (markMigrated) prefs.markSessionGroupCatalogMigrated(gatewayId)
+      if (consumeLegacy) prefs.consumeLegacySessionCustomGroups()
+      sessionGroupCatalogState.value = names
+      sessionSectionOrderState.value = sectionOrder
+    }
+  }
+
+  private fun GatewaySession.RequestLease.canPutSessionGroups(): Boolean =
+    !hasAdvertisedMethods() || supportsMethod("sessions.groups.put")
 
   suspend fun forkChatSession(
     parentKey: String,

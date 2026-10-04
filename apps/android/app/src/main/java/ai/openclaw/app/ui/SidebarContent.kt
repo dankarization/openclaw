@@ -9,6 +9,7 @@ import ai.openclaw.app.SessionCatalogEntry
 import ai.openclaw.app.SessionCatalogState
 import ai.openclaw.app.chat.ChatSessionEntry
 import ai.openclaw.app.chat.SessionSnooze
+import ai.openclaw.app.chat.normalizeSidebarSectionOrder
 import ai.openclaw.app.defaultSidebarPageOrder
 import ai.openclaw.app.defaultSidebarVisiblePages
 import ai.openclaw.app.i18n.nativeString
@@ -198,6 +199,8 @@ internal data class SidebarSessionGroupSection(
 internal data class SidebarSessionPresentation(
   val pinned: List<ChatSessionEntry>,
   val groups: List<SidebarSessionGroupSection>,
+  /** Uncategorized channel group chats (gateway kind "group"), not catalog folders. */
+  val chatGroups: List<ChatSessionEntry>,
   val recentSections: List<SessionSection>,
   val canExpandRecent: Boolean,
 )
@@ -218,8 +221,9 @@ internal fun sidebarRecentSessions(
 
 /**
  * Category folders follow the gateway catalog order, then unknown categories.
- * Empty catalog folders stay. Pinned rows stay in Pinned. Recent is only uncategorized
- * sessions, so the Recent cap does not hide group members.
+ * Empty catalog folders stay. Pinned rows stay in Pinned. kind=="group" rows
+ * without a category form the Groups zone. Recent is everything else, so the
+ * Recent cap does not hide folder members or channel groups.
  */
 internal fun sidebarSessionGroupSections(
   sessions: List<ChatSessionEntry>,
@@ -260,17 +264,21 @@ internal fun sidebarSessionPresentation(
     }
   val grouped = navigable.filter { !it.category.isNullOrBlank() }
   val ungrouped = navigable.filter { it.category.isNullOrBlank() }
-  val visibleRecent = if (expanded) ungrouped else ungrouped.take(SIDEBAR_SESSION_LIMIT)
+  // An explicit category wins, matching web/Mac. Groups is only kind=="group".
+  val chatGroups = ungrouped.filter { it.kind == "group" }
+  val recent = ungrouped.filter { it.kind != "group" }
+  val visibleRecent = if (expanded) recent else recent.take(SIDEBAR_SESSION_LIMIT)
   return SidebarSessionPresentation(
     pinned = pinned,
     groups = sidebarSessionGroupSections(grouped, knownGroups),
+    chatGroups = chatGroups,
     recentSections =
       if (visibleRecent.isEmpty()) {
         emptyList()
       } else {
         listOf(SessionSection(title = null, entries = visibleRecent))
       },
-    canExpandRecent = ungrouped.size > SIDEBAR_SESSION_LIMIT,
+    canExpandRecent = recent.size > SIDEBAR_SESSION_LIMIT,
   )
 }
 
@@ -479,6 +487,7 @@ internal fun OpenClawSidebar(
   val rowHost = remember { SidebarRowHost() }
   val agentPicker = agentPickerState(agents, selectedAgentId)
   val storedGroups by viewModel.sessionCustomGroups.collectAsState()
+  val storedSectionOrder by viewModel.sessionSectionOrder.collectAsState()
   val questions by viewModel.chatQuestions.collectAsState()
   val approvalInbox by viewModel.execApprovalInbox.collectAsState()
   val defaultAgentId by viewModel.gatewayDefaultAgentId.collectAsState()
@@ -515,9 +524,10 @@ internal fun OpenClawSidebar(
   var collapsedGroupNames by rememberSaveable { mutableStateOf(emptyList<String>()) }
   var recentExpanded by rememberSaveable { mutableStateOf(false) }
   var newGroupDialogVisible by rememberSaveable { mutableStateOf(false) }
-  var renameGroupName by rememberSaveable { mutableStateOf("") }
-  var deleteGroupName by rememberSaveable { mutableStateOf("") }
-  var newGroupForSessionKey by rememberSaveable { mutableStateOf("") }
+  var pendingNewGroupGatewayId by rememberSaveable { mutableStateOf<String?>(null) }
+  var renameGroupTarget by rememberSaveable(stateSaver = SessionGroupActionTargetSaver) { mutableStateOf<SessionGroupActionTarget?>(null) }
+  var deleteGroupTarget by rememberSaveable(stateSaver = SessionGroupActionTargetSaver) { mutableStateOf<SessionGroupActionTarget?>(null) }
+  var newGroupForSessionTarget by rememberSaveable(stateSaver = SessionActionTargetSaver) { mutableStateOf<SessionActionTarget?>(null) }
   var collapsedCatalogHostIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
   var collapsedCatalogWorkspaceIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
   val catalogSections = sidebarCatalogSections(catalogState.catalogs, expandedCatalogIds)
@@ -543,7 +553,15 @@ internal fun OpenClawSidebar(
     )
   val pinnedSessions = recentPresentation.pinned
   val groupSections = recentPresentation.groups
+  val chatGroups = recentPresentation.chatGroups
   val recentSections = recentPresentation.recentSections
+  renameGroupTarget = renameGroupTarget?.takeIf { it.gatewayStableId == gatewayStableId }
+  deleteGroupTarget = deleteGroupTarget?.takeIf { it.gatewayStableId == gatewayStableId }
+  newGroupForSessionTarget = newGroupForSessionTarget?.takeIf { it.matchesGateway(gatewayStableId) }
+  if (pendingNewGroupGatewayId != null && pendingNewGroupGatewayId != gatewayStableId) {
+    pendingNewGroupGatewayId = null
+    newGroupDialogVisible = false
+  }
   val desktopObserveAvailable by viewModel.desktopObserveAvailable.collectAsState()
   val orderedPages = orderedSidebarDestinations(pageOrder).filter { it.settingsRoute?.isAvailable(desktopObserveAvailable) != false }
   val visiblePageIdSet = visiblePageIds.toSet()
@@ -617,7 +635,7 @@ internal fun OpenClawSidebar(
             } else {
               null
             },
-          onNewGroup = if (canMutateSessions) {{ newGroupForSessionKey = session.key }} else null,
+          onNewGroup = if (canMutateSessions) {{ newGroupForSessionTarget = session.toActionTarget(gatewayStableId) }} else null,
         )
       }
     }
@@ -871,204 +889,211 @@ internal fun OpenClawSidebar(
             }
           }
 
-          if (catalogAvailable) {
+          // groupSidebarSessionRows / ChatSessionSidebarGrouping: gateway sectionOrder,
+          // then default built-ins (Other, Groups, hidden empty work) and provider catalogs.
+          val sectionTokens =
+            normalizeSidebarSectionOrder(
+              stored = storedSectionOrder,
+              knownGroups = groupSections.map { it.name },
+              catalogIds = if (catalogAvailable) catalogSections.map { it.catalog.id } else emptyList(),
+            )
+          val groupsByName = groupSections.associateBy { it.name }
+          val catalogsById = catalogSections.associateBy { it.catalog.id }
+          val showGroupsZone =
+            chatGroups.isNotEmpty() || groupSections.any { section -> section.entries.any { it.kind == "group" } }
+          if (canMutateSessions) {
+            SidebarActionRow(
+              label = nativeString("New group"),
+              icon = Icons.Default.Add,
+              palette = palette,
+              onClick = {
+                pendingNewGroupGatewayId = gatewayStableId
+                newGroupDialogVisible = true
+              },
+            )
+          }
+          var showedCatalogChrome = false
+          for (token in sectionTokens) {
             when {
-              catalogState.loading && catalogSections.isEmpty() -> {
-                SidebarCatalogStatus(nativeString("Loading"), palette, progress = true)
+              token.startsWith("category:") -> {
+                val section = groupsByName[token.removePrefix("category:")] ?: continue
+                val collapsed = section.name in collapsedGroupNames
+                key("group:${section.name}") {
+                  SidebarCollapsibleHeader(
+                    label = section.name,
+                    attention =
+                      if (collapsed) {
+                        attentionFor(section.entries.map { sidebarAttentionSessionKey(it.key, it.ownerAgentId ?: selectedAgentId ?: defaultAgentId) })
+                      } else {
+                        null
+                      },
+                    expanded = !collapsed,
+                    palette = palette,
+                    modifier = Modifier.padding(top = 10.dp),
+                    iconContent = {
+                      Icon(
+                        imageVector = Icons.Outlined.Folder,
+                        contentDescription = null,
+                        tint = palette.muted,
+                        modifier = Modifier.size(16.dp),
+                      )
+                    },
+                    trailingContent = {
+                      if (canMutateSessions) {
+                        SidebarGroupFolderMenu(
+                          palette = palette,
+                          onRename = { renameGroupTarget = SessionGroupActionTarget(gatewayStableId, section.name) },
+                          onNewGroup = {
+                            pendingNewGroupGatewayId = gatewayStableId
+                            newGroupDialogVisible = true
+                          },
+                          onDelete = { deleteGroupTarget = SessionGroupActionTarget(gatewayStableId, section.name) },
+                        )
+                      }
+                    },
+                    onClick = { collapsedGroupNames = toggleSidebarExpansion(collapsedGroupNames, section.name) },
+                  )
+                  if (!collapsed && section.entries.isNotEmpty()) {
+                    sessionRows(section.entries, SidebarSessionDragSource.Recent)
+                  }
+                }
               }
-
-              catalogErrorText != null && catalogSections.isEmpty() -> {
-                SidebarCatalogStatus(catalogErrorText, palette)
+              token == "ungrouped" -> {
+                SidebarCollapsibleHeader(
+                  label = nativeString("Other"),
+                  attention = if (recentExpanded) null else attentionFor(sidebarRecentSessions(sessions, activeSessionKey, sessionNowMs).filter { it.pinned != true && it.key !in catalogSessionKeys && it.category.isNullOrBlank() && it.kind != "group" }.map { it.key }),
+                  expanded = recentExpanded,
+                  palette = palette,
+                  onClick = { recentExpanded = !recentExpanded },
+                )
+                if (recentExpanded) {
+                  if (recentSections.isEmpty()) {
+                    Text(
+                      text = nativeString("No recent sessions"),
+                      style = ClawTheme.type.caption,
+                      color = palette.muted,
+                      modifier = Modifier.padding(horizontal = 40.dp, vertical = 10.dp),
+                    )
+                  } else {
+                    recentSections.forEach { section ->
+                      section.title?.let { title -> SidebarSectionTitle(title, palette, Modifier.padding(start = 24.dp)) }
+                      sessionRows(section.entries, SidebarSessionDragSource.Recent)
+                    }
+                  }
+                  if (recentPresentation.canExpandRecent) {
+                    SidebarActionRow(
+                      label = nativeString(if (sessionsExpanded) "Show less" else "Show more"),
+                      icon =
+                        if (sessionsExpanded) {
+                          Icons.Default.KeyboardArrowUp
+                        } else {
+                          Icons.Default.KeyboardArrowDown
+                        },
+                      palette = palette,
+                      onClick = { sessionsExpanded = !sessionsExpanded },
+                    )
+                  }
+                }
               }
-
-              catalogSections.isEmpty() -> {
-                SidebarCatalogStatus(nativeString("No sessions"), palette)
+              token == "groups" && showGroupsZone -> {
+                SidebarCollapsibleHeader(
+                  label = nativeString("Groups"),
+                  attention =
+                    if (groupsExpanded) {
+                      null
+                    } else {
+                      attentionFor(chatGroups.map { sidebarAttentionSessionKey(it.key, it.ownerAgentId ?: selectedAgentId ?: defaultAgentId) })
+                    },
+                  expanded = groupsExpanded,
+                  palette = palette,
+                  modifier = Modifier.padding(top = 10.dp),
+                  onClick = { groupsExpanded = !groupsExpanded },
+                )
+                if (groupsExpanded) {
+                  sessionRows(chatGroups, SidebarSessionDragSource.Recent)
+                }
               }
-
-              else -> {
-                if (catalogState.loading) {
+              token == "work" -> Unit
+              token.startsWith("catalog:") -> {
+                val section = catalogsById[token.removePrefix("catalog:")] ?: continue
+                if (!showedCatalogChrome && catalogState.loading) {
                   SidebarCatalogStatus(nativeString("Loading"), palette, progress = true)
                 }
-                catalogSections.forEach { section ->
-                  val catalog = section.catalog
-                  key("catalog:${catalog.id}") {
-                    SidebarCollapsibleHeader(
-                      label = catalog.label,
-                      attention = if (section.expanded) null else attentionFor(sidebarVisibleCatalogSessionKeys(listOf(catalog))),
-                      expanded = section.expanded,
-                      palette = palette,
-                      iconContent = {
-                        ProviderBrandIcon(provider = catalog.id, size = 18.dp)
-                      },
-                      trailingContent =
-                        if (
-                          sidebarCatalogSessionCreationEnabled(catalog, canMutateSessions) &&
-                          catalogState.continuingEntryId == null
-                        ) {
-                          {
-                            IconButton(
-                              onClick = { onCreateCatalogSession(catalog.id) },
-                              enabled = !sessionCreating,
-                              modifier = Modifier.size(40.dp),
-                            ) {
-                              Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = nativeString("New session"),
-                                tint = palette.text,
-                                modifier = Modifier.size(18.dp),
-                              )
-                            }
-                          }
-                        } else {
-                          null
-                        },
-                      onClick = {
-                        expandedCatalogIds = toggleSidebarExpansion(expandedCatalogIds, catalog.id)
-                      },
-                    )
-                    if (section.expanded) {
-                      SidebarSessionCatalog(
-                        attentionFor = ::attentionFor,
-                        rowHost = rowHost,
-                        state = catalogState,
-                        catalog = catalog,
-                        activeSessionKey = activeSessionKey,
-                        liveSessionsByKey = liveSessionsByKey,
-                        collapsedHostIds = collapsedCatalogHostIds.toSet(),
-                        collapsedWorkspaceIds = collapsedCatalogWorkspaceIds.toSet(),
-                        palette = palette,
-                        onToggleHost = { stableId ->
-                          collapsedCatalogHostIds = toggleSidebarExpansion(collapsedCatalogHostIds, stableId)
-                        },
-                        onToggleWorkspace = { stableId ->
-                          collapsedCatalogWorkspaceIds = toggleSidebarExpansion(collapsedCatalogWorkspaceIds, stableId)
-                        },
-                        onSelectSession = onSelectCatalogSession,
-                        onLoadMore = viewModel::loadMoreSessionCatalog,
-                        canMutateSessions = canMutateSessions,
-                        onPinSession = setSessionPinned,
-                        onDragActiveChange = onDragActiveChange,
-                      )
-                    }
-                  }
-                }
-                catalogErrorText?.let { SidebarCatalogStatus(it, palette) }
-              }
-            }
-          }
-
-          // Web puts category folders immediately before Other. Android provider
-          // catalogs stay above that pair; Groups is not buried inside Recent.
-          if (groupSections.isNotEmpty() || canMutateSessions) {
-          SidebarCollapsibleHeader(
-            label = nativeString("Groups"),
-            attention =
-              if (groupsExpanded) {
-                null
-              } else {
-                attentionFor(groupSections.flatMap { section -> section.entries.map { sidebarAttentionSessionKey(it.key, it.ownerAgentId ?: selectedAgentId ?: defaultAgentId) } })
-              },
-            expanded = groupsExpanded,
-            palette = palette,
-            modifier = Modifier.padding(top = 10.dp),
-            trailingContent =
-              if (canMutateSessions) {
-                {
-                  IconButton(
-                    onClick = { newGroupDialogVisible = true },
-                    modifier = Modifier.size(40.dp),
-                  ) {
-                    Icon(
-                      imageVector = Icons.Default.Add,
-                      contentDescription = nativeString("New group"),
-                      tint = palette.text,
-                      modifier = Modifier.size(18.dp),
-                    )
-                  }
-                }
-              } else {
-                null
-              },
-            onClick = { groupsExpanded = !groupsExpanded },
-          )
-          if (groupsExpanded) {
-            groupSections.forEach { section ->
-              val collapsed = section.name in collapsedGroupNames
-              key("group:${section.name}") {
-                SidebarCollapsibleHeader(
-                  label = section.name,
-                  attention =
-                    if (collapsed) {
-                      attentionFor(section.entries.map { sidebarAttentionSessionKey(it.key, it.ownerAgentId ?: selectedAgentId ?: defaultAgentId) })
-                    } else {
-                      null
+                showedCatalogChrome = true
+                val catalog = section.catalog
+                key("catalog:${catalog.id}") {
+                  SidebarCollapsibleHeader(
+                    label = catalog.label,
+                    attention = if (section.expanded) null else attentionFor(sidebarVisibleCatalogSessionKeys(listOf(catalog))),
+                    expanded = section.expanded,
+                    palette = palette,
+                    iconContent = {
+                      ProviderBrandIcon(provider = catalog.id, size = 18.dp)
                     },
-                  expanded = !collapsed,
-                  palette = palette,
-                  modifier = Modifier.padding(start = 12.dp),
-                  iconContent = {
-                    Icon(
-                      imageVector = Icons.Outlined.Folder,
-                      contentDescription = null,
-                      tint = palette.muted,
-                      modifier = Modifier.size(16.dp),
+                    trailingContent =
+                      if (
+                        sidebarCatalogSessionCreationEnabled(catalog, canMutateSessions) &&
+                        catalogState.continuingEntryId == null
+                      ) {
+                        {
+                          IconButton(
+                            onClick = { onCreateCatalogSession(catalog.id) },
+                            enabled = !sessionCreating,
+                            modifier = Modifier.size(40.dp),
+                          ) {
+                            Icon(
+                              imageVector = Icons.Default.Add,
+                              contentDescription = nativeString("New session"),
+                              tint = palette.text,
+                              modifier = Modifier.size(18.dp),
+                            )
+                          }
+                        }
+                      } else {
+                        null
+                      },
+                    onClick = {
+                      expandedCatalogIds = toggleSidebarExpansion(expandedCatalogIds, catalog.id)
+                    },
+                  )
+                  if (section.expanded) {
+                    SidebarSessionCatalog(
+                      attentionFor = ::attentionFor,
+                      rowHost = rowHost,
+                      state = catalogState,
+                      catalog = catalog,
+                      activeSessionKey = activeSessionKey,
+                      liveSessionsByKey = liveSessionsByKey,
+                      collapsedHostIds = collapsedCatalogHostIds.toSet(),
+                      collapsedWorkspaceIds = collapsedCatalogWorkspaceIds.toSet(),
+                      palette = palette,
+                      onToggleHost = { stableId ->
+                        collapsedCatalogHostIds = toggleSidebarExpansion(collapsedCatalogHostIds, stableId)
+                      },
+                      onToggleWorkspace = { stableId ->
+                        collapsedCatalogWorkspaceIds = toggleSidebarExpansion(collapsedCatalogWorkspaceIds, stableId)
+                      },
+                      onSelectSession = onSelectCatalogSession,
+                      onLoadMore = viewModel::loadMoreSessionCatalog,
+                      canMutateSessions = canMutateSessions,
+                      onPinSession = setSessionPinned,
+                      onDragActiveChange = onDragActiveChange,
                     )
-                  },
-                  trailingContent = {
-                    if (canMutateSessions) {
-                      SidebarGroupFolderMenu(
-                        palette = palette,
-                        onRename = { renameGroupName = section.name },
-                        onNewGroup = { newGroupDialogVisible = true },
-                        onDelete = { deleteGroupName = section.name },
-                      )
-                    }
-                  },
-                  onClick = { collapsedGroupNames = toggleSidebarExpansion(collapsedGroupNames, section.name) },
-                )
-                if (!collapsed && section.entries.isNotEmpty()) {
-                  sessionRows(section.entries, SidebarSessionDragSource.Recent)
+                  }
                 }
               }
             }
           }
+          if (catalogAvailable && catalogSections.isEmpty()) {
+            when {
+              catalogState.loading -> SidebarCatalogStatus(nativeString("Loading"), palette, progress = true)
+              catalogErrorText != null -> SidebarCatalogStatus(catalogErrorText, palette)
+              else -> SidebarCatalogStatus(nativeString("No sessions"), palette)
+            }
+          } else if (showedCatalogChrome) {
+            catalogErrorText?.let { SidebarCatalogStatus(it, palette) }
           }
 
-          SidebarCollapsibleHeader(
-            label = nativeString("Recent"),
-            attention = if (recentExpanded) null else attentionFor(sidebarRecentSessions(sessions, activeSessionKey, sessionNowMs).filter { it.pinned != true && it.key !in catalogSessionKeys && it.category.isNullOrBlank() }.map { it.key }),
-            expanded = recentExpanded,
-            palette = palette,
-            onClick = { recentExpanded = !recentExpanded },
-          )
-          if (recentExpanded) {
-            if (recentSections.isEmpty()) {
-              Text(
-                text = nativeString("No recent sessions"),
-                style = ClawTheme.type.caption,
-                color = palette.muted,
-                modifier = Modifier.padding(horizontal = 40.dp, vertical = 10.dp),
-              )
-            } else {
-              recentSections.forEach { section ->
-                section.title?.let { title -> SidebarSectionTitle(title, palette, Modifier.padding(start = 24.dp)) }
-                sessionRows(section.entries, SidebarSessionDragSource.Recent)
-              }
-            }
-            if (recentPresentation.canExpandRecent) {
-              SidebarActionRow(
-                label = nativeString(if (sessionsExpanded) "Show less" else "Show more"),
-                icon =
-                  if (sessionsExpanded) {
-                    Icons.Default.KeyboardArrowUp
-                  } else {
-                    Icons.Default.KeyboardArrowDown
-                  },
-                palette = palette,
-                onClick = { sessionsExpanded = !sessionsExpanded },
-              )
-            }
-          }
         }
       }
     }
@@ -1094,65 +1119,70 @@ internal fun OpenClawSidebar(
     }
   }
   if (newGroupDialogVisible) {
+    val ownerGatewayId = pendingNewGroupGatewayId
     SessionTextDialog(
       title = nativeString("New group"),
-      stateKey = "sidebar-group-new",
+      stateKey = "sidebar-group-new:${ownerGatewayId.orEmpty()}",
       initialValue = "",
       confirmLabel = nativeString("Create"),
       allowEmpty = false,
-      onDismiss = { newGroupDialogVisible = false },
+      onDismiss = {
+        newGroupDialogVisible = false
+        pendingNewGroupGatewayId = null
+      },
       onConfirm = { value ->
         newGroupDialogVisible = false
-        scope.launch { viewModel.addChatSessionGroup(value) }
+        pendingNewGroupGatewayId = null
+        if (ownerGatewayId != viewModel.activeGatewayStableId.value) return@SessionTextDialog
+        scope.launch { viewModel.addChatSessionGroup(value, expectedGatewayStableId = ownerGatewayId) }
       },
     )
   }
-  renameGroupName.takeIf { it.isNotEmpty() }?.let { name ->
+  renameGroupTarget?.let { target ->
     SessionTextDialog(
       title = nativeString("Rename group"),
-      stateKey = "sidebar-group-rename:$gatewayStableId:$name",
-      initialValue = name,
+      stateKey = "sidebar-group-rename:${target.gatewayStableId}:${target.name}",
+      initialValue = target.name,
       confirmLabel = nativeString("Rename"),
       allowEmpty = false,
-      onDismiss = { renameGroupName = "" },
+      onDismiss = { renameGroupTarget = null },
       onConfirm = { value ->
-        val current = name
-        renameGroupName = ""
+        renameGroupTarget = null
+        if (target.gatewayStableId != viewModel.activeGatewayStableId.value) return@SessionTextDialog
         val next = value.trim()
-        if (next.isNotEmpty() && next != current) {
+        if (next.isNotEmpty() && next != target.name) {
           scope.launch {
-            viewModel.renameChatSessionGroup(from = current, to = next, expectedGatewayStableId = gatewayStableId)
+            viewModel.renameChatSessionGroup(from = target.name, to = next, expectedGatewayStableId = target.gatewayStableId)
           }
         }
       },
     )
   }
-  deleteGroupName.takeIf { it.isNotEmpty() }?.let { name ->
+  deleteGroupTarget?.let { target ->
     SessionDeleteDialog(
       title = nativeString("Delete group?"),
-      text = nativeString("Threads in \"\$group\" are kept and move back to Ungrouped.", name),
-      onDismiss = { deleteGroupName = "" },
+      text = nativeString("Threads in \"\$group\" are kept and move back to Ungrouped.", target.name),
+      onDismiss = { deleteGroupTarget = null },
       onConfirm = {
-        val current = name
-        deleteGroupName = ""
-        scope.launch { viewModel.deleteChatSessionGroup(current, expectedGatewayStableId = gatewayStableId) }
+        deleteGroupTarget = null
+        if (target.gatewayStableId != viewModel.activeGatewayStableId.value) return@SessionDeleteDialog
+        scope.launch { viewModel.deleteChatSessionGroup(target.name, expectedGatewayStableId = target.gatewayStableId) }
       },
     )
   }
-  newGroupForSessionKey.takeIf { it.isNotEmpty() }?.let { key ->
-    val session = sessions.firstOrNull { it.key == key }
+  newGroupForSessionTarget?.let { target ->
     SessionTextDialog(
       title = nativeString("New group"),
-      stateKey = "sidebar-group-for:$gatewayStableId:$key",
+      stateKey = "sidebar-group-for:${target.stateKey}",
       initialValue = "",
       confirmLabel = nativeString("Create"),
       allowEmpty = false,
-      onDismiss = { newGroupForSessionKey = "" },
+      onDismiss = { newGroupForSessionTarget = null },
       onConfirm = { value ->
-        newGroupForSessionKey = ""
-        val target = session ?: return@SessionTextDialog
+        newGroupForSessionTarget = null
+        if (!target.matchesGateway(viewModel.activeGatewayStableId.value)) return@SessionTextDialog
         scope.launch {
-          viewModel.addChatSessionGroup(value)
+          viewModel.addChatSessionGroup(value, expectedGatewayStableId = target.gatewayStableId)
           viewModel.patchChatSession(key = target.key, ownerAgentId = target.ownerAgentId, category = value.trim())
         }
       },

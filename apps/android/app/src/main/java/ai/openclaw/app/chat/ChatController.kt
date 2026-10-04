@@ -49,8 +49,11 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -596,6 +599,9 @@ class ChatController internal constructor(
 
   private val _swarmGroups = MutableStateFlow<List<ChatSwarmGroup>>(emptyList())
   val swarmGroups: StateFlow<List<ChatSwarmGroup>> = _swarmGroups.asStateFlow()
+
+  private val _sessionGroupCatalogInvalidations = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+  internal val sessionGroupCatalogInvalidations: SharedFlow<Unit> = _sessionGroupCatalogInvalidations.asSharedFlow()
 
   private data class SwarmRefreshLease(
     val parentKey: String,
@@ -1396,21 +1402,31 @@ class ChatController internal constructor(
     patchSessionGroupMembers(group = groupName, category = null, expectedGatewayId = expectedGatewayId)
   }
 
-  /** Gateway catalog. Failures stay quiet so a missing method does not toast on every sidebar open. */
-  internal suspend fun listSessionGroups(): List<GatewaySessionGroup>? =
-    try {
-      parseSessionGroupsPayload(requestGateway("sessions.groups.list", "{}"))
-    } catch (err: CancellationException) {
-      throw err
-    } catch (_: Throwable) {
-      null
-    }
+  /** Binds catalog I/O to the gateway that was current when the caller started. */
+  internal fun captureSessionCatalogLease(expectedGatewayId: String): GatewaySession.RequestLease? {
+    val gatewayId = expectedGatewayId.trim().takeIf { it.isNotEmpty() } ?: return null
+    return captureRequestLease(ChatCacheScope(gatewayId = gatewayId, connectionGeneration = 0L))
+  }
 
-  internal suspend fun putSessionGroups(names: List<String>): List<GatewaySessionGroup>? {
+  /** Gateway catalog. Failures stay quiet so a missing method does not toast on every sidebar open. */
+  internal suspend fun listSessionGroups(lease: GatewaySession.RequestLease): SessionGroupCatalogSnapshot? =
+    requestSessionGroups(
+      lease,
+      "sessions.groups.list",
+      buildJsonObject {},
+      reportError = false,
+    )
+
+  internal suspend fun putSessionGroups(
+    names: List<String>,
+    lease: GatewaySession.RequestLease,
+  ): SessionGroupCatalogSnapshot? {
     val cleaned = names.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
     return requestSessionGroups(
+      lease,
       "sessions.groups.put",
       buildJsonObject { put("names", JsonArray(cleaned.map(::JsonPrimitive))) },
+      reportError = true,
     )
   }
 
@@ -1418,45 +1434,56 @@ class ChatController internal constructor(
   internal suspend fun renameSessionGroupCatalog(
     from: String,
     to: String,
-  ): List<GatewaySessionGroup>? {
+    lease: GatewaySession.RequestLease,
+  ): SessionGroupCatalogSnapshot? {
     val fromName = from.trim()
     val toName = to.trim()
     if (fromName.isEmpty() || toName.isEmpty() || fromName == toName) return null
     val updated =
       requestSessionGroups(
+        lease,
         "sessions.groups.rename",
         buildJsonObject {
           put("name", JsonPrimitive(fromName))
           put("to", JsonPrimitive(toName))
         },
+        reportError = true,
       ) ?: return null
-    fetchSessionsForCurrentWindow()
+    if (lease.isCurrent()) fetchSessionsForCurrentWindow()
     return updated
   }
 
   /** Deletes a catalog group. The gateway clears member categories; this does not sweep sessions.list. */
-  internal suspend fun deleteSessionGroupCatalog(name: String): List<GatewaySessionGroup>? {
+  internal suspend fun deleteSessionGroupCatalog(
+    name: String,
+    lease: GatewaySession.RequestLease,
+  ): SessionGroupCatalogSnapshot? {
     val groupName = name.trim()
     if (groupName.isEmpty()) return null
     val updated =
       requestSessionGroups(
+        lease,
         "sessions.groups.delete",
         buildJsonObject { put("name", JsonPrimitive(groupName)) },
+        reportError = true,
       ) ?: return null
-    fetchSessionsForCurrentWindow()
+    if (lease.isCurrent()) fetchSessionsForCurrentWindow()
     return updated
   }
 
   private suspend fun requestSessionGroups(
+    lease: GatewaySession.RequestLease,
     method: String,
     params: JsonObject,
-  ): List<GatewaySessionGroup>? =
+    reportError: Boolean,
+  ): SessionGroupCatalogSnapshot? =
     try {
-      parseSessionGroupsPayload(requestGateway(method, params.toString()))
+      if (!lease.isCurrent()) return null
+      parseSessionGroupCatalog(lease.request(method, params.toString()))
     } catch (err: CancellationException) {
       throw err
     } catch (err: Throwable) {
-      updateErrorText(err.message)
+      if (reportError && lease.isCurrent()) updateErrorText(err.message)
       null
     }
 
@@ -6417,6 +6444,7 @@ class ChatController internal constructor(
     val swarmKind = swarmKindElement.asStringOrNull()?.trim()
     if (swarmEvent && (swarmKind == "phase" || swarmKind == "log")) return
     val reason = payload["reason"].asStringOrNull()
+    if (reason == "groups") _sessionGroupCatalogInvalidations.tryEmit(Unit)
     if (isSessionSettingsMutation(payload)) {
       val session = eventSessionObject(payload)
       val key = payload["sessionKey"].asStringOrNull() ?: session?.get("key").asStringOrNull()
@@ -7782,6 +7810,7 @@ class ChatController internal constructor(
       label = obj["label"].asStringOrNull()?.trim(),
       autoLabel = obj["autoLabel"].asStringOrNull()?.trim(),
       category = obj["category"].asStringOrNull()?.trim(),
+      kind = obj.nonBlankString("kind"),
       color =
         obj["color"]
           .asJsonStringOrNull()
@@ -9078,6 +9107,7 @@ internal fun mergeChatSessionEntry(
     label = next.label ?: existing.label,
     autoLabel = next.autoLabel ?: existing.autoLabel,
     category = next.category ?: existing.category,
+    kind = next.kind ?: existing.kind,
     // Omitted metadata preserves the tint; explicit null from another client clears it.
     color = if (next.hasColorMetadata) next.color else existing.color,
     hasColorMetadata = existing.hasColorMetadata || next.hasColorMetadata,

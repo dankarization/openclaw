@@ -526,7 +526,7 @@ internal fun SessionsScreen(
         groupSessionTarget = null
         if (!session.matchesGateway(activeGatewayStableId)) return@SessionTextDialog
         coroutineScope.launch {
-          viewModel.addChatSessionGroup(value)
+          viewModel.addChatSessionGroup(value, expectedGatewayStableId = session.gatewayStableId)
           viewModel.patchChatSession(key = session.key, ownerAgentId = session.ownerAgentId, category = value.trim())
         }
       },
@@ -1439,12 +1439,12 @@ internal data class SessionActionTarget(
   fun matchesGateway(activeGatewayStableId: String?): Boolean = gatewayStableId == activeGatewayStableId
 }
 
-private data class SessionGroupActionTarget(
+internal data class SessionGroupActionTarget(
   val gatewayStableId: String?,
   val name: String,
 )
 
-private val SessionGroupActionTargetSaver =
+internal val SessionGroupActionTargetSaver =
   Saver<SessionGroupActionTarget?, ArrayList<String>>(
     save = { target -> target?.let { arrayListOf(it.gatewayStableId.orEmpty(), it.name) } ?: arrayListOf() },
     restore = { values ->
@@ -1454,7 +1454,7 @@ private val SessionGroupActionTargetSaver =
 
 private const val SESSION_ACTION_TARGET_STATE_FIELDS = 9
 
-private val SessionActionTargetSaver =
+internal val SessionActionTargetSaver =
   Saver<SessionActionTarget?, ArrayList<String>>(
     save = { target -> target?.toSavedState() ?: arrayListOf() },
     restore = ::sessionActionTargetFromSavedState,

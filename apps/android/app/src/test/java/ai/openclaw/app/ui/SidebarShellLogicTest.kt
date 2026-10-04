@@ -3,6 +3,7 @@ package ai.openclaw.app.ui
 import ai.openclaw.app.AppearanceThemeFamily
 import ai.openclaw.app.GatewayAgentSummary
 import ai.openclaw.app.chat.ChatSessionEntry
+import ai.openclaw.app.chat.normalizeSidebarSectionOrder
 import ai.openclaw.app.ui.design.clawColorsForTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -415,6 +416,59 @@ class SidebarShellLogicTest {
     assertEquals(9, expanded.recentSections.flatMap { it.entries }.size)
   }
 
+  @Test
+  fun categoryFoldersStayOutOfTheKindGroupZone() {
+    val presentation =
+      sidebarSessionPresentation(
+        sessions =
+          listOf(
+            session("dev", activity = 4, category = "Alpha"),
+            session("objects", activity = 3, category = "Beta"),
+            session("sync", activity = 2, category = "Gamma"),
+            session("other", activity = 6, kind = "direct"),
+            session("telegram", activity = 5, kind = "group"),
+            session("filed-group", activity = 1, category = "Alpha", kind = "group"),
+          ),
+        knownGroups = listOf("Alpha", "Beta", "Gamma"),
+        expanded = true,
+      )
+
+    assertEquals(listOf("Alpha", "Beta", "Gamma"), presentation.groups.map { it.name })
+    assertEquals(listOf("dev", "filed-group"), presentation.groups[0].entries.map { it.key })
+    assertEquals(listOf("other"), presentation.recentSections.flatMap { it.entries }.map { it.key })
+    assertEquals(listOf("telegram"), presentation.chatGroups.map { it.key })
+  }
+
+
+  @Test
+  fun sectionOrderUsesGatewayTokensThenDefaultBuiltIns() {
+    assertEquals(
+      listOf("category:Alpha", "category:Beta", "ungrouped", "groups", "work", "catalog:codex", "catalog:extra"),
+      normalizeSidebarSectionOrder(
+        stored = emptyList(),
+        knownGroups = listOf("Alpha", "Beta"),
+        catalogIds = listOf("codex", "extra"),
+      ),
+    )
+    assertEquals(
+      listOf(
+        "catalog:codex",
+        "category:Beta",
+        "category:Gamma",
+        "ungrouped",
+        "groups",
+        "category:Alpha",
+        "work",
+        "catalog:extra",
+      ),
+      normalizeSidebarSectionOrder(
+        stored = listOf("catalog:codex", "category:Beta", "ungrouped", "groups", "category:Alpha", "work", "catalog:missing"),
+        knownGroups = listOf("Alpha", "Beta", "Gamma"),
+        catalogIds = listOf("codex", "extra"),
+      ),
+    )
+  }
+
   private fun agent(
     id: String,
     kind: String? = null,
@@ -435,6 +489,7 @@ class SidebarShellLogicTest {
     label: String? = null,
     owner: String? = null,
     category: String? = null,
+    kind: String? = null,
   ): ChatSessionEntry =
     ChatSessionEntry(
       key = key,
@@ -446,5 +501,6 @@ class SidebarShellLogicTest {
       label = label,
       ownerAgentId = owner,
       category = category,
+      kind = kind,
     )
 }
