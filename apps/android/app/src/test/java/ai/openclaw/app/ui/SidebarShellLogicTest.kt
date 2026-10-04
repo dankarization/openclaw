@@ -2,6 +2,8 @@ package ai.openclaw.app.ui
 
 import ai.openclaw.app.AppearanceThemeFamily
 import ai.openclaw.app.GatewayAgentSummary
+import ai.openclaw.app.SessionCatalogEntry
+import ai.openclaw.app.SessionCatalogHost
 import ai.openclaw.app.chat.ChatSessionEntry
 import ai.openclaw.app.chat.normalizeSidebarSectionOrder
 import ai.openclaw.app.ui.design.clawColorsForTheme
@@ -483,8 +485,8 @@ class SidebarShellLogicTest {
     assertEquals(11, window.rows.size)
     assertEquals("s-14", window.rows.last().key)
     assertTrue(window.canShowMore)
-    assertEquals(14, sidebarCollapsedCount(window.totalCount, rosterComplete = true))
-    assertEquals(null, sidebarCollapsedCount(window.totalCount, rosterComplete = false))
+    assertEquals(14, sidebarCollapsedCount(window.totalCount))
+    assertEquals(null, sidebarCollapsedCount(0))
   }
 
   @Test
@@ -509,6 +511,38 @@ class SidebarShellLogicTest {
       ),
     )
   }
+
+  @Test
+  fun collapsedCatalogCountShowsLoadedRowsWhileAnotherPageExists() {
+    val host =
+      SessionCatalogHost(
+        hostId = "desktop",
+        label = "Desktop",
+        connected = true,
+        nextCursor = "page-2",
+        sessions =
+          listOf(
+            catalogEntry("live"),
+            catalogEntry("archived", archived = true),
+          ),
+      )
+
+    assertEquals(1, sidebarCatalogLoadedCount(listOf(host)))
+    assertEquals(null, sidebarCatalogLoadedCount(emptyList()))
+  }
+
+  private fun catalogEntry(
+    threadId: String,
+    archived: Boolean = false,
+  ): SessionCatalogEntry =
+    SessionCatalogEntry(
+      catalogId = "codex",
+      hostId = "desktop",
+      threadId = threadId,
+      status = "idle",
+      archived = archived,
+      canContinue = true,
+    )
 
   private fun agent(
     id: String,

@@ -158,7 +158,7 @@ internal fun SidebarCollapsibleHeader(
   iconContent: (@Composable () -> Unit)? = null,
   trailingContent: (@Composable () -> Unit)? = null,
   attention: SidebarAttention? = null,
-  /** Loaded membership. Null hides the badge so a partial page is not shown as complete. */
+  /** Loaded membership, same as the web collapsed section count. Hidden when expanded or zero. */
   count: Int? = null,
 ) {
   Row(
