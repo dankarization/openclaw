@@ -405,20 +405,18 @@ internal fun sidebarReorderVisibleTokens(
   }
 
 /**
- * Collapsed badge. A catalog still paging, or a roster that still has another
- * `sessions.list` page, is not a finished total — omit it instead of showing a partial as complete.
+ * Collapsed badge. The web projection's `totalRowCount` is the loaded section
+ * membership (`section.rows.length` in app-sidebar-session-projection.ts), painted
+ * as soon as the folder is collapsed. A later roster page grows that number.
+ * It is not withheld until `sessions.list` reports `hasMore: false`.
  */
-internal fun sidebarCollapsedCount(
-  loadedCount: Int,
-  rosterComplete: Boolean,
-): Int? = loadedCount.takeIf { rosterComplete && it > 0 }
+internal fun sidebarCollapsedCount(loadedCount: Int): Int? = loadedCount.takeIf { it > 0 }
 
-internal fun sidebarCatalogLoadedCount(
-  hosts: List<SessionCatalogHost>,
-): Int? {
-  if (hosts.any { it.nextCursor != null }) return null
-  return hosts.sumOf { host -> host.sessions.count { !it.archived } }
-}
+/**
+ * Collapsed catalog badge. Web paints the loaded `visibleHosts` session length
+ * while a host still has `nextCursor` (app-sidebar-session-catalog-render.ts).
+ */
+internal fun sidebarCatalogLoadedCount(hosts: List<SessionCatalogHost>): Int? = hosts.sumOf { host -> host.sessions.count { !it.archived } }.takeIf { it > 0 }
 
 internal fun toggleSidebarExpansion(
   ids: List<String>,
@@ -596,7 +594,6 @@ internal fun OpenClawSidebar(
   var pagesMenuMode by rememberSaveable { mutableStateOf(SidebarPagesMenuMode.Closed) }
   val sectionVisibleLimits = remember { mutableStateMapOf<String, Int>() }
   val rosterHasMore by viewModel.chatSessionRosterHasMore.collectAsState()
-  val rosterSettled by viewModel.chatSessionRosterSettled.collectAsState()
   val rosterLoadingMore by viewModel.chatSessionRosterLoadingMore.collectAsState()
   var expandedCatalogIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
   var pinnedExpanded by rememberSaveable { mutableStateOf(false) }
@@ -1004,7 +1001,6 @@ internal fun OpenClawSidebar(
               showGroupsZone = showGroupsZone,
               catalogIds = catalogsById.keys,
             )
-          val rosterComplete = rosterSettled && !rosterHasMore
 
           fun limitFor(token: String): Int = sectionVisibleLimits[token] ?: SIDEBAR_SESSION_PAGE_SIZE
 
@@ -1059,7 +1055,7 @@ internal fun OpenClawSidebar(
                     expanded = !collapsed,
                     palette = palette,
                     modifier = Modifier.padding(top = 10.dp),
-                    count = sidebarCollapsedCount(window.totalCount, rosterComplete),
+                    count = sidebarCollapsedCount(window.totalCount),
                     iconContent = {
                       Icon(
                         imageVector = Icons.Outlined.Folder,
@@ -1117,7 +1113,7 @@ internal fun OpenClawSidebar(
                     },
                   expanded = recentExpanded,
                   palette = palette,
-                  count = sidebarCollapsedCount(window.totalCount, rosterComplete),
+                  count = sidebarCollapsedCount(window.totalCount),
                   trailingContent = {
                     if (canMutateSessions) {
                       SidebarSectionMoveMenu(
@@ -1163,7 +1159,7 @@ internal fun OpenClawSidebar(
                   expanded = groupsExpanded,
                   palette = palette,
                   modifier = Modifier.padding(top = 10.dp),
-                  count = sidebarCollapsedCount(window.totalCount, rosterComplete),
+                  count = sidebarCollapsedCount(window.totalCount),
                   trailingContent = {
                     if (canMutateSessions) {
                       SidebarSectionMoveMenu(
