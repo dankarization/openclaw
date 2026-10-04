@@ -5,7 +5,7 @@ import {
   UpdateRecoveryRequiredError,
   type UpdateRecoveryRecord,
 } from "./update-run-recovery-schema.js";
-import { readRecoveries } from "./update-run-recovery-store.js";
+import { readPendingPreviousBootSettlement, readRecoveries } from "./update-run-recovery-store.js";
 export type { UpdateRecoveryFence, UpdateRecoveryHandoff } from "./update-run-recovery-types.js";
 export { UpdateRecoveryRequiredError } from "./update-run-recovery-schema.js";
 export type { UpdateRecoveryRecord } from "./update-run-recovery-schema.js";
@@ -30,5 +30,16 @@ export function assertNoPendingUpdateRecovery(options: OpenClawStateDatabaseOpti
   const pending = loadUpdateRecoveries(options).find(isUpdateRecoveryPending);
   if (pending) {
     throw new UpdateRecoveryRequiredError(pending);
+  }
+  const settlement = withExistingOpenClawStateDatabaseArtifactPreservingReadOnly(
+    ({ db }) => readPendingPreviousBootSettlement(db),
+    options,
+  );
+  if (settlement) {
+    throw new Error(
+      "Previous-boot update settlement is in progress for operation " +
+        settlement.operationId +
+        ".",
+    );
   }
 }

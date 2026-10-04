@@ -51,3 +51,25 @@ export function inspectUpdateRecoveries(
     ) ?? []
   );
 }
+
+export function readPendingPreviousBootSettlement(db: DatabaseSync) {
+  if (!tableExists(db, "config_machine_state")) {
+    return undefined;
+  }
+  const rows = executeSqliteQuerySync(
+    db,
+    getNodeSqliteKysely<RecoveryDatabase>(db)
+      .selectFrom("config_machine_state")
+      .select(["state_key", "value_json"])
+      .where("state_key", ">=", "update.previousBootSettlement.")
+      .where("state_key", "<", "update.previousBootSettlement/")
+      .orderBy("state_key", "asc"),
+  ).rows;
+  for (const row of rows) {
+    const value = JSON.parse(row.value_json) as { phase?: string; operationId?: string };
+    if (value.phase !== "committed") {
+      return value;
+    }
+  }
+  return undefined;
+}

@@ -72,6 +72,10 @@ import type {
   InterruptedUpdateSettlementResult,
 } from "../infra/update-run-interruption-contract.js";
 import type { UpdateRunReconciliationOperations } from "../infra/update-run-reconciliation.types.js";
+import type {
+  UpdatePreviousBootSettlementReceiptOperations,
+  UpdateRecoverySettlementArchiveOperations,
+} from "../infra/update-run-recovery-settlement.types.js";
 import type { readRemoteModelCatalog } from "../model-catalog/remote-store.js";
 import type { NodeWorkerJournalWorkerOperations } from "../node-host/node-worker-journal.worker-contract.js";
 import type { PluginBlobWorkerOperations } from "../plugin-state/plugin-blob-worker-contract.js";
@@ -149,7 +153,9 @@ export type OpenClawStateWorkerOperations = UpdateRunReconciliationOperations &
   NodeWorkerJournalWorkerOperations &
   SkillUploadWorkerOperations &
   OpenClawStateLeaseLifecycleOperations &
-  ManagedImageRecordWorkerOperations & {
+  ManagedImageRecordWorkerOperations &
+  UpdateRecoverySettlementArchiveOperations &
+  UpdatePreviousBootSettlementReceiptOperations & {
     "database.walMaintenance": { input: SqliteWalPeriodicRequest; output: SqliteWalPeriodicResult };
     "worktrees.admitRunLease": { input: WorktreeRunLeaseRowInput; output: void };
     "worktrees.reapRunLeases": { input: { scopes: string[] }; output: void };

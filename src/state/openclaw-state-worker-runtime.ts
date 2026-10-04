@@ -91,6 +91,10 @@ import {
 } from "../infra/telemetry-store.kernel.js";
 import { persistInterruptedUpdateObservation } from "../infra/update-run-interruption-store.js";
 import { reconcileUpdateRunCandidatesInWorker } from "../infra/update-run-reconciliation.worker.js";
+import {
+  archivePreviousBootRecoveryInWorker,
+  recordPreviousBootSettlementReceiptInWorker,
+} from "../infra/update-run-recovery-settlement.worker.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { readRemoteModelCatalog } from "../model-catalog/remote-store.js";
 import { isNodeWorkerJournalCommand } from "../node-host/node-worker-journal.worker-contract.js";
@@ -312,6 +316,12 @@ export function executeSharedStateCommand(
       ({ db }) => upsertPluginBindingApprovalInDatabase(db, command.input),
       { database, path: context.databasePath, env: getSqliteWorkerStateContext().environment },
     );
+  }
+  if (command.type === "updateRecovery.archivePreviousBoot") {
+    return archivePreviousBootRecoveryInWorker(command.input, stateOptions());
+  }
+  if (command.type === "updateRecovery.previousBootReceipt") {
+    return recordPreviousBootSettlementReceiptInWorker(command.input, stateOptions());
   }
   if (command.type === "updateRuns.reconcile") {
     return reconcileUpdateRunCandidatesInWorker(command.input, stateOptions(), (stage) =>

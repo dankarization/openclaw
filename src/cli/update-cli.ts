@@ -228,6 +228,68 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/update", "docs.openclaw.ai/cli/up
       await updateAdmitCommand(opts.context);
     });
 
+  const recovery = update
+    .command("recovery")
+    .description("Inspect and settle retained package recovery");
+  recovery
+    .command("attest-previous-boot")
+    .description("Root-operator attestation for one interrupted package update")
+    .requiredOption("--operation-id <uuid>", "Exact retained update transaction ID")
+    .requiredOption("--old-boot-id <uuid>", "Operator-identified pre-reboot kernel boot ID")
+    .requiredOption("--service-uid <uid>", "Gateway service UID")
+    .requiredOption("--service-gid <gid>", "Gateway service GID")
+    .requiredOption("--install-root <path>", "Exact current OpenClaw install root")
+    .requiredOption("--anchor <path>", "Exact retained package activation anchor")
+    .requiredOption("--control <path>", "Exact retained package activation control directory")
+    .requiredOption("--journal <path>", "Exact retained package activation journal")
+    .requiredOption("--helper <path>", "Exact sealed recovery helper")
+    .requiredOption("--archive <path>", "Verified preserved package/archive artifact")
+    .requiredOption("--service-unit <name>", "Exact Gateway service unit name")
+    .option(
+      "--launcher <path|argv0>",
+      "Attested launcher as PATH|ARGV0; repeat for each launcher",
+      (value: string, previous: string[] = []) => [...previous, value],
+      [],
+    )
+    .action(
+      createUpdateLeafAction(async (opts) => {
+        const { createPreviousBootAttestationCommand } =
+          await import("./update-cli/previous-boot-settlement.js");
+        await createPreviousBootAttestationCommand(opts as never);
+      }),
+    );
+
+  recovery
+    .command("settle-previous-boot")
+    .description("Quarantine an attested prior-boot publication and clear its recovery barrier")
+    .requiredOption("--operation-id <uuid>", "Exact original package activation operation ID")
+    .requiredOption("--attestation <path>", "Root-owned operation-bound attestation file")
+    .option(
+      "--apply",
+      "Apply the verified previous-boot settlement; otherwise print the read-only plan",
+      false,
+    )
+    .requiredOption("--install-root <path>", "Exact current OpenClaw install root")
+    .requiredOption("--anchor <path>", "Exact retained package activation anchor")
+    .requiredOption("--control <path>", "Exact retained package activation control directory")
+    .requiredOption("--journal <path>", "Exact retained package activation journal")
+    .requiredOption("--helper <path>", "Exact sealed recovery helper")
+    .requiredOption("--archive <path>", "Verified preserved package/archive artifact")
+    .requiredOption("--service-unit <name>", "Exact Gateway service unit name")
+    .option(
+      "--launcher <path|argv0>",
+      "Attested launcher as PATH|ARGV0; repeat for each launcher",
+      (value: string, previous: string[] = []) => [...previous, value],
+      [],
+    )
+    .action(
+      createUpdateLeafAction(async (opts) => {
+        const { settlePreviousBootRecoveryCommand } =
+          await import("./update-cli/previous-boot-settlement.js");
+        await settlePreviousBootRecoveryCommand(opts as never);
+      }),
+    );
+
   update
     .command("cleanup")
     .description("Retire verified update recovery originals after acknowledging rollback loss")
