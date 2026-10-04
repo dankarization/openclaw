@@ -1,3 +1,7 @@
+import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   assertUpdatePreviousBootAttestationBinding,
@@ -6,6 +10,11 @@ import {
   type UpdatePreviousBootAttestation,
   type UpdatePreviousBootAttestationPaths,
 } from "./update-previous-boot-attestation.js";
+
+vi.mock("node:child_process", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:child_process")>();
+  return { ...actual, spawnSync: vi.fn(actual.spawnSync) };
+});
 
 const oldBootId = "11111111-1111-4111-8111-111111111111";
 const currentBootId = "22222222-2222-4222-8222-222222222222";
@@ -67,6 +76,54 @@ describe("previous-boot operator attestation", () => {
     ).toThrow(/effective UID 0/u);
     expect(readJournalBootIds).not.toHaveBeenCalled();
   });
+
+  it.skipIf(process.platform !== "linux")(
+    "uses all boot rows from the native journalctl output before inspecting artifacts",
+    () => {
+      const journalOutput = [
+        "IDX BOOT ID                          FIRST ENTRY                 LAST ENTRY",
+        "-1 11111111111141118111111111111111 Mon 2026-10-04 00:00:00 UTC Mon 2026-10-04 01:00:00 UTC",
+        " 0 22222222222242228222222222222222 Mon 2026-10-05 00:00:00 UTC Mon 2026-10-05 01:00:00 UTC",
+        "",
+      ].join("\n");
+      vi.mocked(spawnSync).mockReturnValueOnce({
+        pid: process.pid,
+        output: [],
+        stdout: journalOutput,
+        stderr: "",
+        status: 0,
+        signal: null,
+        error: undefined,
+      } as never);
+      const missingAnchor = path.join(
+        os.tmpdir(),
+        "openclaw-attestation-parser-" + randomUUID(),
+        "anchor",
+      );
+      expect(() =>
+        createUpdatePreviousBootAttestation(
+          {
+            operationId,
+            oldBootId,
+            serviceUid: 1000,
+            serviceGid: 1000,
+            paths: { ...paths, anchorPath: missingAnchor },
+          },
+          {
+            effectiveUid: () => 0,
+            readBootId: () => currentBootId,
+            now: () => 10,
+            nonce: () => "44444444-4444-4444-8444-444444444444",
+          },
+        ),
+      ).toThrow(/ENOENT/u);
+      expect(spawnSync).toHaveBeenCalledWith(
+        "journalctl",
+        ["--list-boots", "--no-pager"],
+        expect.objectContaining({ encoding: "utf8", timeout: 5000, maxBuffer: 64 * 1024 }),
+      );
+    },
+  );
 
   it("refuses same-boot assertions and journal history that cannot corroborate both IDs", () => {
     const base = {

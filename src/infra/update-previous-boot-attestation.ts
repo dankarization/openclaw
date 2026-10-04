@@ -90,7 +90,7 @@ function defaults(): System {
       if (result.error || result.status !== 0 || typeof result.stdout !== "string") {
         throw new Error("Persistent system journal boot history is unavailable.");
       }
-      return [...result.stdout.matchAll(/^\s*-?\d+\s+([0-9a-f-]{32}|[0-9a-f-]{36})\s/giu)].map(
+      return [...result.stdout.matchAll(/^\s*-?\d+\s+([0-9a-f-]{32}|[0-9a-f-]{36})\s/gimu)].map(
         (m) => {
           const value = m[1]!.toLowerCase();
           return value.length === 32
