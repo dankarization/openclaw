@@ -1076,7 +1076,10 @@ class SecurePrefs(
     return map[id].orEmpty()
   }
 
-  fun setStoredSessionGroupCatalog(gatewayId: String, names: List<String>) {
+  fun setStoredSessionGroupCatalog(
+    gatewayId: String,
+    names: List<String>,
+  ) {
     val id = gatewayId.trim()
     if (id.isEmpty()) return
     val cleaned = names.map(String::trim).filter { it.isNotEmpty() }.distinct()
@@ -1092,7 +1095,10 @@ class SecurePrefs(
     return loadSessionGroupSectionOrderMap()[id].orEmpty()
   }
 
-  fun setStoredSessionGroupSectionOrder(gatewayId: String, sectionOrder: List<String>) {
+  fun setStoredSessionGroupSectionOrder(
+    gatewayId: String,
+    sectionOrder: List<String>,
+  ) {
     val id = gatewayId.trim()
     if (id.isEmpty()) return
     val cleaned = sectionOrder.map(String::trim).filter { it.isNotEmpty() }.distinct()

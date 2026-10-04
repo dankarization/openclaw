@@ -14,8 +14,6 @@ import ai.openclaw.app.chat.ChatReactionSummary
 import ai.openclaw.app.chat.ChatSessionEntry
 import ai.openclaw.app.chat.ChatSwarmGroup
 import ai.openclaw.app.chat.ChatThinkingLevelSelection
-import ai.openclaw.app.chat.decideSessionGroupMigration
-import ai.openclaw.app.chat.unionSessionGroupNames
 import ai.openclaw.app.chat.ChatTranscriptAnchorState
 import ai.openclaw.app.chat.ChatWidgetResource
 import ai.openclaw.app.chat.GatewayDefaultAgentOwner
@@ -24,13 +22,15 @@ import ai.openclaw.app.chat.SessionBranch
 import ai.openclaw.app.chat.SessionDiffSnapshot
 import ai.openclaw.app.chat.SessionForkResult
 import ai.openclaw.app.chat.SessionRewindResult
+import ai.openclaw.app.chat.decideSessionGroupMigration
 import ai.openclaw.app.chat.defaultChatThinkingLevelSelection
 import ai.openclaw.app.chat.resolveChatComposerOwner
+import ai.openclaw.app.chat.unionSessionGroupNames
 import ai.openclaw.app.gateway.GatewayEndpoint
-import ai.openclaw.app.gateway.GatewaySession
 import ai.openclaw.app.gateway.GatewayMediaKind
 import ai.openclaw.app.gateway.GatewayRegistryEntry
 import ai.openclaw.app.gateway.GatewayRegistryEntryKind
+import ai.openclaw.app.gateway.GatewaySession
 import ai.openclaw.app.gateway.GatewayUpdateAvailableSummary
 import ai.openclaw.app.i18n.NativeText
 import ai.openclaw.app.i18n.nativeString
@@ -1976,8 +1976,7 @@ class MainViewModel private constructor(
     }
   }
 
-  private fun GatewaySession.RequestLease.canPutSessionGroups(): Boolean =
-    !hasAdvertisedMethods() || supportsMethod("sessions.groups.put")
+  private fun GatewaySession.RequestLease.canPutSessionGroups(): Boolean = !hasAdvertisedMethods() || supportsMethod("sessions.groups.put")
 
   suspend fun forkChatSession(
     parentKey: String,
