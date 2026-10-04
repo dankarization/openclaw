@@ -554,6 +554,64 @@ class ChatControllerModelSelectionTest {
     }
 
   @Test
+  fun offUltraPickerPreservesGatewayMediumOnSelectionSendAndQueuedReconnect() =
+    runTest {
+      val sentThinkingLevels = mutableListOf<String>()
+      val sessionPayload =
+        """{"sessions":[{"key":"main","modelProvider":"growter","model":"deepseek-v4-flash",${thinkingFields("medium", "off", "ultra")}}]}"""
+      val controller =
+        createScriptedChatController {
+          respond("sessions.list", sessionPayload)
+          respond("chat.send") { paramsJson ->
+            val params = json.parseToJsonElement(paramsJson.orEmpty()) as JsonObject
+            sentThinkingLevels += (params["thinking"] as JsonPrimitive).content
+            """{"runId":"run-ok","status":"ok"}"""
+          }
+        }
+
+      controller.refreshSessions()
+      advanceUntilIdle()
+
+      assertEquals(
+        listOf("off", "ultra"),
+        controller.thinkingLevelSelection.value.options
+          .map { it.id },
+      )
+      assertEquals("medium", controller.thinkingLevel.value)
+      controller.handleGatewayEvent("health", null)
+      assertTrue(
+        controller.sendMessageAwaitAcceptance(
+          message = "keep gateway medium",
+          thinkingLevel = controller.thinkingLevel.value,
+          attachments = emptyList(),
+        ),
+      )
+      runCurrent()
+      assertEquals(listOf("medium"), sentThinkingLevels)
+
+      controller.onDisconnected("Reconnecting…")
+      assertTrue(
+        controller.sendMessageAwaitAcceptance(
+          message = "queued medium",
+          thinkingLevel = "medium",
+          attachments = emptyList(),
+        ),
+      )
+      assertEquals(
+        ChatOutboxStatus.Queued,
+        controller.outboxItems.value
+          .single { it.text == "queued medium" }
+          .status,
+      )
+      controller.refreshSessions()
+      advanceUntilIdle()
+      assertEquals("medium", controller.thinkingLevel.value)
+      controller.handleGatewayEvent("health", null)
+      advanceUntilIdle()
+      assertEquals(listOf("medium", "medium"), sentThinkingLevels)
+    }
+
+  @Test
   fun failedSelectionDoesNotRecordRecentOrUpdateSelectedModel() =
     runTest {
       val recents = mutableListOf<String>()
