@@ -554,17 +554,14 @@ class ChatControllerModelSelectionTest {
     }
 
   @Test
-  fun unsupportedMediumOnOffUltraProfileClampsSelectionAndSend() =
+  fun offUltraPickerPreservesGatewayMediumOnSelectionSendAndQueuedReconnect() =
     runTest {
       val sentThinkingLevels = mutableListOf<String>()
+      val sessionPayload =
+        """{"sessions":[{"key":"main","modelProvider":"growter","model":"deepseek-v4-flash",${thinkingFields("medium", "off", "ultra")}}]}"""
       val controller =
         createScriptedChatController {
-          respond(
-            "sessions.list",
-            // Growter / DeepSeek Flash: session still carries Medium from a prior model/default,
-            // while advertised picker options are only Off + Ultra.
-            """{"sessions":[{"key":"main","modelProvider":"growter","model":"deepseek-v4-flash",${thinkingFields("medium", "off", "ultra")}}]}""",
-          )
+          respond("sessions.list", sessionPayload)
           respond("chat.send") { paramsJson ->
             val params = json.parseToJsonElement(paramsJson.orEmpty()) as JsonObject
             sentThinkingLevels += (params["thinking"] as JsonPrimitive).content
@@ -579,17 +576,33 @@ class ChatControllerModelSelectionTest {
         listOf("off", "ultra"),
         controller.thinkingLevelSelection.value.options.map { it.id },
       )
-      assertEquals("off", controller.thinkingLevel.value)
+      assertEquals("medium", controller.thinkingLevel.value)
       controller.handleGatewayEvent("health", null)
       assertTrue(
         controller.sendMessageAwaitAcceptance(
-          message = "clamp unsupported medium",
+          message = "keep gateway medium",
           thinkingLevel = controller.thinkingLevel.value,
           attachments = emptyList(),
         ),
       )
       runCurrent()
-      assertEquals(listOf("off"), sentThinkingLevels)
+      assertEquals(listOf("medium"), sentThinkingLevels)
+
+      controller.onDisconnected("Reconnecting…")
+      assertTrue(
+        controller.sendMessageAwaitAcceptance(
+          message = "queued medium",
+          thinkingLevel = "medium",
+          attachments = emptyList(),
+        ),
+      )
+      assertEquals(ChatOutboxStatus.Queued, controller.outboxItems.value.single { it.text == "queued medium" }.status)
+      controller.refreshSessions()
+      advanceUntilIdle()
+      assertEquals("medium", controller.thinkingLevel.value)
+      controller.handleGatewayEvent("health", null)
+      advanceUntilIdle()
+      assertEquals(listOf("medium", "medium"), sentThinkingLevels)
     }
 
   @Test

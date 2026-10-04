@@ -40,35 +40,21 @@ class ChatThinkingLevelClampTest {
   }
 
   @Test
-  fun clampsMediumToOffOnOffUltraProfile() {
-    // Growter / DeepSeek Flash advertises Off+Ultra only; Medium must never stick.
-    assertEquals("off", clampThinkingLevelToOptions("medium", options("off", "ultra")))
-  }
-
-  @Test
-  fun ambiguousAdaptivePrefersOffOnOffUltraProfile() {
-    // Complete Off/Ultra capabilities prove adaptive unsupported; clamp to Off.
-    assertEquals("off", clampThinkingLevelToOptions("adaptive", options("off", "ultra")))
-  }
-
-  @Test
-  fun highEffortClampsToOffOnOffUltraProfile() {
-    // Align with Gateway resolveSupportedThinkingLevelFromProfile: never auto-fallback to Ultra.
-    assertEquals("off", clampThinkingLevelToOptions("high", options("off", "ultra")))
-    assertEquals("off", clampThinkingLevelToOptions("max", options("off", "ultra")))
-    assertEquals("off", clampThinkingLevelToOptions("xhigh", options("off", "ultra")))
+  fun offUltraPickerDoesNotReplaceCanonicalEffectiveLevel() {
+    // An Off-only profile can have Ultra appended by the runtime. That picker shape is not
+    // authoritative support, so a gateway-preserved Medium/High stays put and is not Ultra.
+    assertEquals("medium", clampThinkingLevelToOptions("medium", options("off", "ultra")))
+    assertEquals("adaptive", clampThinkingLevelToOptions("adaptive", options("off", "ultra")))
+    assertEquals("high", clampThinkingLevelToOptions("high", options("off", "ultra")))
+    assertEquals("max", clampThinkingLevelToOptions("max", options("off", "ultra")))
+    assertEquals("xhigh", clampThinkingLevelToOptions("xhigh", options("off", "ultra")))
+    assertEquals("medium", clampThinkingLevelToOptions("medium", options("ultra")))
   }
 
   @Test
   fun preservesCanonicalLevelWhenRicherLadderOmitsIt() {
     // Off/High/Ultra is not an Off/Ultra-only restricted profile; preserve omitted Medium.
     assertEquals("medium", clampThinkingLevelToOptions("medium", options("off", "high", "ultra")))
-  }
-
-  @Test
-  fun soleUltraAdvertisedDoesNotAutoSelectUltra() {
-    // Gateway never auto-opts into Ultra; explicit Ultra is membership-only.
-    assertEquals("off", clampThinkingLevelToOptions("medium", options("ultra")))
   }
 
   @Test
