@@ -18,6 +18,7 @@ import {
   withOpenClawAgentDatabaseAsync,
   type OpenClawAgentDatabase,
 } from "../../state/openclaw-agent-db.js";
+import { sessionDeliveryOrigin } from "../../utils/delivery-context.read.js";
 import { cloneEnvWithPlatformSemantics } from "../config-env-vars.js";
 import { resolveStateDir } from "../paths.js";
 import { isInternalSessionEffectsKey } from "./internal-session-key.js";
@@ -595,7 +596,7 @@ export async function recordInboundSessionMeta(
     (_entry, context) => {
       const existing = context.existingEntry;
       hadExistingEntry = existing !== undefined;
-      previousOriginLabel = existing?.delivery?.origin?.label;
+      previousOriginLabel = sessionDeliveryOrigin(existing)?.label;
       const metadataPatch = deriveSessionMetaPatch({
         ctx: params.ctx,
         sessionKey: params.sessionKey,
@@ -626,7 +627,7 @@ export async function recordInboundSessionMeta(
   if (
     hadExistingEntry &&
     topicLabel &&
-    updated?.delivery?.origin?.label === topicLabel &&
+    sessionDeliveryOrigin(updated ?? undefined)?.label === topicLabel &&
     previousOriginLabel !== topicLabel
   ) {
     // Metadata changes are committed before this point. The Gateway's lifecycle
