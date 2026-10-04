@@ -1022,7 +1022,6 @@ internal fun OpenClawSidebar(
               }
 
               token == "work" -> {
-                Unit
               }
 
               token.startsWith("catalog:") -> {
