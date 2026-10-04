@@ -316,8 +316,12 @@ the `api.session.state` namespace.
 Use `api.session.workflow.enqueueNextTurnInjection(...)` when a plugin needs
 durable context queued for the next prompt build (the top-level
 `api.enqueueNextTurnInjection(...)` is a deprecated alias with the same
-behavior). On the embedded and CLI prompt-preparation paths, OpenClaw drains
-queued injections before prompt hooks. It drops expired entries and entries
+behavior). Enqueue results retain the enqueued, id, and sessionKey fields and
+add an explicit outcome: enqueued, duplicate, or rejected. A duplicate returns
+the existing id; capacity rejection reports reason capacity. Plugins must branch
+on outcome rather than infer a duplicate from enqueued=false and a non-empty id.
+On the embedded and CLI prompt-preparation paths, OpenClaw drains queued
+injections before prompt hooks. It drops expired entries and entries
 whose plugin is inactive or has prompt injection disabled. `idempotencyKey`
 deduplicates unexpired pending entries for the same plugin and session; the
 key can be reused after consumption. Drained entries are reused across retries

@@ -28,12 +28,36 @@ export type PluginNextTurnInjectionRecord = Omit<
   placement: PluginNextTurnInjectionPlacement;
 };
 
-/** Result returned after enqueueing a next-turn injection. */
-export type PluginNextTurnInjectionEnqueueResult = {
-  enqueued: boolean;
-  id: string;
-  sessionKey: string;
-};
+/** Why a next-turn injection request was rejected. */
+export type PluginNextTurnInjectionEnqueueRejectionReason =
+  | "invalid_input"
+  | "capacity"
+  | "session_not_found"
+  | "policy_blocked"
+  | "inactive"
+  | "unavailable";
+
+/** Result returned after enqueueing or deduplicating a next-turn injection. */
+export type PluginNextTurnInjectionEnqueueResult =
+  | {
+      outcome: "enqueued";
+      enqueued: true;
+      id: string;
+      sessionKey: string;
+    }
+  | {
+      outcome: "duplicate";
+      enqueued: false;
+      id: string;
+      sessionKey: string;
+    }
+  | {
+      outcome: "rejected";
+      enqueued: false;
+      id: string;
+      sessionKey: string;
+      reason: PluginNextTurnInjectionEnqueueRejectionReason;
+    };
 
 /** Event passed to plugins before an agent turn is prepared. */
 export type PluginAgentTurnPrepareEvent = {

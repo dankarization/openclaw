@@ -524,6 +524,7 @@ describe("plugin session attachments", () => {
       expect(workflowMocks.sendMessage).toHaveBeenCalledTimes(1);
       expect(requireFirstSendMessageParams().cfg).toBe(liveConfig);
       await expect(injection).resolves.toEqual({
+        outcome: "enqueued",
         enqueued: true,
         id: "live-config-injection",
         sessionKey: MAIN_SESSION_KEY,

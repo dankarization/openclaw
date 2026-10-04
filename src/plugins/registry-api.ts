@@ -150,9 +150,11 @@ export function createPluginApiFactory(
                     message: `next-turn injection blocked by plugins.entries.${record.id}.hooks.allowPromptInjection=false`,
                   });
                   return {
+                    outcome: "rejected",
                     enqueued: false,
                     id: "",
                     sessionKey: injection.sessionKey,
+                    reason: "policy_blocked",
                   };
                 }
                 const { enqueuePluginNextTurnInjection } = await loadHookState();
@@ -160,7 +162,13 @@ export function createPluginApiFactory(
                   registryParams.activateGlobalSideEffects === false ||
                   !shouldCommitWorkflowSideEffect()
                 ) {
-                  return { enqueued: false, id: "", sessionKey: injection.sessionKey };
+                  return {
+                    outcome: "rejected",
+                    enqueued: false,
+                    id: "",
+                    sessionKey: injection.sessionKey,
+                    reason: "inactive",
+                  };
                 }
                 return enqueuePluginNextTurnInjection({
                   // SAFETY: The host helper reads the SDK's readonly view of the same config data.

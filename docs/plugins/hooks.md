@@ -205,6 +205,8 @@ boundary. Migrate now:
   `api.session.state.registerSessionExtension(...)` and
   `api.session.workflow.enqueueNextTurnInjection(...)`.
 
+Enqueue results add explicit outcomes so callers can distinguish an idempotent duplicate from capacity or policy rejection.
+
 For the full list - memory capability registration, provider thinking
 profile, external auth providers, provider discovery types, task runtime
 accessors, and the `command-auth` → `command-status` rename - see

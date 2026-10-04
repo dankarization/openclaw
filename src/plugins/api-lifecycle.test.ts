@@ -52,9 +52,11 @@ describe("plugin api lifecycle", () => {
       api.registerSessionSchedulerJob({ id: "job", sessionKey, kind: "session-turn" }),
     ).toBeUndefined();
     await expect(api.enqueueNextTurnInjection({ sessionKey, text: "queued" })).resolves.toEqual({
+      outcome: "rejected",
       enqueued: false,
       id: "",
       sessionKey,
+      reason: "unavailable",
     });
     await expect(
       api.sendSessionAttachment({ sessionKey, files: [{ path: "/tmp/attachment.txt" }] }),
@@ -107,7 +109,8 @@ describe("plugin api lifecycle", () => {
 
   it("keeps both next-turn injection APIs callable after registration", async () => {
     const enqueueNextTurnInjection = vi.fn(async (injection) => ({
-      enqueued: true,
+      outcome: injection.text === "grouped" ? ("duplicate" as const) : ("enqueued" as const),
+      enqueued: injection.text !== "grouped",
       id: `injection-${injection.text}`,
       sessionKey: injection.sessionKey,
     }));
@@ -125,11 +128,13 @@ describe("plugin api lifecycle", () => {
     });
 
     expect(groupedResult).toEqual({
-      enqueued: true,
+      outcome: "duplicate",
+      enqueued: false,
       id: "injection-grouped",
       sessionKey: "global",
     });
     expect(flatResult).toEqual({
+      outcome: "enqueued",
       enqueued: true,
       id: "injection-flat",
       sessionKey: "global",

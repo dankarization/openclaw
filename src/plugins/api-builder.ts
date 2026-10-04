@@ -68,9 +68,11 @@ const noops = {
   registerAgentToolResultMiddleware: () => {},
   registerSessionExtension: () => {},
   enqueueNextTurnInjection: async (injection) => ({
+    outcome: "rejected",
     enqueued: false,
     id: "",
     sessionKey: injection.sessionKey,
+    reason: "unavailable",
   }),
   registerTrustedToolPolicy: () => {},
   registerToolMetadata: () => {},

@@ -28,6 +28,13 @@ const MAX_PLUGIN_NEXT_TURN_INJECTION_TEXT_LENGTH = 32 * 1024;
 const MAX_PLUGIN_NEXT_TURN_INJECTION_IDEMPOTENCY_KEY_LENGTH = 512;
 const MAX_PLUGIN_NEXT_TURN_INJECTIONS_PER_SESSION = 32;
 
+function rejectedEnqueue(
+  sessionKey: string,
+  reason: "invalid_input" | "capacity" | "session_not_found",
+): PluginNextTurnInjectionEnqueueResult {
+  return { outcome: "rejected", enqueued: false, id: "", sessionKey, reason };
+}
+
 type MutableSessionEntry = SessionEntry & Record<string, unknown>;
 
 function isPluginNextTurnInjectionPlacement(
@@ -90,24 +97,24 @@ export async function enqueuePluginNextTurnInjection(params: {
   now?: number;
 }): Promise<PluginNextTurnInjectionEnqueueResult> {
   if (typeof params.injection.sessionKey !== "string") {
-    return { enqueued: false, id: "", sessionKey: "" };
+    return rejectedEnqueue("", "invalid_input");
   }
   const sessionKey = params.injection.sessionKey.trim();
   if (!sessionKey) {
-    return { enqueued: false, id: "", sessionKey };
+    return rejectedEnqueue(sessionKey, "invalid_input");
   }
   if (typeof params.injection.text !== "string") {
-    return { enqueued: false, id: "", sessionKey };
+    return rejectedEnqueue(sessionKey, "invalid_input");
   }
   const text = params.injection.text.trim();
   if (!text) {
-    return { enqueued: false, id: "", sessionKey };
+    return rejectedEnqueue(sessionKey, "invalid_input");
   }
   if (text.length > MAX_PLUGIN_NEXT_TURN_INJECTION_TEXT_LENGTH) {
-    return { enqueued: false, id: "", sessionKey };
+    return rejectedEnqueue(sessionKey, "invalid_input");
   }
   if (params.injection.metadata !== undefined && !isPluginJsonValue(params.injection.metadata)) {
-    return { enqueued: false, id: "", sessionKey };
+    return rejectedEnqueue(sessionKey, "invalid_input");
   }
   if (
     params.injection.idempotencyKey !== undefined &&
@@ -116,19 +123,19 @@ export async function enqueuePluginNextTurnInjection(params: {
       params.injection.idempotencyKey.length >
         MAX_PLUGIN_NEXT_TURN_INJECTION_IDEMPOTENCY_KEY_LENGTH)
   ) {
-    return { enqueued: false, id: "", sessionKey };
+    return rejectedEnqueue(sessionKey, "invalid_input");
   }
   if (
     params.injection.placement !== undefined &&
     !isPluginNextTurnInjectionPlacement(params.injection.placement)
   ) {
-    return { enqueued: false, id: "", sessionKey };
+    return rejectedEnqueue(sessionKey, "invalid_input");
   }
   if (
     params.injection.ttlMs !== undefined &&
     (!Number.isFinite(params.injection.ttlMs) || params.injection.ttlMs < 0)
   ) {
-    return { enqueued: false, id: "", sessionKey };
+    return rejectedEnqueue(sessionKey, "invalid_input");
   }
   const now = params.now ?? Date.now();
   const record = toPluginNextTurnInjectionRecord({
@@ -155,10 +162,21 @@ export async function enqueuePluginNextTurnInjection(params: {
     if (enqueued) {
       entry.updatedAt = now;
     }
-    return { enqueued, id: duplicate?.id ?? record.id };
+    if (duplicate) {
+      return { outcome: "duplicate", enqueued: false, id: duplicate.id };
+    }
+    if (enqueued) {
+      return { outcome: "enqueued", enqueued: true, id: record.id };
+    }
+    return {
+      outcome: "rejected",
+      enqueued: false,
+      id: record.id,
+      reason: "capacity",
+    };
   });
   if (!updated.found) {
-    return { enqueued: false, id: "", sessionKey };
+    return rejectedEnqueue(sessionKey, "session_not_found");
   }
   return { ...updated.result, sessionKey: updated.canonicalKey };
 }

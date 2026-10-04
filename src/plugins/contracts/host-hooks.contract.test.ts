@@ -2069,7 +2069,13 @@ describe("host-hook fixture plugin contract", () => {
           placement: "middle_context",
         } as never,
       }),
-    ).resolves.toEqual({ enqueued: false, id: "", sessionKey: "agent:main:main" });
+    ).resolves.toEqual({
+      outcome: "rejected",
+      enqueued: false,
+      id: "",
+      sessionKey: "agent:main:main",
+      reason: "invalid_input",
+    });
 
     await expect(
       enqueuePluginNextTurnInjection({
@@ -2081,7 +2087,13 @@ describe("host-hook fixture plugin contract", () => {
           ttlMs: Number.POSITIVE_INFINITY,
         },
       }),
-    ).resolves.toEqual({ enqueued: false, id: "", sessionKey: "agent:main:main" });
+    ).resolves.toEqual({
+      outcome: "rejected",
+      enqueued: false,
+      id: "",
+      sessionKey: "agent:main:main",
+      reason: "invalid_input",
+    });
 
     await expect(
       enqueuePluginNextTurnInjection({
@@ -2093,7 +2105,13 @@ describe("host-hook fixture plugin contract", () => {
           ttlMs: -1,
         },
       }),
-    ).resolves.toEqual({ enqueued: false, id: "", sessionKey: "agent:main:main" });
+    ).resolves.toEqual({
+      outcome: "rejected",
+      enqueued: false,
+      id: "",
+      sessionKey: "agent:main:main",
+      reason: "invalid_input",
+    });
   });
 
   it.each(["enqueue", "drain", "extension"] as const)(
@@ -2236,8 +2254,13 @@ describe("host-hook fixture plugin contract", () => {
         now: now + 1,
       });
 
-      expect(first.enqueued).toBe(true);
+      expect(first).toMatchObject({
+        outcome: "enqueued",
+        enqueued: true,
+        id: "approval:resume",
+      });
       expect(duplicate).toEqual({
+        outcome: "duplicate",
         enqueued: false,
         id: first.id,
         sessionKey: "agent:main:main",
@@ -2246,6 +2269,50 @@ describe("host-hook fixture plugin contract", () => {
       expect(
         stored["agent:main:main"]?.pluginNextTurnInjections?.["approval-fixture"],
       ).toHaveLength(1);
+    });
+  });
+
+  it("reports per-session queue capacity as a distinct rejection", async () => {
+    await withHostHookState("openclaw-host-hooks-capacity-", async ({ storePath, tempConfig }) => {
+      const now = Date.now();
+      await updateSessionStore(storePath, (store) => {
+        store["agent:main:main"] = {
+          sessionId: "session-capacity",
+          updatedAt: now,
+          pluginNextTurnInjections: {
+            "capacity-fixture": Array.from({ length: 32 }, (_, index) => ({
+              id: "queued-" + index,
+              pluginId: "capacity-fixture",
+              text: "queued context " + index,
+              placement: "prepend_context" as const,
+              createdAt: now,
+            })),
+          },
+        };
+      });
+
+      const rejected = await enqueuePluginNextTurnInjection({
+        cfg: tempConfig,
+        pluginId: "capacity-fixture",
+        injection: {
+          sessionKey: "agent:main:main",
+          text: "overflow context",
+          idempotencyKey: "capacity:overflow",
+        },
+        now: now + 1,
+      });
+
+      expect(rejected).toEqual({
+        outcome: "rejected",
+        enqueued: false,
+        id: "capacity:overflow",
+        sessionKey: "agent:main:main",
+        reason: "capacity",
+      });
+      expect(
+        loadSessionStore(storePath, { skipCache: true })["agent:main:main"]
+          ?.pluginNextTurnInjections?.["capacity-fixture"],
+      ).toHaveLength(32);
     });
   });
 
