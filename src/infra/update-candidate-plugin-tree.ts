@@ -31,6 +31,12 @@ import { isGitRuntimeStagingName } from "./update-runtime-staging.js";
 export { UpdateCandidatePluginTreePlanSchema } from "./update-candidate-plugin-tree-schema.js";
 export type { UpdateCandidatePluginTreePlan } from "./update-candidate-plugin-tree-schema.js";
 
+// Native package activation keeps its anchor and private journal beside the
+// package in global node_modules; these are recovery-owner artifacts, not deps.
+function isPackageActivationArtifactName(name: string): boolean {
+  return /^\.openclaw\.package-activation-[0-9a-f]{24}(?:\.control)?$/u.test(name);
+}
+
 async function dependencyOwner(
   target: string,
   withinRetainedHost = false,
@@ -316,6 +322,15 @@ export async function prepareUpdateCandidatePluginTrees(params: {
     }
     for (const entry of entries) {
       const file = path.join(directory, entry.name);
+      if (
+        path.basename(directory) === "node_modules" &&
+        isPackageActivationArtifactName(entry.name)
+      ) {
+        if (!entry.isDirectory()) {
+          throw new Error(`Native package activation artifact is not a directory: ${file}`);
+        }
+        continue;
+      }
       if (isOwnedHostEdge(file)) {
         // The complete-wave owner pass records the authoritative host identity.
         continue;

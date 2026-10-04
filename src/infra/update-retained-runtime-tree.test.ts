@@ -252,6 +252,115 @@ it.each([
   },
 );
 
+it("keeps native activation siblings out of expanded module-owner retention", async () => {
+  const root = await fs.realpath(dirs.make("retained-runtime-activation-sibling-"));
+  const globalModules = path.join(root, "prefix", "lib", "node_modules");
+  const source = path.join(globalModules, "openclaw");
+  const targetStateDir = path.join(root, "retained");
+  const candidateRoot = path.join(root, "candidate");
+  const dependency = path.join(globalModules, "hoisted-fixture");
+  const userDotPackage = path.join(globalModules, ".user-private-package");
+  const anchor = path.join(globalModules, `.openclaw.package-activation-${"a".repeat(24)}`);
+  const control = `${anchor}.control`;
+  await fs.mkdir(path.join(source, "dist"), { recursive: true });
+  await fs.mkdir(path.join(source, "node_modules"), { recursive: true });
+  await fs.mkdir(dependency, { recursive: true });
+  await fs.mkdir(userDotPackage, { recursive: true });
+  await fs.mkdir(path.join(anchor, "previous", "state"), { recursive: true, mode: 0o700 });
+  await fs.mkdir(control, { recursive: true, mode: 0o700 });
+  await fs.mkdir(candidateRoot);
+  await fs.writeFile(
+    path.join(source, "package.json"),
+    JSON.stringify({ name: "openclaw", dependencies: { "hoisted-fixture": "1.0.0" } }),
+  );
+  await fs.writeFile(path.join(source, "dist", "entry.js"), "export {};\n");
+  await fs.symlink("../../hoisted-fixture", path.join(source, "node_modules", "hoisted-fixture"));
+  await fs.writeFile(
+    path.join(dependency, "package.json"),
+    JSON.stringify({ name: "hoisted-fixture", main: "index.js" }),
+  );
+  await fs.writeFile(path.join(dependency, "index.js"), "module.exports = 1;\n");
+  await fs.writeFile(
+    path.join(userDotPackage, "package.json"),
+    JSON.stringify({ name: "user-private-package", main: "index.js" }),
+  );
+  await fs.writeFile(path.join(userDotPackage, "index.js"), "module.exports = 2;\n");
+  const previousMarker = path.join(anchor, "previous", "state", "previous.marker");
+  await fs.writeFile(previousMarker, "previous\n");
+  const previousBefore = await fs.stat(previousMarker, { bigint: true });
+  const nestedReserved = path.join(dependency, `.openclaw.package-activation-${"c".repeat(24)}`);
+  await fs.mkdir(nestedReserved);
+  await fs.writeFile(path.join(nestedReserved, "payload.txt"), "ordinary nested package payload\n");
+  const journal = path.join(control, "operation.sqlite");
+  await fs.writeFile(journal, "private native journal");
+  await fs.chmod(journal, 0o600);
+  const project = (entry: string) => {
+    const base = path.parse(entry).root;
+    return path.join(
+      targetStateDir,
+      "tree",
+      Buffer.from(base).toString("hex"),
+      path.relative(base, entry),
+    );
+  };
+  const roots = new Map([
+    [path.join(source, "package.json"), project(path.join(source, "package.json"))],
+    [path.join(source, "dist"), project(path.join(source, "dist"))],
+    [path.join(source, "node_modules"), project(path.join(source, "node_modules"))],
+  ]);
+  const plan = await prepareUpdateCandidatePluginTrees({
+    roots,
+    project,
+    targetStateDir,
+    candidateRoot,
+    retainedHostRoot: source,
+  });
+  const contains = (candidate: string, parent: string) =>
+    candidate === parent || candidate.startsWith(`${parent}${path.sep}`);
+  expect(plan.entries.some(({ path: entry }) => contains(entry, anchor))).toBe(false);
+  expect(plan.entries.some(({ path: entry }) => contains(entry, control))).toBe(false);
+  expect(plan.entries.some(({ path: entry }) => contains(entry, dependency))).toBe(true);
+  expect(plan.entries.some(({ path: entry }) => contains(entry, userDotPackage))).toBe(true);
+  expect(plan.entries.some(({ path: entry }) => contains(entry, nestedReserved))).toBe(true);
+  const before = await fs.stat(journal, { bigint: true });
+  await linkUpdateCandidatePluginTrees(plan, {
+    targetStateDir,
+    candidateRoot,
+    assertCurrent: () => {},
+  });
+  const after = await fs.stat(journal, { bigint: true });
+  expect(after.nlink).toBe(1n);
+  expect(after.mode & 0o777n).toBe(0o600n);
+  expect(after.ino).toBe(before.ino);
+  expect(after.ctimeNs).toBe(before.ctimeNs);
+  const previousAfter = await fs.stat(previousMarker, { bigint: true });
+  expect(previousAfter.nlink).toBe(1n);
+  expect(previousAfter.ino).toBe(previousBefore.ino);
+  expect(previousAfter.ctimeNs).toBe(previousBefore.ctimeNs);
+  await expect(fs.stat(project(journal))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await fs.readFile(project(path.join(dependency, "index.js")), "utf8")).toBe(
+    "module.exports = 1;\n",
+  );
+  expect(await fs.readFile(project(path.join(userDotPackage, "index.js")), "utf8")).toBe(
+    "module.exports = 2;\n",
+  );
+  expect(await fs.readFile(project(path.join(nestedReserved, "payload.txt")), "utf8")).toBe(
+    "ordinary nested package payload\n",
+  );
+  const alias = path.join(globalModules, `.openclaw.package-activation-${"b".repeat(24)}.control`);
+  await fs.symlink(control, alias);
+  await expect(
+    prepareUpdateCandidatePluginTrees({
+      roots,
+      project,
+      targetStateDir,
+      candidateRoot,
+      retainedHostRoot: source,
+    }),
+  ).rejects.toThrow("Native package activation artifact is not a directory");
+  expect((await fs.stat(journal, { bigint: true })).nlink).toBe(1n);
+});
+
 it("retains files by hard link so the inodes outlive package replacement", async () => {
   const f = await fixture();
   const before = await fs.stat(f.worker, { bigint: true });
