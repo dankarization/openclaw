@@ -525,9 +525,8 @@ internal fun SessionsScreen(
       onConfirm = { value ->
         groupSessionTarget = null
         if (!session.matchesGateway(activeGatewayStableId)) return@SessionTextDialog
-        // Remember the name so the group survives locally even if the patch later empties it.
-        viewModel.addChatSessionGroup(value)
         coroutineScope.launch {
+          viewModel.addChatSessionGroup(value)
           viewModel.patchChatSession(key = session.key, ownerAgentId = session.ownerAgentId, category = value.trim())
         }
       },
@@ -565,7 +564,7 @@ internal fun SessionsScreen(
       onDismiss = { newGroupDialogVisible = false },
       onConfirm = { value ->
         newGroupDialogVisible = false
-        viewModel.addChatSessionGroup(value)
+        coroutineScope.launch { viewModel.addChatSessionGroup(value) }
       },
     )
   }
@@ -602,7 +601,7 @@ internal fun SessionsScreen(
 }
 
 @Composable
-private fun SessionDeleteDialog(
+internal fun SessionDeleteDialog(
   title: String,
   text: String,
   onDismiss: () -> Unit,
@@ -982,7 +981,7 @@ private fun SessionMenuItem(
 }
 
 @Composable
-private fun SessionTextDialog(
+internal fun SessionTextDialog(
   title: String,
   stateKey: String,
   initialValue: String,

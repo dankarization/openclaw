@@ -193,11 +193,12 @@ class SidebarShellLogicTest {
 
     val recentKeys = presentation.recentSections.flatMap { it.entries }.map(ChatSessionEntry::key)
     assertEquals(listOf("pinned"), presentation.pinned.map(ChatSessionEntry::key))
-    assertEquals(8, recentKeys.size)
-    assertEquals(setOf("session-10", "session-9", "session-8", "session-7", "session-6", "session-5", "session-4", "session-3"), recentKeys.toSet())
-    assertEquals(listOf("Work", "Ungrouped"), presentation.recentSections.map { it.title })
-    assertTrue(presentation.recentSections.all { it.entries.isNotEmpty() })
-    assertTrue(presentation.canExpandRecent)
+    assertEquals(listOf("Personal", "Work"), presentation.groups.map { it.name })
+    assertEquals(emptyList<String>(), presentation.groups[0].entries.map { it.key })
+    assertEquals(listOf("session-10", "session-8", "session-6", "session-4", "session-2"), presentation.groups[1].entries.map { it.key })
+    assertEquals(listOf("session-9", "session-7", "session-5", "session-3", "session-1"), recentKeys)
+    assertEquals(listOf<String?>(null), presentation.recentSections.map { it.title })
+    assertFalse(presentation.canExpandRecent)
   }
 
   @Test
@@ -348,6 +349,70 @@ class SidebarShellLogicTest {
     assertEquals(SidebarSessionActivity.Queued, sidebarSessionActivity("queued", null, null, false))
     assertNull(sidebarSessionActivity("queued", null, false, false))
     assertEquals(SidebarSessionActivity.Unread, sidebarSessionActivity("queued", null, false, true))
+  }
+
+  @Test
+  fun sidebarGroupsKeepEmptyCatalogFoldersAheadOfRecent() {
+    val presentation =
+      sidebarSessionPresentation(
+        sessions =
+          listOf(
+            session("loose", activity = 5),
+            session("coded", activity = 9, category = "CODEX"),
+            session("pinned-coded", activity = 8, pinned = true, category = "CODEX"),
+          ),
+        knownGroups = listOf("dankar", "CODEX"),
+        expanded = true,
+      )
+
+    assertEquals(listOf("pinned-coded"), presentation.pinned.map { it.key })
+    assertEquals(listOf("dankar", "CODEX"), presentation.groups.map { it.name })
+    assertEquals(emptyList<String>(), presentation.groups[0].entries.map { it.key })
+    assertEquals(listOf("coded"), presentation.groups[1].entries.map { it.key })
+    assertEquals(listOf("loose"), presentation.recentSections.flatMap { it.entries }.map { it.key })
+  }
+
+  @Test
+  fun sidebarGroupsStayVisibleWhenNoSessionsExist() {
+    val presentation =
+      sidebarSessionPresentation(
+        sessions = emptyList(),
+        knownGroups = listOf(" CODE ", "CODE", "dankar"),
+        expanded = false,
+      )
+
+    assertEquals(listOf("CODE", "dankar"), presentation.groups.map { it.name })
+    assertTrue(presentation.groups.all { it.entries.isEmpty() })
+    assertTrue(presentation.recentSections.isEmpty())
+  }
+
+  @Test
+  fun unknownCategoriesFollowCatalogOrder() {
+    val presentation =
+      sidebarSessionPresentation(
+        sessions =
+          listOf(
+            session("z", activity = 2, category = "zeta"),
+            session("a", activity = 1, category = "alpha"),
+          ),
+        knownGroups = listOf("mid"),
+        expanded = true,
+      )
+
+    assertEquals(listOf("mid", "alpha", "zeta"), presentation.groups.map { it.name })
+  }
+
+  @Test
+  fun recentCapIgnoresSessionsThatLiveInGroups() {
+    val sessions = (1L..9L).map { session("loose-$it", activity = it) } + session("grouped", activity = 100, category = "Work")
+    val collapsed = sidebarSessionPresentation(sessions, knownGroups = listOf("Work"), expanded = false)
+    val expanded = sidebarSessionPresentation(sessions, knownGroups = listOf("Work"), expanded = true)
+
+    assertEquals(8, collapsed.recentSections.flatMap { it.entries }.size)
+    assertFalse(collapsed.recentSections.flatMap { it.entries }.any { it.key == "grouped" })
+    assertEquals(listOf("grouped"), collapsed.groups.single().entries.map { it.key })
+    assertTrue(collapsed.canExpandRecent)
+    assertEquals(9, expanded.recentSections.flatMap { it.entries }.size)
   }
 
   private fun agent(
