@@ -40,21 +40,23 @@ class SessionGroupsTest {
     assertEquals(true, restricted.putLegacy)
     assertEquals(true, restricted.consumeLegacy)
 
-    val otherGateway = decideSessionGroupMigration(
-      listedNames = emptyList(),
-      legacyNames = emptyList(),
-      alreadyMigrated = false,
-      canPut = true,
-    )
+    val otherGateway =
+      decideSessionGroupMigration(
+        listedNames = emptyList(),
+        legacyNames = emptyList(),
+        alreadyMigrated = false,
+        canPut = true,
+      )
     assertEquals(false, otherGateway.putLegacy)
     assertEquals(false, otherGateway.consumeLegacy)
 
-    val nonempty = decideSessionGroupMigration(
-      listedNames = listOf("Work"),
-      legacyNames = listOf("Folder"),
-      alreadyMigrated = false,
-      canPut = true,
-    )
+    val nonempty =
+      decideSessionGroupMigration(
+        listedNames = listOf("Work"),
+        legacyNames = listOf("Folder"),
+        alreadyMigrated = false,
+        canPut = true,
+      )
     assertEquals(false, nonempty.putLegacy)
     assertEquals(true, nonempty.consumeLegacy)
     assertEquals(listOf("Work", "Extra"), unionSessionGroupNames(listOf("Work"), listOf("Extra", "Work")))

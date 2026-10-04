@@ -635,7 +635,12 @@ internal fun OpenClawSidebar(
             } else {
               null
             },
-          onNewGroup = if (canMutateSessions) {{ newGroupForSessionTarget = session.toActionTarget(gatewayStableId) }} else null,
+          onNewGroup =
+            if (canMutateSessions) {
+              { newGroupForSessionTarget = session.toActionTarget(gatewayStableId) }
+            } else {
+              null
+            },
         )
       }
     }
@@ -958,6 +963,7 @@ internal fun OpenClawSidebar(
                   }
                 }
               }
+
               token == "ungrouped" -> {
                 SidebarCollapsibleHeader(
                   label = nativeString("Other"),
@@ -995,6 +1001,7 @@ internal fun OpenClawSidebar(
                   }
                 }
               }
+
               token == "groups" && showGroupsZone -> {
                 SidebarCollapsibleHeader(
                   label = nativeString("Groups"),
@@ -1013,7 +1020,11 @@ internal fun OpenClawSidebar(
                   sessionRows(chatGroups, SidebarSessionDragSource.Recent)
                 }
               }
-              token == "work" -> Unit
+
+              token == "work" -> {
+                Unit
+              }
+
               token.startsWith("catalog:") -> {
                 val section = catalogsById[token.removePrefix("catalog:")] ?: continue
                 if (!showedCatalogChrome && catalogState.loading) {
@@ -1093,7 +1104,6 @@ internal fun OpenClawSidebar(
           } else if (showedCatalogChrome) {
             catalogErrorText?.let { SidebarCatalogStatus(it, palette) }
           }
-
         }
       }
     }

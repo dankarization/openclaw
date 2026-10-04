@@ -51,9 +51,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -600,8 +598,7 @@ class ChatController internal constructor(
   private val _swarmGroups = MutableStateFlow<List<ChatSwarmGroup>>(emptyList())
   val swarmGroups: StateFlow<List<ChatSwarmGroup>> = _swarmGroups.asStateFlow()
 
-  private val _sessionGroupCatalogInvalidations = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-  internal val sessionGroupCatalogInvalidations: SharedFlow<Unit> = _sessionGroupCatalogInvalidations.asSharedFlow()
+  internal val sessionGroupCatalogInvalidations = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
   private data class SwarmRefreshLease(
     val parentKey: String,
@@ -6444,7 +6441,7 @@ class ChatController internal constructor(
     val swarmKind = swarmKindElement.asStringOrNull()?.trim()
     if (swarmEvent && (swarmKind == "phase" || swarmKind == "log")) return
     val reason = payload["reason"].asStringOrNull()
-    if (reason == "groups") _sessionGroupCatalogInvalidations.tryEmit(Unit)
+    if (reason == "groups") sessionGroupCatalogInvalidations.tryEmit(Unit)
     if (isSessionSettingsMutation(payload)) {
       val session = eventSessionObject(payload)
       val key = payload["sessionKey"].asStringOrNull() ?: session?.get("key").asStringOrNull()

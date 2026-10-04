@@ -473,7 +473,10 @@ private fun SidebarSessionGroupMenu(
   var choosingGroup by remember { mutableStateOf(false) }
   val category = currentCategory?.trim()?.takeIf { it.isNotEmpty() }
   Box {
-    IconButton(onClick = { choosingGroup = false; expanded = true }, modifier = Modifier.size(36.dp)) {
+    IconButton(onClick = {
+      choosingGroup = false
+      expanded = true
+    }, modifier = Modifier.size(36.dp)) {
       Icon(
         imageVector = Icons.Default.MoreVert,
         contentDescription = nativeString("Move to group"),

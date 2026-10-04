@@ -411,7 +411,13 @@ class SidebarShellLogicTest {
 
     assertEquals(8, collapsed.recentSections.flatMap { it.entries }.size)
     assertFalse(collapsed.recentSections.flatMap { it.entries }.any { it.key == "grouped" })
-    assertEquals(listOf("grouped"), collapsed.groups.single().entries.map { it.key })
+    assertEquals(
+      listOf("grouped"),
+      collapsed.groups
+        .single()
+        .entries
+        .map { it.key },
+    )
     assertTrue(collapsed.canExpandRecent)
     assertEquals(9, expanded.recentSections.flatMap { it.entries }.size)
   }
@@ -438,7 +444,6 @@ class SidebarShellLogicTest {
     assertEquals(listOf("other"), presentation.recentSections.flatMap { it.entries }.map { it.key })
     assertEquals(listOf("telegram"), presentation.chatGroups.map { it.key })
   }
-
 
   @Test
   fun sectionOrderUsesGatewayTokensThenDefaultBuiltIns() {

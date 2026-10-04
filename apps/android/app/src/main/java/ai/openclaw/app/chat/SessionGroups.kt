@@ -73,7 +73,10 @@ internal fun decideSessionGroupMigration(
 }
 
 /** Catalog order, then names not already present. Blank names are dropped. */
-internal fun unionSessionGroupNames(existing: List<String>, extra: List<String>): List<String> {
+internal fun unionSessionGroupNames(
+  existing: List<String>,
+  extra: List<String>,
+): List<String> {
   val names = mutableListOf<String>()
   for (name in existing + extra) {
     val trimmed = name.trim()
