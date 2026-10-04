@@ -77,23 +77,26 @@ response remains authoritative even if it contains no visible models; HTTP
 `401` and `403` return an empty catalog rather than exposing fallback models.
 
 <Note>
-The current bundled harness is `@openai/codex` `0.158.0`. A live `model/list`
-probe against that app-server, authenticated with a ChatGPT account, returned
-this public subset of catalog metadata on September 28, 2026:
+The current bundled harness is `@openai/codex` `0.159.1`. An isolated,
+unauthenticated `model/list` probe against that app-server reported these
+bundled catalog entries:
 
 | Model id        | Input modalities | Reasoning efforts                    | Default effort |
 | --------------- | ---------------- | ------------------------------------ | -------------- |
+| `gpt-6.1-sol`   | text, image      | low, medium, high, xhigh, max, ultra | low            |
 | `gpt-6-astra`   | text, image      | low, medium, high, xhigh, max, ultra | low            |
 | `gpt-6-sol`     | text, image      | low, medium, high, xhigh, max, ultra | medium         |
 | `gpt-6-luna`    | text, image      | low, medium, high, xhigh, max        | medium         |
-| `gpt-5.6-luna`  | text, image      | low, medium, high, xhigh, max        | medium         |
-| `gpt-5.6-sol`   | text, image      | low, medium, high, xhigh, max, ultra | medium         |
+| `gpt-5.6-sol`   | text, image      | low, medium, high, xhigh, max, ultra | low            |
 | `gpt-5.6-terra` | text, image      | low, medium, high, xhigh, max, ultra | medium         |
+| `gpt-5.6-luna`  | text, image      | low, medium, high, xhigh, max        | medium         |
+| `gpt-5.5`       | text, image      | low, medium, high, xhigh             | medium         |
 
-This snapshot does not establish access for other accounts or attribute catalog
-changes to the app-server version. Available model IDs, input modalities, and
-reasoning efforts remain account-scoped. Run `/codex models` after starting or
-upgrading the gateway to inspect the actual public picker for your account.
+The corresponding `0.158.0` probe did not list `gpt-6.1-sol`. Bundled
+catalog metadata does not establish account access: authenticated catalogs can
+differ, and native discovery still requires the selected account. Run
+`/codex models` after starting or upgrading the gateway to inspect the actual
+picker for that account.
 
 OpenClaw reasoning controls preserve supported native levels, including `ultra`.
 Codex owns Ultra's proactive delegation and model-specific inference effort;
