@@ -574,7 +574,8 @@ class ChatControllerModelSelectionTest {
 
       assertEquals(
         listOf("off", "ultra"),
-        controller.thinkingLevelSelection.value.options.map { it.id },
+        controller.thinkingLevelSelection.value.options
+          .map { it.id },
       )
       assertEquals("medium", controller.thinkingLevel.value)
       controller.handleGatewayEvent("health", null)
@@ -596,7 +597,12 @@ class ChatControllerModelSelectionTest {
           attachments = emptyList(),
         ),
       )
-      assertEquals(ChatOutboxStatus.Queued, controller.outboxItems.value.single { it.text == "queued medium" }.status)
+      assertEquals(
+        ChatOutboxStatus.Queued,
+        controller.outboxItems.value
+          .single { it.text == "queued medium" }
+          .status,
+      )
       controller.refreshSessions()
       advanceUntilIdle()
       assertEquals("medium", controller.thinkingLevel.value)
@@ -631,7 +637,8 @@ class ChatControllerModelSelectionTest {
 
       assertEquals(
         listOf("off", "high", "low", "ultra"),
-        controller.thinkingLevelSelection.value.options.map { it.id },
+        controller.thinkingLevelSelection.value.options
+          .map { it.id },
       )
       assertEquals("medium", controller.thinkingLevel.value)
 
@@ -654,7 +661,8 @@ class ChatControllerModelSelectionTest {
       assertEquals("medium", controller.thinkingLevel.value)
       assertEquals(
         listOf("off", "high", "low", "ultra"),
-        controller.thinkingLevelSelection.value.options.map { it.id },
+        controller.thinkingLevelSelection.value.options
+          .map { it.id },
       )
 
       controller.handleGatewayEvent("health", null)

@@ -8061,14 +8061,18 @@ class ChatController internal constructor(
     // stay selectable/sendable. Do not infer that an Off/Ultra picker is complete.
     _thinkingLevel.value =
       when {
-        selected != null -> clampThinkingLevelToOptions(selected, options)
-        else ->
+        selected != null -> {
+          clampThinkingLevelToOptions(selected, options)
+        }
+
+        else -> {
           listOf(defaultLevel, currentLevel).firstOrNull { candidate ->
             candidate != null && options.any { it.id == candidate }
           }
             ?: options.firstOrNull { it.id == "off" }?.id
             ?: options.firstOrNull()?.id
             ?: "off"
+        }
       }
   }
 

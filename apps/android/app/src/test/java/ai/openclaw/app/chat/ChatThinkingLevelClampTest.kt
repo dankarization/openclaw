@@ -4,8 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ChatThinkingLevelClampTest {
-  private fun options(vararg ids: String): List<ChatThinkingLevelOption> =
-    ids.map { ChatThinkingLevelOption(id = it, label = it) }
+  private fun options(vararg ids: String): List<ChatThinkingLevelOption> = ids.map { ChatThinkingLevelOption(id = it, label = it) }
 
   @Test
   fun membershipWins() {

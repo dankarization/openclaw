@@ -444,8 +444,7 @@ private val chatThinkingLevelRanks =
     "ultra" to 80,
   )
 
-internal fun chatThinkingLevelRank(level: String): Int =
-  chatThinkingLevelRanks[level.trim().lowercase(Locale.US)] ?: -1
+internal fun chatThinkingLevelRank(level: String): Int = chatThinkingLevelRanks[level.trim().lowercase(Locale.US)] ?: -1
 
 /**
  * Clamps [level] onto Gateway-advertised [options].
