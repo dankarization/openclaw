@@ -53,6 +53,7 @@ import {
   resolveTelegramReactionVariant,
   resolveTelegramStatusReactionEmojis,
 } from "./status-reaction-variants.js";
+import { resolveTelegramDirectTopicNameCacheScope } from "./topic-name-cache.js";
 
 export type {
   BuildTelegramMessageContextParams,
@@ -334,6 +335,30 @@ export const buildTelegramMessageContext = async ({
   ) {
     return null;
   }
+
+  // Private bot forums use message_thread_id/is_topic_message. They are direct
+  // conversations, not group forums or channel Direct Messages topics.
+  if (
+    !isGroup &&
+    threadSpec.scope === "dm" &&
+    msg.is_topic_message === true &&
+    dmThreadId != null
+  ) {
+    const topicNameCacheScope = await resolveTelegramMessageContextStorePath({
+      cfg,
+      agentId:
+        ownerAgentId?.trim() ||
+        resolveTelegramAccountOwnerAgentId({ cfg, accountId: account.accountId }),
+      sessionRuntime,
+    });
+    const topic = await resolveTelegramForumTopicMetadata({
+      msg,
+      threadId: dmThreadId,
+      scope: resolveTelegramDirectTopicNameCacheScope(topicNameCacheScope, account.accountId),
+    });
+    topicName = topic.topicName;
+  }
+
   let initialTypingCueSent = false;
   const ensureConfiguredBindingReady = async (): Promise<boolean> => {
     if (bindingMode.kind !== "configured") {
