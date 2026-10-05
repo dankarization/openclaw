@@ -62,7 +62,7 @@ it("does not restart the Doctor phase budget after slow custody entry", async ()
     }),
   );
 
-  await expect(running).rejects.toMatchObject({ reason: "finalization-timeout" });
+  await expect(running).rejects.toMatchObject({ result: { reason: "finalization-timeout" } });
   expect(doctorChild).not.toHaveBeenCalled();
 });
 
