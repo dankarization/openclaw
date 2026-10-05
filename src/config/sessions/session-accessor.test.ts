@@ -516,6 +516,8 @@ describe("session accessor seam", () => {
       {
         sessionId: "topic-session",
         updatedAt: 10,
+        topicName: "Old title",
+        displayName: "New Chat",
         delivery: {
           kind: "external",
           route: {
@@ -554,6 +556,7 @@ describe("session accessor seam", () => {
         Surface: "telegram",
         ChatType: "direct",
         From: "telegram:direct:42001",
+        AccountId: "default",
         To: "telegram:42001",
         SessionKey: sessionKey,
         MessageThreadId: "77",
@@ -563,18 +566,37 @@ describe("session accessor seam", () => {
       expect(loadSessionEntry({ sessionKey, storePath })?.delivery?.origin?.label).toBe(
         "New title",
       );
+      expect(loadSessionEntry({ sessionKey, storePath })?.displayName).toBe("New Chat");
+      expect(loadSessionEntry({ sessionKey, storePath })?.topicName).toBe("New title");
+      expect(loadSessionEntry({ sessionKey, storePath })?.updatedAt).toBe(10);
       expect(received).toEqual([{ sessionKey, agentId: "main", reason: "rename" }]);
 
       await recordInboundSessionMeta({ storePath, sessionKey, ctx, createIfMissing: false });
       expect(received).toHaveLength(1);
+      received.length = 0;
 
+      await recordInboundSessionMeta({
+        storePath,
+        sessionKey,
+        createIfMissing: false,
+        ctx: { ...ctx, ThreadLabel: undefined },
+      });
+      expect(loadSessionEntry({ sessionKey, storePath })?.displayName).toBe("New Chat");
+      expect(loadSessionEntry({ sessionKey, storePath })?.topicName).toBe("New title");
+      expect(loadSessionEntry({ sessionKey, storePath })?.delivery?.origin?.label).toBe(
+        "New title",
+      );
+      expect(loadSessionEntry({ sessionKey, storePath })?.updatedAt).toBe(10);
+      expect(received).toHaveLength(0);
+
+      received.length = 0;
       await recordInboundSessionMeta({
         storePath,
         sessionKey,
         createIfMissing: false,
         ctx: { ...ctx, ChatType: "group", ThreadLabel: "Group topic" },
       });
-      expect(received).toHaveLength(1);
+      expect(received).toHaveLength(0);
     } finally {
       stop();
     }

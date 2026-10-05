@@ -51,6 +51,7 @@ import {
 import { renderTelegramTextEntities } from "./bot/inbound-text-entities.js";
 import type { TelegramContext } from "./bot/types.js";
 import { resolveTelegramDirectPeerId } from "./dm-session-key.js";
+import { isTelegramForumTopicTitleUpdate } from "./forum-service-message.js";
 import {
   resolveTelegramDirectToolPolicy,
   resolveTelegramGroupPromptSettings,
@@ -845,7 +846,10 @@ export async function buildTelegramInboundContextPayload(params: {
       IsForum: isForum,
       TopicName: isForum && topicName ? topicName : undefined,
       ThreadLabel:
-        !isGroup && threadSpec.scope === "dm" && msg.is_topic_message === true
+        !isGroup &&
+        threadSpec.scope === "dm" &&
+        threadSpec.id != null &&
+        (msg.is_topic_message === true || isTelegramForumTopicTitleUpdate(msg))
           ? topicName
           : undefined,
     },

@@ -239,9 +239,12 @@ export const createTelegramMessageProcessor = (
     if (
       !context.isGroup &&
       context.threadSpec.scope === "dm" &&
-      context.primaryCtx.message.is_topic_message === true &&
       isTelegramForumTopicTitleUpdate(context.primaryCtx.message)
     ) {
+      if (context.threadSpec.id == null) {
+        // A malformed or incomplete title event has no safe session target.
+        return { kind: "completed" };
+      }
       let metadataTask: Promise<unknown> | undefined;
       let metadataError: unknown;
       await context.turn.recordInboundSession({

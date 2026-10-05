@@ -42,6 +42,7 @@ import {
   resolveTelegramTargetSession,
 } from "./conversation-route.js";
 import { enforceTelegramDmAccess } from "./dm-access.js";
+import { isTelegramForumTopicTitleUpdate } from "./forum-service-message.js";
 import { resolveTelegramForumTopicMetadata } from "./forum-topic-metadata.js";
 import { evaluateTelegramGroupBaseAccess } from "./group-access.js";
 import { resolveTelegramNativeCommandAdmission } from "./ingress.js";
@@ -341,8 +342,8 @@ export const buildTelegramMessageContext = async ({
   if (
     !isGroup &&
     threadSpec.scope === "dm" &&
-    msg.is_topic_message === true &&
-    dmThreadId != null
+    dmThreadId != null &&
+    (msg.is_topic_message === true || isTelegramForumTopicTitleUpdate(msg))
   ) {
     const topicNameCacheScope = await resolveTelegramMessageContextStorePath({
       cfg,
@@ -397,7 +398,8 @@ export const buildTelegramMessageContext = async ({
     senderId,
     dmThreadId,
     botHasTopicsEnabled:
-      (threadSpec.scope === "dm" && msg.is_topic_message === true) ||
+      (threadSpec.scope === "dm" &&
+        (msg.is_topic_message === true || isTelegramForumTopicTitleUpdate(msg))) ||
       resolveTelegramBotHasTopicsEnabled(primaryCtx.me),
   });
   route = {

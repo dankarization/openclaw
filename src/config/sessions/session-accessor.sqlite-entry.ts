@@ -590,12 +590,14 @@ export async function recordInboundSessionMeta(
   const createIfMissing = params.createIfMissing ?? true;
   let hadExistingEntry = false;
   let previousOriginLabel: string | undefined;
+  let previousTopicName: string | undefined;
   const updated = await patchSessionEntryCore(
     { sessionKey: params.sessionKey, storePath: params.storePath },
     (_entry, context) => {
       const existing = context.existingEntry;
       hadExistingEntry = existing !== undefined;
       previousOriginLabel = existing?.delivery?.origin?.label;
+      previousTopicName = existing?.topicName;
       const metadataPatch = deriveSessionMetaPatch({
         ctx: params.ctx,
         sessionKey: params.sessionKey,
@@ -623,11 +625,15 @@ export async function recordInboundSessionMeta(
     typeof params.ctx.ThreadLabel === "string"
       ? params.ctx.ThreadLabel.trim()
       : "";
+  const topicNameChangedForTelegramTopic =
+    previousTopicName !== updated?.topicName &&
+    updated?.topicName === topicLabel &&
+    updated?.delivery?.origin?.provider === "telegram";
   if (
     hadExistingEntry &&
     topicLabel &&
     updated?.delivery?.origin?.label === topicLabel &&
-    previousOriginLabel !== topicLabel
+    (previousOriginLabel !== topicLabel || topicNameChangedForTelegramTopic)
   ) {
     // Metadata changes are committed before this point. The Gateway's lifecycle
     // subscriber refreshes the projected session row and emits sessions.changed.
