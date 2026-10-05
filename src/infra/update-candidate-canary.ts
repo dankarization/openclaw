@@ -86,6 +86,7 @@ export async function validateUpdateCandidateCanary(params: {
   timeoutMs?: number;
   signal?: AbortSignal;
   env?: NodeJS.ProcessEnv;
+  snapshotTempDir?: string;
   nodeRunner?: string;
   assertCurrent?: () => void;
   /** Emit at completion; replaying after the canary shifts persisted step timestamps. */
@@ -227,6 +228,7 @@ export async function validateUpdateCandidateCanary(params: {
       config: params.config,
       stateDir: params.stateDir,
       env: sourceEnv,
+      snapshotTempDir: params.snapshotTempDir,
       nodeRunner: params.nodeRunner,
       timeoutMs: params.timeoutMs,
       signal: params.signal,

@@ -54,6 +54,7 @@ export async function initializeAndRunUpdate(
   invocationCwd: string | undefined,
   env: NodeJS.ProcessEnv,
   runInitialized: (initialization: InitializedUpdate) => Promise<void>,
+  snapshotTempDir?: string,
   executorOptions?: UpdateCommandExecutorOptions,
 ): Promise<void> {
   const targetEnv = resolveUpdateTargetEnv({ baseEnv: env, nodeRunner: process.execPath });
@@ -74,6 +75,7 @@ export async function initializeAndRunUpdate(
                   prepared,
                   executor,
                   prepared.timeoutMs ?? DEFAULT_UPDATE_STEP_TIMEOUT_MS,
+                  snapshotTempDir,
                 ),
               );
               if (!target) {
@@ -82,6 +84,7 @@ export async function initializeAndRunUpdate(
               const packageAdmission = { serviceRoot: target.managedServiceRoot };
               const initialization: InitializedUpdate = {
                 env,
+                ...(snapshotTempDir ? { snapshotTempDir } : {}),
                 runId,
                 executor,
                 registerRun: async (run) => {

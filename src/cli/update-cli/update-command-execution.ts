@@ -436,7 +436,13 @@ export async function executeMutableUpdate(
       validatedConfigSnapshot ??
       (await readUpdateCandidateSource(env, params.legacyConfigPlan, { configValidation }));
     const validation = await validateUpdateCandidateWithProgress(
-      { root, config: snapshot.config, env, assertCurrent: assertExecutionCurrent },
+      {
+        root,
+        config: snapshot.config,
+        env,
+        snapshotTempDir: originalRun?.snapshotTempDir,
+        assertCurrent: assertExecutionCurrent,
+      },
       params,
       originalRun,
     );
@@ -622,6 +628,7 @@ export async function executeMutableUpdate(
         ...installOptions,
         sourceRuntimePrepared,
         switchToGit: params.switchToGit,
+        snapshotTempDir: originalRun?.snapshotTempDir,
         timeoutMs: params.timeoutMs,
         channel: params.channel,
         devTarget: params.devTarget,

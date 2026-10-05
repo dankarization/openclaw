@@ -6,7 +6,10 @@ import type { UpdateDisplayProgress } from "./progress.js";
 import type { UpdateCommandOptions } from "./shared.js";
 
 export function validateUpdateCandidateWithProgress(
-  params: Pick<Parameters<typeof validateUpdateCandidateCanary>[0], "root" | "config"> & {
+  params: Pick<
+    Parameters<typeof validateUpdateCandidateCanary>[0],
+    "root" | "config" | "snapshotTempDir"
+  > & {
     env: NodeJS.ProcessEnv;
     assertCurrent: () => void;
   },

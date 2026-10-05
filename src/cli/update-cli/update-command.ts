@@ -71,6 +71,8 @@ async function updateCommandWithRuntime(
   executorOptions?: UpdateCommandExecutorOptions,
 ): Promise<void> {
   const invocationCwd = tryProcessCwd();
+  // Service selectors are merged later; keep this invocation-only snapshot preference separate.
+  const snapshotTempDir = process.env.TMPDIR?.trim() || undefined;
   const recoveryState: UpdateCommandRecoveryState = {
     triageTarget: { env: resolveServiceRefreshEnv(process.env, invocationCwd) },
   };
@@ -109,6 +111,7 @@ async function updateCommandWithRuntime(
         prepared,
         recoveryState,
         invocationCwd,
+        snapshotTempDir,
         retainRuntime,
         initialization,
         executorOptions,
@@ -122,6 +125,7 @@ async function updateCommandWithRuntime(
         invocationCwd,
         env,
         execute,
+        snapshotTempDir,
         executorOptions,
       );
     }
@@ -134,6 +138,7 @@ async function runAdmittedUpdate(
   prepared: PreparedUpdate,
   recoveryState: UpdateCommandRecoveryState,
   invocationCwd: string | undefined,
+  snapshotTempDir: string | undefined,
   retainRuntime: RetainUpdateRuntime,
   initialization?: InitializedUpdate,
   executorOptions?: UpdateCommandExecutorOptions,
@@ -143,6 +148,7 @@ async function runAdmittedUpdate(
     root: resolveUpdateCommandAdmissionRoot(prepared),
     serviceRoot: initialization?.target.managedServiceRoot ?? prepared.servicePlan?.serviceRoot,
     invocationCwd,
+    snapshotTempDir,
     initialization,
     pkgOwnership: prepared.pkgOwnership,
     expectedForeground:
@@ -264,6 +270,7 @@ async function updateCommandInternal(
       prepared,
       executor,
       updateStepTimeoutMs,
+      initialization?.snapshotTempDir,
     ));
   if (!target) {
     return;

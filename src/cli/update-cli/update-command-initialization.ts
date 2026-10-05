@@ -23,6 +23,7 @@ import type { resolveUpdateCommandTarget } from "./update-command-target.js";
 
 export type InitializedUpdate = {
   env: NodeJS.ProcessEnv;
+  snapshotTempDir?: string;
   runId: string;
   executor: UpdateCommandExecutor;
   registerRun: (run: NonNullable<UpdateCommandOptions["run"]>) => Promise<void>;

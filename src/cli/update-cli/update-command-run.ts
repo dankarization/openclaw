@@ -234,6 +234,7 @@ export function assertUpdatePackageActivationAdmission(
 export async function admitUpdateCommandRun(params: {
   opts: UpdateCommandOptions;
   root: string;
+  snapshotTempDir?: string;
   installKind?: "git" | "package" | "unknown";
   serviceRoot?: string;
   invocationCwd?: string;
@@ -343,6 +344,7 @@ export async function admitUpdateCommandRun(params: {
     runId: record.runId,
     defaultStepTimeoutMs: record.trigger === "campaign" ? AUTO_UPDATE_STEP_TIMEOUT_MS : undefined,
     env,
+    ...(params.snapshotTempDir?.trim() ? { snapshotTempDir: params.snapshotTempDir.trim() } : {}),
     ...(record.trigger !== "cli" &&
     meta?.runId === record.runId &&
     meta.completionOwner === "gateway-restart"

@@ -72,6 +72,30 @@ export function consumeGatewayBootstrapSteps(): GatewayBootstrapStep[] {
   return steps.toSorted((a, b) => a.startedAt - b.startedAt || a.name.localeCompare(b.name));
 }
 
+/** Emit an opt-in, content-free start marker for work that may never complete. */
+const BLOCKING_STARTUP_TRACE_STAGES = [
+  "cli.command.startup-migration-lease-acquire",
+  "cli.command.startup-plugin-quarantine-refresh",
+] as const;
+export type GatewayBootstrapStepStartPhase = (typeof BLOCKING_STARTUP_TRACE_STAGES)[number];
+const blockingStartupTraceStages: ReadonlySet<GatewayBootstrapStepStartPhase> = new Set(
+  BLOCKING_STARTUP_TRACE_STAGES,
+);
+
+export function markGatewayBootstrapStepStarted(name: GatewayBootstrapStepStartPhase): void {
+  if (
+    !blockingStartupTraceStages.has(name) ||
+    !isTruthyEnvValue(process.env.OPENCLAW_GATEWAY_STARTUP_TRACE)
+  ) {
+    return;
+  }
+  const startedAt = performance.now();
+  // Keep this synchronous: the marker must reach stderr before a potentially stalled await.
+  process.stderr.write(
+    `[gateway] startup trace: ${name} started total=${startedAt.toFixed(1)}ms\n`,
+  );
+}
+
 export async function measureGatewayBootstrapStep<T>(
   name: string,
   run: () => T | Promise<T>,

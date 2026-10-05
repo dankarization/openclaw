@@ -4,7 +4,10 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { flushDiagnosticsTimeline } from "../infra/diagnostics-timeline.js";
-import { createGatewayDispatchStartupTrace } from "./startup-trace.js";
+import {
+  createGatewayDispatchStartupTrace,
+  markGatewayBootstrapStepStarted,
+} from "./startup-trace.js";
 
 function readTimelineEvents(timelinePath: string): Record<string, unknown>[] {
   flushDiagnosticsTimeline();
@@ -20,6 +23,33 @@ describe("CLI startup trace", () => {
     flushDiagnosticsTimeline();
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
+  });
+
+  it("emits only fixed startup phase start markers when tracing is enabled", () => {
+    vi.stubEnv("OPENCLAW_GATEWAY_STARTUP_TRACE", "1");
+    const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+
+    markGatewayBootstrapStepStarted("cli.command.startup-migration-lease-acquire");
+    markGatewayBootstrapStepStarted("cli.command.startup-plugin-quarantine-refresh");
+
+    const output = stderr.mock.calls.map(([line]) => String(line)).join("");
+    expect(output).toContain("cli.command.startup-migration-lease-acquire started");
+    expect(output).toContain("cli.command.startup-plugin-quarantine-refresh started");
+    expect(output).not.toContain("account");
+    expect(output).not.toContain("token");
+
+    const beforeUnknown = stderr.mock.calls.length;
+    markGatewayBootstrapStepStarted("caller-controlled-sensitive-value" as never);
+    expect(stderr.mock.calls).toHaveLength(beforeUnknown);
+  });
+
+  it("does not emit startup phase start markers unless tracing is enabled", () => {
+    vi.stubEnv("OPENCLAW_GATEWAY_STARTUP_TRACE", "0");
+    const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+
+    markGatewayBootstrapStepStarted("cli.command.startup-plugin-quarantine-refresh");
+
+    expect(stderr).not.toHaveBeenCalled();
   });
 
   it.each([false, true])(

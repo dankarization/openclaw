@@ -414,6 +414,7 @@ export async function updateGitInstall(params: {
   getDoctorContext?: Parameters<typeof runPackageUpdateDoctor>[0]["getDoctorContext"];
   getManagedServiceEnv: () => NodeJS.ProcessEnv | undefined;
   getSnapshotSource: () => Promise<{ config: OpenClawConfig; env: NodeJS.ProcessEnv }>;
+  snapshotTempDir?: string;
   jsonMode?: boolean;
   invocationCwd?: string;
   nodeRunner?: string;
@@ -475,6 +476,7 @@ export async function updateGitInstall(params: {
       config,
       stateDir: resolveStateDir(env),
       env,
+      snapshotTempDir: params.snapshotTempDir,
     });
     params.progress.onStepComplete?.({ ...snapshot, index: 0, total: 0 });
     if (snapshot.exitCode !== 0) {

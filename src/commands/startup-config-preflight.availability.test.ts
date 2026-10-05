@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import {
   readStartupMigrationWarning,
   recordStartupMigrationWarnings,
@@ -20,6 +20,8 @@ afterEach(() => {
   setActiveDegradedPlugins([]);
   recordStartupMigrationWarnings([]);
   closeOpenClawStateDatabaseForTest();
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
 });
 
 it("admits an unavailable plugin while leaving legacy state for Doctor", async () => {
@@ -43,8 +45,29 @@ it("admits an unavailable plugin while leaving legacy state for Doctor", async (
         { config },
       );
 
-      const ready = await runStartupConfigPreflight({ gateway: true, observe: false });
+      vi.stubEnv("OPENCLAW_GATEWAY_STARTUP_TRACE", "1");
+      const events: string[] = [];
+      vi.spyOn(process.stderr, "write").mockImplementation((line) => {
+        events.push(`stderr:${String(line)}`);
+        return true;
+      });
+      const ready = await runStartupConfigPreflight({
+        gateway: true,
+        observe: false,
+        measure: async (name, run) => {
+          events.push(`measure:${name}`);
+          return await run();
+        },
+      });
 
+      const startMarker = events.findIndex((event) =>
+        event.includes("cli.command.startup-plugin-quarantine-refresh started"),
+      );
+      const measuredRefresh = events.findIndex(
+        (event) => event === "measure:startup-plugin-quarantine-refresh",
+      );
+      expect(startMarker).toBeGreaterThanOrEqual(0);
+      expect(measuredRefresh).toBeGreaterThan(startMarker);
       expect(ready.snapshot.valid).toBe(true);
       expect(listActiveDegradedPlugins()).toMatchObject([
         {

@@ -11,7 +11,10 @@ import { runtimeProcessEntrypoints } from "./runtime-process-entrypoints.js";
 import { sqliteWorkerPreloadEnv } from "./sqlite-worker-preload.test-support.js";
 import { measureUpdateStateFiles } from "./update-candidate-io.js";
 import { observeUpdateCandidateIoProgress } from "./update-candidate-io.test-support.js";
-import { prepareUpdateCandidateStateSnapshot } from "./update-candidate-snapshot.js";
+import {
+  assessInitialUpdateSnapshotCapacity,
+  prepareUpdateCandidateStateSnapshot,
+} from "./update-candidate-snapshot.js";
 import { readUpdateStateSchemaVersions } from "./update-candidate-state.js";
 import { readUpdateStateDatabaseSizes } from "./update-candidate-state.sizes.js";
 
@@ -32,6 +35,35 @@ async function waitForFile(file: string): Promise<void> {
     });
   }
 }
+
+it("uses the caller snapshot TMPDIR ahead of the managed service TMPDIR", async () => {
+  const root = await fs.realpath(tempDirs.make("snapshot-tmpdir-precedence-"));
+  const stateDir = path.join(root, "state");
+  const callerTmp = path.join(root, "caller-tmp");
+  const serviceTmp = path.join(root, "service-tmp");
+  await Promise.all([fs.mkdir(stateDir), fs.mkdir(callerTmp), fs.mkdir(serviceTmp)]);
+  vi.spyOn(diskSpace, "tryReadDiskSpace").mockImplementation((targetPath) => ({
+    targetPath,
+    checkedPath: targetPath,
+    availableBytes: 0,
+    totalBytes: 0,
+  }));
+
+  const result = await assessInitialUpdateSnapshotCapacity({
+    config: {},
+    stateDir,
+    env: { TMPDIR: serviceTmp },
+    snapshotTempDir: callerTmp,
+  });
+
+  expect(result.exitCode).toBe(1);
+  expect(result.snapshotCapacity?.candidates.map((candidate) => candidate.directory)).toContain(
+    callerTmp,
+  );
+  expect(result.snapshotCapacity?.candidates.map((candidate) => candidate.directory)).not.toContain(
+    serviceTmp,
+  );
+});
 
 it.each([undefined, 600_000])(
   "honors the %s ms allowance during metadata inventory",

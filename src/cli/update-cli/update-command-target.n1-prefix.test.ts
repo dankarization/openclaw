@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   calls: [] as string[][],
   manager: "npm" as "npm" | "bun",
   sqliteText: true,
+  snapshotCapacityCalls: [] as Array<Record<string, unknown>>,
 }));
 vi.mock("../../infra/update-global.js", async (original) => {
   const actual = await original<typeof import("../../infra/update-global.js")>();
@@ -47,6 +48,23 @@ vi.mock("./update-command-config.js", () => ({
     storedChannel: "stable",
   }),
 }));
+vi.mock("../../infra/update-candidate-snapshot.js", () => ({
+  assessInitialUpdateSnapshotCapacity: async (params: Record<string, unknown>) => {
+    state.snapshotCapacityCalls.push(params);
+    return {
+      name: "snapshot-space-preflight",
+      command: "snapshot-space-preflight",
+      cwd: String(params.stateDir),
+      durationMs: 0,
+      exitCode: 0,
+      warnings: [],
+      diagnostics: [],
+    };
+  },
+}));
+vi.mock("./update-command-managed-context.js", () => ({
+  readUpdateCandidateSource: async () => ({ config: {} }),
+}));
 vi.mock("../../infra/disk-space.js", () => ({ createLowDiskSpaceWarning: () => undefined }));
 vi.mock("./update-command-package-destination.js", () => ({
   inspectNpmGlobalDestination: async () => ({ kind: "empty" }),
@@ -75,22 +93,30 @@ vi.mock("../../daemon/runtime-paths.js", () => ({
 vi.mock("./update-command-node-runtime-resolution.js", () => ({
   resolveTargetNodeRuntime: async () => undefined,
 }));
+vi.mock("./update-command-executor-capabilities.js", () => ({
+  captureUpdateCommandExecutorAuthority: () => ({ installKey: rootB }),
+}));
 import { resolveUpdateCommandTarget } from "./update-command-target.js";
 
 beforeEach(() => {
   state.calls = [];
   state.manager = "npm";
   state.sqliteText = true;
+  state.snapshotCapacityCalls = [];
   vi.mocked(resolveNodeRuntimeInfo).mockReset();
 });
 afterEach(() => vi.unstubAllGlobals());
 const rootB = path.resolve(".n1-fixture/B/node_modules/openclaw");
 const rootA = path.resolve(".n1-fixture/A/lib/node_modules/openclaw");
-async function resolve(servicePlan: {
-  rootRedirect: { root: string; previousRoot: string } | null;
-  serviceRoot?: string;
-  nodeRunner?: string;
-}) {
+async function resolve(
+  servicePlan: {
+    rootRedirect: { root: string; previousRoot: string } | null;
+    serviceRoot?: string;
+    nodeRunner?: string;
+  },
+  opts: { json: boolean; dryRun: boolean } = { json: true, dryRun: true },
+  snapshotTempDir?: string,
+) {
   // Dry-run target resolution uses synthetic registry metadata and never mutates an install.
   const prepared = {
     discoveredRoot: rootB,
@@ -105,18 +131,30 @@ async function resolve(servicePlan: {
   >[1];
   const executor = { enter: vi.fn(async () => ({ assertCurrent: vi.fn() })) };
   const target = await resolveUpdateCommandTarget(
-    { json: true, dryRun: true },
+    opts,
     recovery,
     undefined,
     prepared,
     executor,
     1000,
+    snapshotTempDir,
   );
   if (!target) {
     throw new Error("Expected an admitted update target");
   }
   return target;
 }
+it("uses the caller scratch path for the first capacity preflight", async () => {
+  const snapshotTempDir = path.resolve(".n1-fixture/caller-update-scratch");
+  await resolve(
+    { rootRedirect: null, serviceRoot: rootA },
+    { json: true, dryRun: false },
+    snapshotTempDir,
+  );
+  expect(state.snapshotCapacityCalls).toHaveLength(1);
+  expect(state.snapshotCapacityCalls[0]).toMatchObject({ snapshotTempDir });
+});
+
 it("keeps writable rebind target B without a recognized service Node instead of PATH npm A", async () => {
   const selected = await resolve({ rootRedirect: null, serviceRoot: rootA });
   expect(selected.packageInstallTarget?.packageRoot).toBe(rootB);

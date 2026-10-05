@@ -1,3 +1,4 @@
+import { markGatewayBootstrapStepStarted } from "../cli/startup-trace.js";
 import { cloneEnvWithPlatformSemantics } from "../config/config-env-vars.js";
 import type { ConfigSnapshotReadMeasure, ConfigSnapshotReadOptions } from "../config/io.js";
 import type { ConfigFileSnapshot } from "../config/types.js";
@@ -110,7 +111,10 @@ async function prepareStartupConfig(
     if (read.recovery || needsRefreshedPluginIndexPersistence(read)) {
       const { acquireStartupMigrationLeaseWithWait } =
         await import("../infra/startup-migration-checkpoint.js");
-      lease = await acquireStartupMigrationLeaseWithWait({ env });
+      markGatewayBootstrapStepStarted("cli.command.startup-migration-lease-acquire");
+      lease = await measure("startup-migration-lease-acquire", () =>
+        acquireStartupMigrationLeaseWithWait({ env }),
+      );
       heartbeat = setInterval(() => {
         try {
           lease?.heartbeat();
@@ -146,11 +150,14 @@ async function prepareStartupConfig(
         read = persisted.snapshotRead;
       }
     }
-    const verification = await refreshStartupPluginQuarantine({
-      cfg: read.snapshot.sourceConfig,
-      env,
-      measure,
-    });
+    markGatewayBootstrapStepStarted("cli.command.startup-plugin-quarantine-refresh");
+    const verification = await measure("startup-plugin-quarantine-refresh", () =>
+      refreshStartupPluginQuarantine({
+        cfg: read.snapshot.sourceConfig,
+        env,
+        measure,
+      }),
+    );
     setActiveDegradedPlugins(verification.quarantinedPlugins);
     recordStartupMigrationWarnings([
       ...(verification.warnings ?? []),

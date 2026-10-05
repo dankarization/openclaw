@@ -94,6 +94,7 @@ it.each([
               OPENCLAW_PROFILE: "service",
               OPENCLAW_STATE_DIR: serviceState,
               OPENCLAW_CONFIG_PATH: path.join(serviceState, "openclaw.json"),
+              TMPDIR: path.join(home, "service-tmp"),
               ...(outcome === "conflict"
                 ? platform === "linux"
                   ? { OPENCLAW_SYSTEMD_UNIT: "openclaw-gateway-other.service" }
@@ -157,7 +158,17 @@ it.each([
           expect(loadUpdateRecovery(runId, { env })).toEqual(retained);
           await expect(fs.stat(callerState)).rejects.toMatchObject({ code: "ENOENT" });
         } else {
-          const run = await admitUpdateCommandRun({ opts: {}, root });
+          const callerSnapshotTmp = path.join(home, "caller-snapshot-tmp");
+          const run = await admitUpdateCommandRun({
+            opts: {},
+            root,
+            snapshotTempDir: callerSnapshotTmp,
+          });
+          expect(run.snapshotTempDir).toBe(callerSnapshotTmp);
+          expect(run.env.TMPDIR).toBe(
+            outcome === "unavailable" ? env.TMPDIR : path.join(home, "service-tmp"),
+          );
+          expect(run.env.TMPDIR).not.toBe(callerSnapshotTmp);
           expect(run.env.OPENCLAW_STATE_DIR).toBe(env.OPENCLAW_STATE_DIR);
           if (outcome === "unavailable") {
             const inspected = await maybeStopManagedServiceBeforeMutableUpdate({

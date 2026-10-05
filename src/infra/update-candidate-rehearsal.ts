@@ -132,6 +132,7 @@ export async function prepareUpdateCandidateRehearsal(params: {
   candidateRoot: string;
   stateDir: string;
   env?: NodeJS.ProcessEnv;
+  snapshotTempDir?: string;
   nodeRunner?: string;
   timeoutMs?: number;
   signal?: AbortSignal;
@@ -201,6 +202,7 @@ export async function prepareUpdateCandidateRehearsal(params: {
   } = await prepareUpdateCandidateStateSnapshot({
     ...params,
     env: sourceEnv,
+    snapshotTempDir: params.snapshotTempDir,
     workerEnv,
   });
   const env = workerEnv(tempDir);
