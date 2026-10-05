@@ -57,7 +57,7 @@ describe("Telegram transcript echo durable ownership", () => {
   }
 
   it("sends once for concurrent processing and a replay after completion", async () => {
-    const started = createDeferred<void>();
+    const started = createDeferred();
     const finish = createDeferred<{ channel: "telegram"; messageId: string }>();
     sendText.mockImplementationOnce(async () => {
       started.resolve();
