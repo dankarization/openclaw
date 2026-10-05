@@ -156,6 +156,9 @@ export async function runUpdateFinalizationDoctorInFreshProcess(params: {
     ...(params.workspaceSuggestions ? [] : ["--no-workspace-suggestions"]),
     ...(params.yes ? ["--yes"] : []),
   ];
+  const timeoutMs = params.opts ? parseUpdateTimeoutMs(params.opts.timeout) : params.timeoutMs;
+  const serviceInspectionDeadlineAtMs =
+    timeoutMs === undefined ? undefined : Date.now() + timeoutMs;
   const baseEnv = stripGatewayServiceMarkerEnv(disableUpdatedPackageCompileCacheEnv(process.env));
   delete baseEnv[UPDATE_POST_CORE_CONVERGENCE_ENV];
   const doctorResultPath = createUpdatePostInstallDoctorResultPath();
@@ -168,7 +171,7 @@ export async function runUpdateFinalizationDoctorInFreshProcess(params: {
       cwd: params.root,
       // Normal updates also carry a default step allowance. Only operator opts
       // may impose a Doctor deadline; standalone finalization supplies its own.
-      timeoutMs: params.opts ? parseUpdateTimeoutMs(params.opts.timeout) : params.timeoutMs,
+      timeoutMs,
       maxBuffer: 4 * 1024 * 1024,
       logOutput: false,
       onOutputChunk: captureUpdateFinalizationDoctorOutput(params.phase),
@@ -227,6 +230,9 @@ export async function runUpdateFinalizationDoctorInFreshProcess(params: {
             databaseGenerations:
               params.databaseBackup?.postMigrationGenerations ??
               params.databaseBackup?.sourceGenerations,
+            ...(serviceInspectionDeadlineAtMs !== undefined
+              ? { serviceInspectionDeadlineAtMs }
+              : {}),
             yes: params.yes,
             workspaceSuggestions: params.workspaceSuggestions === true,
             ...(params.phase === "post-plugin" && process.env[POST_CORE_UPDATE_ENV] === "1"

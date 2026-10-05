@@ -136,6 +136,7 @@ export function preparePackageDoctorContext(params: {
 }
 
 export async function runPackageUpdateDoctor(params: PackageDoctorOptions) {
+  const doctorTimeoutMs = resolveInstallWorkTimeoutMs(params.workTimeoutMs, params.timeoutMs);
   const context = params.getDoctorContext?.();
   context?.assertCurrent();
   const entryPath = await resolveGatewayInstallEntrypoint(params.root);
@@ -361,7 +362,7 @@ export async function runPackageUpdateDoctor(params: PackageDoctorOptions) {
         }),
         [UPDATE_POST_INSTALL_DOCTOR_RESULT_PATH_ENV]: doctorResultPath,
       },
-      timeoutMs: resolveInstallWorkTimeoutMs(params.workTimeoutMs, params.timeoutMs),
+      timeoutMs: doctorTimeoutMs,
       ...(runCommand ? { runCommand } : {}),
     });
   let outcome: { step: UpdateStepResult } | { error: unknown };
@@ -376,6 +377,9 @@ export async function runPackageUpdateDoctor(params: PackageDoctorOptions) {
                 configInputHash: context.inputHash,
                 repair: doctorPolicy.fix,
                 databaseGenerations: context.databaseBackup?.sourceGenerations,
+                ...(doctorTimeoutMs !== undefined
+                  ? { serviceInspectionDeadlineAtMs: Date.now() + doctorTimeoutMs }
+                  : {}),
               },
             },
             runDoctor,

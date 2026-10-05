@@ -168,6 +168,7 @@ async function runDoctorHealthFlowWithResult(
       runtime: repairRuntime,
       assertCurrent: writeAuthority?.assertCurrent,
       databaseGenerations: writeAuthority?.databaseGenerations,
+      serviceInspectionDeadlineAtMs: writeAuthority?.serviceInspectionDeadlineAtMs,
     });
     const runChecks = async () => {
       const doctorRuntime = maintenance ? repairRuntime : effectiveRuntime;
