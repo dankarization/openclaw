@@ -105,8 +105,8 @@ describe("media-understanding admission guards", () => {
           });
           return ok({ text: "must not upload" });
         });
-        const run = runProviderEntry({
-          capability: "audio",
+        const request = {
+          capability: "audio" as const,
           entry: { provider: "fixture", model: "fixture-audio" },
           cfg: {
             models: {
@@ -122,11 +122,12 @@ describe("media-understanding admission guards", () => {
           ctx,
           attachmentIndex: 0,
           cache,
-          providerRegistry: new Map([
+          providerRegistry: new Map<string, MediaUnderstandingProvider>([
             ["fixture", { id: "fixture", capabilities: ["audio"], transcribeAudioWithContext }],
           ]),
           assertCurrent,
-        });
+        };
+        const run = runProviderEntry(request);
 
         await captureStarted.promise;
         if (revokeAt === "provider capture prep") {
@@ -150,8 +151,8 @@ describe("media-understanding admission guards", () => {
       const assertCurrent = vi.fn(() => {
         throw new Error("admission expired");
       });
-      const result = runProviderEntry({
-        capability: "audio",
+      const request = {
+        capability: "audio" as const,
         entry: { provider: "fixture", model: "fixture-audio" },
         cfg: {
           models: {
@@ -167,11 +168,12 @@ describe("media-understanding admission guards", () => {
         ctx,
         attachmentIndex: 0,
         cache,
-        providerRegistry: new Map([
+        providerRegistry: new Map<string, MediaUnderstandingProvider>([
           ["fixture", { id: "fixture", capabilities: ["audio"], transcribeAudio }],
         ]),
         assertCurrent,
-      });
+      };
+      const result = runProviderEntry(request);
 
       await expect(result).rejects.toThrow("admission expired");
       expect(assertCurrent).toHaveBeenCalledOnce();

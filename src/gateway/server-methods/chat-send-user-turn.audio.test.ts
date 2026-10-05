@@ -216,7 +216,6 @@ describe("prepareChatSendUserTurn audio", () => {
             agents: {
               entries: {
                 main: {
-                  default: true,
                   agentDir: "/state/agents/main",
                   workspace: "/work/main",
                 },
