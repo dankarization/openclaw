@@ -627,6 +627,7 @@ export async function runProviderEntry(params: {
   agentDir?: string;
   workspaceDir?: string;
   providerRegistry: ProviderRegistry;
+  assertCurrent?: () => void;
   config?: MediaUnderstandingConfig;
   secretOwnerId?: string;
   request?: MediaRequestOverrides;
@@ -774,6 +775,7 @@ export async function runProviderEntry(params: {
     };
     let result: AudioTranscriptionResult;
     if (provider.transcribeAudioWithContext) {
+      params.assertCurrent?.();
       const attempt = await provider.transcribeAudioWithContext({
         ...input,
         cfg,
@@ -781,6 +783,7 @@ export async function runProviderEntry(params: {
         workspaceDir: params.workspaceDir,
         profile: entry.profile,
         preferredProfile: entry.preferredProfile,
+        assertCurrent: params.assertCurrent,
       });
       if (!attempt.ok) {
         return attempt;
@@ -800,9 +803,10 @@ export async function runProviderEntry(params: {
         agentDir: params.agentDir,
         workspaceDir: params.workspaceDir,
       });
-      result = await executeProviderRequest(providerId, auth, (requestAuth) =>
-        transcribeAudio({ ...input, ...requestAuth }),
-      );
+      result = await executeProviderRequest(providerId, auth, (requestAuth) => {
+        params.assertCurrent?.();
+        return transcribeAudio({ ...input, ...requestAuth });
+      });
     }
     if (isTranscriptArtifactText(result.text)) {
       return ok(null);
@@ -890,6 +894,7 @@ export async function runCliEntry(params: {
   ctx: MsgContext;
   attachment: MediaAttachment;
   cache: MediaAttachmentCache;
+  assertCurrent?: () => void;
   config?: MediaUnderstandingConfig;
   request?: MediaRequestOverrides;
 }): Promise<MediaUnderstandingOutput | null> {
@@ -961,6 +966,7 @@ export async function runCliEntry(params: {
     if (shouldLogVerbose()) {
       logVerbose(`Media understanding via CLI: ${argv.join(" ")}`);
     }
+    params.assertCurrent?.();
     const { stdout, stderr } = await runExec(
       expectDefined(argv[0], "argv entry at 0"),
       argv.slice(1),

@@ -24,6 +24,7 @@ import type { MediaUnderstandingProvider } from "./types.js";
 export async function transcribeFirstAudio(params: {
   ctx: MsgContext;
   cfg: OpenClawConfig;
+  assertCurrent?: () => void;
   agentDir?: string;
   providers?: Record<string, MediaUnderstandingProvider>;
   activeModel?: ActiveMediaModel;
@@ -61,6 +62,7 @@ export async function transcribeFirstAudio(params: {
         await runAudioTranscription({
           ctx,
           cfg,
+          assertCurrent: params.assertCurrent,
           attachments: [firstAudio],
           agentDir: params.agentDir,
           providers: params.providers,
@@ -89,6 +91,8 @@ export async function transcribeFirstAudio(params: {
     const transcript = params.signal
       ? await waitForTranscript(shared, params.signal)
       : await shared;
+    // Shared transcription can outlive this request's admission while it waits.
+    params.assertCurrent?.();
     if (!transcript) {
       return undefined;
     }

@@ -34,6 +34,7 @@ function request(params: {
   cfg?: OpenClawConfig;
   signal?: AbortSignal;
   chatId?: string;
+  assertCurrent?: () => void;
 }) {
   const ctx: MsgContext = {
     Provider: "telegram",
@@ -47,6 +48,7 @@ function request(params: {
   return {
     ctx,
     cfg: params.cfg ?? {},
+    assertCurrent: params.assertCurrent,
     telegramVoice: { chatId: params.chatId ?? "-123", messageId: params.messageId },
     signal: params.signal,
   };
@@ -88,6 +90,54 @@ describe("Telegram voice preflight sharing", () => {
         await transcribeFirstAudio(request({ file: b, account: "gamma", messageId, cfg })),
       ).toBe("@alpha @beta hello");
       expect(transcribe).toHaveBeenCalledOnce();
+    });
+  });
+
+  it("rechecks each waiter's admission after shared transcription resolves", async () => {
+    await fixture(async ([a, b]) => {
+      const messageId = String(nextMessageId++);
+      const cfg: OpenClawConfig = { tools: { media: { audio: { echoTranscript: true } } } };
+      let finish!: (value: { transcript: string }) => void;
+      let started!: () => void;
+      const startedPromise = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      transcribe.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+            started();
+          }),
+      );
+      const firstAdmission = vi.fn();
+      const expiredWaiterAdmission = vi.fn(() => {
+        throw new Error("admission expired while waiting");
+      });
+      const first = request({
+        file: a,
+        account: "alpha",
+        messageId,
+        cfg,
+        assertCurrent: firstAdmission,
+      });
+      const second = request({
+        file: b,
+        account: "beta",
+        messageId,
+        cfg,
+        assertCurrent: expiredWaiterAdmission,
+      });
+      const results = Promise.all([transcribeFirstAudio(first), transcribeFirstAudio(second)]);
+      await startedPromise;
+      finish({ transcript: "shared transcript" });
+
+      expect(await results).toEqual(["shared transcript", undefined]);
+      expect(transcribe).toHaveBeenCalledOnce();
+      expect(firstAdmission).toHaveBeenCalledOnce();
+      expect(expiredWaiterAdmission).toHaveBeenCalledOnce();
+      expect(echo).toHaveBeenCalledOnce();
+      expect(first.ctx.media?.[0]?.transcribed).toBe(true);
+      expect(second.ctx.media?.[0]?.transcribed).not.toBe(true);
     });
   });
 
