@@ -21,6 +21,7 @@ import {
   isPackageActivationComplete,
 } from "./package-update-activation-journal.js";
 import { readPackageActivationRecordStatus as packageActivationStatus } from "./package-update-activation-status.js";
+import { createVerifiedPackageEvidenceBackup } from "./package-update-evidence-backup.js";
 import {
   activateStagedNpmPackageRoot,
   copyPackagePathEntry,
@@ -238,7 +239,46 @@ export function createPublicationOwner(
     }
     assertCurrent();
   };
-  const preflight = async (action: "repair" | "retire") => {
+  const inspectAlteredPreviousRetirement = async () => {
+    if (record.phase !== "publication-complete" || record.intent !== null) {
+      throw new Error("Altered previous retirement requires completed candidate publication.");
+    }
+    await verifyClosure();
+    if (
+      entryIdentity(live, true) !== descriptor.candidate.identity ||
+      entryIdentity(root("previous"), true) !== descriptor.previous.identity ||
+      entryIdentity(root("candidate"), true) !== null ||
+      entryIdentity(root("previous.candidate"), true) !== null ||
+      entryIdentity(root("launchers"), true) !== descriptor.launcherRootIdentity ||
+      entryIdentity(root("previous-launchers"), true) !== descriptor.previousLauncherRootIdentity
+    ) {
+      throw new Error("Altered previous retirement has ambiguous or changed package roles.");
+    }
+    await matches(live, descriptor.candidate, descriptor.originalStageRoot);
+    await verifySelectedLaunchers("candidate");
+    const reader = createPackageIntegrityReader();
+    const names = descriptor.launchers.map((entry) => entry.name).toSorted();
+    if (!isDeepStrictEqual(fs.readdirSync(root("launchers")).toSorted(), names)) {
+      throw new Error("Candidate launcher inventory changed.");
+    }
+    for (const entry of descriptor.launchers) {
+      const source = root(`launchers/${entry.name}`);
+      if (
+        entryIdentity(source, "launcher") !== entry.candidateIdentity ||
+        encodePackageActivationLauncher(await reader.launcher(source)) !== entry.candidate
+      ) {
+        throw new Error("Candidate launcher assets changed.");
+      }
+    }
+    const observed = await reader.tree(root("previous"), live);
+    assertCurrent();
+    return observed;
+  };
+  const preflight = async (action: "repair" | "retire" | "retire-altered-previous") => {
+    if (action === "retire-altered-previous") {
+      await inspectAlteredPreviousRetirement();
+      return;
+    }
     if (
       action === "repair" &&
       !["preparing", "prepared", "publishing", "publication-complete"].includes(record.phase)
@@ -433,7 +473,7 @@ export function createPublicationOwner(
     // another journal write. Read-only receipts remain observations, not grants.
     return packageActivationStatus(record);
   };
-  const retire = async () => {
+  const retire = async (verifiedPrevious?: PackageIntegrityFingerprint) => {
     await verifyClosure();
     if (
       !["publication-complete", "rolled-back", "aborted", "retiring", "anchor-retired"].includes(
@@ -466,7 +506,7 @@ export function createPublicationOwner(
       for (const name of ["previous", "candidate", "previous.candidate"] as const) {
         await matches(
           root(name),
-          name === "previous" ? descriptor.previous : descriptor.candidate,
+          name === "previous" ? (verifiedPrevious ?? descriptor.previous) : descriptor.candidate,
           name === "previous" ? live : descriptor.originalStageRoot,
         );
       }
@@ -560,9 +600,62 @@ export function createPublicationOwner(
     await fsp.unlink(helper());
     return persistRetirement();
   };
+  const retireAlteredPrevious = async (backupParent: string) => {
+    // The exception is confined to this acknowledged entry point. Never rebind
+    // the descriptor or allow the altered object to become rollback material.
+    const observed = await inspectAlteredPreviousRetirement();
+    const backup = await createVerifiedPackageEvidenceBackup({
+      sourceRoot: anchor,
+      protectedPackageRoot: root("previous"),
+      protectedLogicalRoot: live,
+      backupParent,
+      operationId: descriptor.operationId,
+      assertCurrent,
+    });
+    if (
+      !isDeepStrictEqual(observed, backup.sourceFingerprintBefore) ||
+      !isDeepStrictEqual(observed, backup.sourceFingerprintAfter)
+    ) {
+      throw new Error("Altered previous package changed while its backup was verified.");
+    }
+    const evidenceDir = path.dirname(backup.archivePath);
+    const helperBytes = await fsp.readFile(helper());
+    if (createHash("sha256").update(helperBytes).digest("hex") !== descriptor.helperDigest) {
+      throw new Error("Sealed package recovery helper changed before backup.");
+    }
+    for (const [name, bytes] of [
+      ["original-recovery.mjs", helperBytes],
+      ["original-operation.json", Buffer.from(JSON.stringify(record, null, 2))],
+    ] as const) {
+      assertCurrent();
+      const file = path.join(evidenceDir, name);
+      const handle = await fsp.open(file, "wx", 0o600);
+      try {
+        await handle.writeFile(bytes);
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
+      if (!bytes.equals(await fsp.readFile(file))) {
+        throw new Error("Recovery evidence backup failed independent verification.");
+      }
+      assertCurrent();
+    }
+    requireDirectorySync(await syncDirectory(evidenceDir), "Recovery evidence backup");
+    const current = await inspectAlteredPreviousRetirement();
+    if (!isDeepStrictEqual(observed, current)) {
+      throw new Error("Altered previous package changed before its retirement intent.");
+    }
+    // Ordinary identity-bound retirement intents remain truthful and compatible
+    // with the sealed helper. A crash before this call leaves the originals;
+    // a crash after the intent resumes deletion of that same recorded root.
+    const result = await retire(current);
+    return { ...result, evidenceBackup: backup.archivePath };
+  };
   return {
     publish,
-    retire,
+    retire: () => retire(),
+    retireAlteredPrevious,
     persistRetirement,
     preflight,
     async disarmRollback() {
