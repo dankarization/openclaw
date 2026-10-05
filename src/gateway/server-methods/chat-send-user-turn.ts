@@ -89,6 +89,7 @@ async function resolveChatUiTranscriptEcho(params: {
             },
           },
         },
+        assertCurrent: params.assertCurrent,
       }),
     )
     .catch(() => undefined);
@@ -98,17 +99,9 @@ async function resolveChatUiTranscriptEcho(params: {
   }
 
   // Audio is marked transcribed before the normal media pipeline runs, so
-  // project the same result into the agent-facing context here. The user-turn
-  // input promise separately stores the display echo in canonical history.
+  // retain the result for the approval-aware agent context and canonical user
+  // turn. Do not add it to the prompt until the canonical text is approved.
   params.ctx.Transcript = transcript;
-  const agentTranscript = formatAudioTranscriptForAgent(transcript);
-  params.ctx.agentText = [
-    params.ctx.agentText ?? params.ctx.BodyForAgent ?? params.ctx.Body,
-    agentTranscript,
-  ]
-    .filter(Boolean)
-    .join("\n");
-  params.ctx.BodyForAgent = params.ctx.agentText;
   return (audio.echoFormat ?? DEFAULT_ECHO_TRANSCRIPT_FORMAT).replace(
     "{transcript}",
     () => transcript,
@@ -367,7 +360,11 @@ export function prepareChatSendUserTurn(params: {
       });
       if (transcriptEcho !== undefined && ctx.Transcript) {
         transcriptEchoForAgent = transcriptEcho;
-        machineTranscriptForAgent = formatAudioTranscriptForAgent(ctx.Transcript);
+        const echoFormat =
+          session.cfg?.tools?.media?.audio?.echoFormat ?? DEFAULT_ECHO_TRANSCRIPT_FORMAT;
+        if (echoFormat.includes("{transcript}")) {
+          machineTranscriptForAgent = formatAudioTranscriptForAgent(ctx.Transcript);
+        }
       }
       return {
         ...userTurn.baseInput,
@@ -401,17 +398,20 @@ export function prepareChatSendUserTurn(params: {
         // it in Body/history, while retaining untrusted transcript framing in
         // the prompt passed to the agent.
         let agentBaseText = text;
-        if (transcriptEchoForAgent) {
-          const echoMarker = "\n" + transcriptEchoForAgent;
-          const echoIndex = text.indexOf(echoMarker, userTurn.baseInput.text?.length ?? 0);
+        const retainedEcho =
+          transcriptEchoForAgent !== undefined &&
+          (text === transcriptEchoForAgent || text.endsWith("\n" + transcriptEchoForAgent));
+        if (retainedEcho && transcriptEchoForAgent) {
           agentBaseText =
-            echoIndex >= 0
-              ? text.slice(0, echoIndex) + text.slice(echoIndex + echoMarker.length)
-              : text === transcriptEchoForAgent
-                ? ""
-                : text;
+            text === transcriptEchoForAgent
+              ? ""
+              : text.slice(0, -(transcriptEchoForAgent.length + 1));
         }
-        ctx.agentText = [agentBaseText, machineTranscriptForAgent].filter(Boolean).join("\n");
+        const approvedTranscript =
+          retainedEcho || (transcriptEchoForAgent === "" && text === request.inboundMessage.trim())
+            ? machineTranscriptForAgent
+            : undefined;
+        ctx.agentText = [agentBaseText, approvedTranscript].filter(Boolean).join("\n");
         ctx.BodyForAgent = ctx.agentText;
 
         // The display echo belongs in canonical history, but the machine

@@ -26,7 +26,10 @@ describe("chat.send voice transcription policy boundary", () => {
   beforeEach(() => runExec.mockReset().mockResolvedValue({ stdout: "policy-approved voice" }));
   afterEach(() => vi.restoreAllMocks());
 
-  async function prepare(scope: MediaUnderstandingScopeConfig) {
+  async function prepare(
+    scope: MediaUnderstandingScopeConfig,
+    assertClientUploadAllowed?: () => void,
+  ) {
     const dir = tempDirs.make("chat-audio-policy-");
     const mediaPath = path.join(dir, "voice.wav");
     await fs.writeFile(mediaPath, createSafeAudioFixtureBuffer());
@@ -73,6 +76,7 @@ describe("chat.send voice transcription policy boundary", () => {
       },
       admission: {
         originatingRoute: { originatingChannel: "webchat", explicitDeliverRoute: false },
+        assertClientUploadAllowed,
       },
       attachments: createAttachments({
         parsedMessage: "caption",
@@ -111,6 +115,23 @@ describe("chat.send voice transcription policy boundary", () => {
       expect(input.text).toBe("caption");
       expect(prepared.ctx.Transcript).toBeUndefined();
       expect(prepared.ctx.media?.[0]?.transcribed).not.toBe(true);
+      expect(runExec).not.toHaveBeenCalled();
+    });
+  });
+
+  it("rechecks UI admission after media preparation and before transcription I/O", async () => {
+    await withEnvAsync({ PATH: "" }, async () => {
+      let assertions = 0;
+      const assertClientUploadAllowed = vi.fn(() => {
+        assertions += 1;
+        if (assertions >= 2) {
+          throw new Error("admission expired");
+        }
+      });
+      await expect(prepare({ default: "allow" }, assertClientUploadAllowed)).rejects.toThrow(
+        "admission expired",
+      );
+      expect(assertions).toBe(3);
       expect(runExec).not.toHaveBeenCalled();
     });
   });

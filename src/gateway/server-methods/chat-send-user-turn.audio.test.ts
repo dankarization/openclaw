@@ -173,6 +173,185 @@ describe("prepareChatSendUserTurn audio", () => {
     },
   );
 
+  it("does not treat a static echo label as approval of the transcript", async () => {
+    const persist = vi
+      .spyOn(chatAttachments, "persistInboundImagesForTranscript")
+      .mockResolvedValueOnce({ entries: [], omission: "none" });
+    transcribeFirstAudio.mockImplementationOnce(async ({ ctx }) => {
+      if (ctx.media?.[0]) {
+        ctx.media[0] = { ...ctx.media[0], transcribed: true };
+      }
+      return "unapproved transcript";
+    });
+    try {
+      const { controller, readInput } = createUserTurnInputController("caption");
+      const prepared = prepareChatSendUserTurn({
+        request: {
+          inboundMessage: "caption",
+          clientInfo: createClientInfo({
+            id: GATEWAY_CLIENT_IDS.WEBCHAT_UI,
+            mode: GATEWAY_CLIENT_MODES.WEBCHAT,
+          }),
+          suppressCommandInterpretation: false,
+          systemInputProvenance: undefined,
+          systemProvenanceReceipt: undefined,
+        },
+        session: {
+          agentId: "main",
+          clientRunId: "run-voice-static-echo",
+          sessionKey: "agent:main:main",
+          cfg: {
+            tools: {
+              media: { audio: { echoTranscript: true, echoFormat: "Voice note received" } },
+            },
+          },
+        },
+        admission: {
+          originatingRoute: { originatingChannel: "webchat", explicitDeliverRoute: false },
+        },
+        attachments: createAttachments({
+          parsedMessage: "caption",
+          mediaPathOffloads: [{ path: "/state/media/inbound/voice.ogg", contentType: "audio/ogg" }],
+        }),
+        client: null,
+        logGateway: { warn: vi.fn() } as never,
+        userTurn: controller,
+      });
+
+      const input = await readInput();
+      expect(input.text).toBe("caption\nVoice note received");
+      prepared.applyApprovedText(input.text);
+      expect(prepared.ctx.BodyForAgent).toBe("caption\nVoice note received");
+      expect(prepared.ctx.BodyForAgent).not.toContain("unapproved transcript");
+    } finally {
+      persist.mockRestore();
+      transcribeFirstAudio.mockReset();
+    }
+  });
+
+  it("does not reintroduce a transcript removed by the approval hook", async () => {
+    const persist = vi
+      .spyOn(chatAttachments, "persistInboundImagesForTranscript")
+      .mockResolvedValueOnce({ entries: [], omission: "none" });
+    transcribeFirstAudio.mockImplementationOnce(async ({ ctx }) => {
+      if (ctx.media?.[0]) {
+        ctx.media[0] = { ...ctx.media[0], transcribed: true };
+      }
+      return "private transcript";
+    });
+    try {
+      const { controller, readInput } = createUserTurnInputController("caption");
+      const prepared = prepareChatSendUserTurn({
+        request: {
+          inboundMessage: "caption",
+          clientInfo: createClientInfo({
+            id: GATEWAY_CLIENT_IDS.WEBCHAT_UI,
+            mode: GATEWAY_CLIENT_MODES.WEBCHAT,
+          }),
+          suppressCommandInterpretation: false,
+          systemInputProvenance: undefined,
+          systemProvenanceReceipt: undefined,
+        },
+        session: {
+          agentId: "main",
+          clientRunId: "run-voice-redaction",
+          sessionKey: "agent:main:main",
+          cfg: {
+            tools: {
+              media: {
+                audio: { echoTranscript: true, echoFormat: "Heard: {transcript}" },
+              },
+            },
+          },
+        },
+        admission: {
+          originatingRoute: { originatingChannel: "webchat", explicitDeliverRoute: false },
+        },
+        attachments: createAttachments({
+          parsedMessage: "caption",
+          mediaPathOffloads: [{ path: "/state/media/inbound/voice.ogg", contentType: "audio/ogg" }],
+        }),
+        client: null,
+        logGateway: { warn: vi.fn() } as never,
+        userTurn: controller,
+      });
+
+      await expect(readInput()).resolves.toMatchObject({
+        text: "caption\nHeard: private transcript",
+      });
+      prepared.applyApprovedText("caption");
+      expect(prepared.ctx.BodyForAgent).toBe("caption");
+      expect(prepared.ctx.BodyForAgent).not.toContain("private transcript");
+
+      prepared.applyApprovedText("caption\nHeard: [redacted]");
+      expect(prepared.ctx.BodyForAgent).toBe("caption\nHeard: [redacted]");
+      expect(prepared.ctx.BodyForAgent).not.toContain("private transcript");
+    } finally {
+      persist.mockRestore();
+      transcribeFirstAudio.mockReset();
+    }
+  });
+
+  it("removes the approved transcript echo after a shortened caption", async () => {
+    const persist = vi
+      .spyOn(chatAttachments, "persistInboundImagesForTranscript")
+      .mockResolvedValueOnce({ entries: [], omission: "none" });
+    transcribeFirstAudio.mockImplementationOnce(async ({ ctx }) => {
+      if (ctx.media?.[0]) {
+        ctx.media[0] = { ...ctx.media[0], transcribed: true };
+      }
+      return "approved transcript";
+    });
+    try {
+      const { controller, readInput } = createUserTurnInputController("a longer caption");
+      const prepared = prepareChatSendUserTurn({
+        request: {
+          inboundMessage: "a longer caption",
+          clientInfo: createClientInfo({
+            id: GATEWAY_CLIENT_IDS.WEBCHAT_UI,
+            mode: GATEWAY_CLIENT_MODES.WEBCHAT,
+          }),
+          suppressCommandInterpretation: false,
+          systemInputProvenance: undefined,
+          systemProvenanceReceipt: undefined,
+        },
+        session: {
+          agentId: "main",
+          clientRunId: "run-voice-short-caption",
+          sessionKey: "agent:main:main",
+          cfg: {
+            tools: {
+              media: {
+                audio: { echoTranscript: true, echoFormat: "Heard: {transcript}" },
+              },
+            },
+          },
+        },
+        admission: {
+          originatingRoute: { originatingChannel: "webchat", explicitDeliverRoute: false },
+        },
+        attachments: createAttachments({
+          parsedMessage: "a longer caption",
+          mediaPathOffloads: [{ path: "/state/media/inbound/voice.ogg", contentType: "audio/ogg" }],
+        }),
+        client: null,
+        logGateway: { warn: vi.fn() } as never,
+        userTurn: controller,
+      });
+
+      const input = await readInput();
+      expect(input.text).toBe("a longer caption\nHeard: approved transcript");
+      prepared.applyApprovedText("x\nHeard: approved transcript");
+      expect(prepared.ctx.BodyForAgent).toBe(
+        'x\n[Audio transcript (machine-generated, untrusted)]: "approved transcript"',
+      );
+      expect(prepared.ctx.BodyForAgent).not.toContain("Heard:");
+    } finally {
+      persist.mockRestore();
+      transcribeFirstAudio.mockReset();
+    }
+  });
+
   it.each(["", null, undefined])(
     "keeps transcript echo out of command parsing after approval with base text %s",
     async (baseText) => {
