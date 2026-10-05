@@ -1,5 +1,6 @@
 import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
 import { GATEWAY_CLIENT_IDS } from "../../../packages/gateway-protocol/src/client-info.js";
+import { resolveAgentDir, resolveAgentWorkspaceDir } from "../../agents/agent-scope.js";
 import { bindRequesterProfile } from "../../auto-reply/requester-profile.js";
 import type { RuntimeMsgContext as MsgContext } from "../../auto-reply/templating.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
@@ -53,6 +54,7 @@ const audioPreflightLoader = createLazyImportLoader(
 
 async function resolveChatUiTranscriptEcho(params: {
   clientInfo: NormalizedChatSendRequest["clientInfo"];
+  agentId: string;
   cfg: OpenClawConfig | undefined;
   ctx: MsgContext;
   assertCurrent: () => void;
@@ -77,6 +79,12 @@ async function resolveChatUiTranscriptEcho(params: {
     .then(({ transcribeFirstAudio }) =>
       transcribeFirstAudio({
         ctx: params.ctx,
+        ...(params.cfg
+          ? {
+              agentDir: resolveAgentDir(params.cfg, params.agentId),
+              workspaceDir: resolveAgentWorkspaceDir(params.cfg, params.agentId),
+            }
+          : {}),
         // Gateway chat.send persists the echo in the canonical user turn;
         // never also send an outbound transcript message.
         cfg: {
@@ -354,6 +362,7 @@ export function prepareChatSendUserTurn(params: {
       };
       const transcriptEcho = await resolveChatUiTranscriptEcho({
         clientInfo: request.clientInfo,
+        agentId: session.agentId,
         cfg: session.cfg,
         ctx,
         assertCurrent: assertTranscriptCurrent,
