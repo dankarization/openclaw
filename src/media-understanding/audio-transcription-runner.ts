@@ -18,6 +18,7 @@ export async function runAudioTranscription(params: {
   assertCurrent?: () => void;
   attachments?: MediaAttachment[];
   agentDir?: string;
+  workspaceDir?: string;
   providers?: Record<string, MediaUnderstandingProvider>;
   activeModel?: ActiveMediaModel;
   localPathRoots?: readonly string[];
@@ -41,6 +42,7 @@ export async function runAudioTranscription(params: {
       attachments: cache,
       media: attachments,
       agentDir: params.agentDir,
+      workspaceDir: params.workspaceDir,
       providerRegistry,
       config: params.cfg.tools?.media?.audio,
       activeModel: params.activeModel,

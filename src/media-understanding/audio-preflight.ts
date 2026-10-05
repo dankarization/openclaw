@@ -21,6 +21,7 @@ export async function transcribeFirstAudio(params: {
   cfg: OpenClawConfig;
   assertCurrent?: () => void;
   agentDir?: string;
+  workspaceDir?: string;
   providers?: Record<string, MediaUnderstandingProvider>;
   activeModel?: ActiveMediaModel;
 }): Promise<string | undefined> {
@@ -50,6 +51,7 @@ export async function transcribeFirstAudio(params: {
       assertCurrent: params.assertCurrent,
       attachments: [firstAudio],
       agentDir: params.agentDir,
+      workspaceDir: params.workspaceDir,
       providers: params.providers,
       activeModel: params.activeModel,
       localPathRoots: resolveMediaAttachmentLocalRoots({ cfg, ctx }),
