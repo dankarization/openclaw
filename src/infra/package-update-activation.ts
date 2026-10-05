@@ -167,9 +167,22 @@ export async function readPackageActivationStatus(
 
 export async function runPackageActivationRecovery(
   anchor: string,
-  action: "repair" | "retire",
+  action: "repair" | "retire" | "retire-altered-previous",
   operationId: string,
+  options?: {
+    acknowledgement: "discard-altered-previous-after-verified-backup";
+    backupParent: string;
+  },
 ): Promise<PackageActivationStatus> {
+  if (
+    action === "retire-altered-previous" &&
+    (options?.acknowledgement !== "discard-altered-previous-after-verified-backup" ||
+      !options.backupParent)
+  ) {
+    throw new Error(
+      "Altered previous retirement requires explicit acknowledgement and a backup parent.",
+    );
+  }
   const journal = openPackageActivationJournal(anchor);
   const admission = await journal.readForRecovery();
   const initial = admission.record;
@@ -200,6 +213,9 @@ export async function runPackageActivationRecovery(
       const owner = createPublicationOwner(anchor, journal, fence.assertCurrent, initial);
       if (complete) {
         return owner.persistRetirement();
+      }
+      if (action === "retire-altered-previous") {
+        return owner.retireAlteredPrevious(options!.backupParent);
       }
       return action === "repair" ? owner.publish(true) : owner.retire();
     },
