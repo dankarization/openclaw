@@ -21,7 +21,10 @@ import {
 } from "./chat-send-user-turn.test-support.js";
 
 const { transcribeFirstAudio } = vi.hoisted(() => ({ transcribeFirstAudio: vi.fn() }));
-vi.mock("../../media-understanding/audio-preflight.js", () => ({ transcribeFirstAudio }));
+vi.mock("../../media-understanding/audio-preflight.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../media-understanding/audio-preflight.js")>()),
+  transcribeFirstAudio,
+}));
 
 describe("prepareChatSendUserTurn audio", () => {
   const tempDirs = useAutoCleanupTempDirTracker(afterEach);

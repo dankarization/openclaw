@@ -19,7 +19,10 @@ import {
 } from "./chat-send-user-turn.test-support.js";
 
 const runExec = vi.hoisted(() => vi.fn());
-vi.mock("../../process/exec.js", () => ({ runExec: (...args: unknown[]) => runExec(...args) }));
+vi.mock("../../process/exec.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../process/exec.js")>()),
+  runExec: (...args: Parameters<typeof runExec>) => runExec(...args),
+}));
 
 describe("chat.send voice transcription policy boundary", () => {
   const tempDirs = useAutoCleanupTempDirTracker(afterEach);
