@@ -43,7 +43,7 @@ export type PackageEvidenceBackupReceipt = {
   verifiedAt: string;
 };
 
-type TarMember = { path: string; type: string; linkpath?: string; size?: number };
+type TarMember = { path: string; type: string; linkpath?: string; size?: number; mode?: number };
 
 function inside(parent: string, child: string): boolean {
   const rel = path.relative(parent, child);
@@ -239,6 +239,88 @@ async function inventory(
   return { portable, observations };
 }
 
+async function restoreExtractedModes(
+  extractedRoot: string,
+  entries: readonly PackageEvidenceInventoryEntry[],
+): Promise<void> {
+  const restore = entries
+    .filter((entry) => entry.kind !== "symlink")
+    .toSorted((left, right) => right.path.split("/").length - left.path.split("/").length);
+  for (const entry of restore) {
+    const relative = safeRelative(entry.path);
+    const destination = path.join(extractedRoot, ...relative.split("/"));
+    const pathStat = await fs.lstat(destination, { bigint: true });
+    if (
+      pathStat.isSymbolicLink() ||
+      (entry.kind === "directory" && !pathStat.isDirectory()) ||
+      (entry.kind === "file" && !pathStat.isFile())
+    ) {
+      throw new Error("Evidence extraction changed an entry type: " + relative);
+    }
+    const flags =
+      constants.O_RDONLY |
+      (constants.O_NOFOLLOW ?? 0) |
+      (entry.kind === "directory" ? (constants.O_DIRECTORY ?? 0) : 0);
+    const handle = await fs.open(destination, flags);
+    try {
+      const before = await handle.stat({ bigint: true });
+      if (
+        snapshot(before) !== snapshot(pathStat) ||
+        (entry.kind === "directory" && !before.isDirectory()) ||
+        (entry.kind === "file" && !before.isFile())
+      ) {
+        throw new Error("Evidence extraction entry changed before mode restoration: " + relative);
+      }
+      await handle.chmod(entry.mode);
+      const after = await handle.stat({ bigint: true });
+      if (
+        after.dev !== before.dev ||
+        after.ino !== before.ino ||
+        after.uid !== before.uid ||
+        after.gid !== before.gid ||
+        (after.mode & 0o7777n) !== BigInt(entry.mode)
+      ) {
+        throw new Error("Evidence extraction could not restore an entry mode: " + relative);
+      }
+    } finally {
+      await handle.close();
+    }
+  }
+}
+
+async function restoreExtractedRootMode(
+  extractedRoot: string,
+  expectedMode: number,
+): Promise<void> {
+  const pathStat = await fs.lstat(extractedRoot, { bigint: true });
+  if (!pathStat.isDirectory() || pathStat.isSymbolicLink()) {
+    throw new Error("Evidence extraction changed the source root type.");
+  }
+  const handle = await fs.open(
+    extractedRoot,
+    constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_DIRECTORY ?? 0),
+  );
+  try {
+    const before = await handle.stat({ bigint: true });
+    if (!before.isDirectory() || snapshot(before) !== snapshot(pathStat)) {
+      throw new Error("Evidence extraction root changed before mode restoration.");
+    }
+    await handle.chmod(expectedMode);
+    const after = await handle.stat({ bigint: true });
+    if (
+      after.dev !== before.dev ||
+      after.ino !== before.ino ||
+      after.uid !== before.uid ||
+      after.gid !== before.gid ||
+      (after.mode & 0o7777n) !== BigInt(expectedMode)
+    ) {
+      throw new Error("Evidence extraction could not restore the source root mode.");
+    }
+  } finally {
+    await handle.close();
+  }
+}
+
 async function syncFile(file: string): Promise<void> {
   const handle = await fs.open(file, "r");
   try {
@@ -290,6 +372,7 @@ async function listAndValidateTar(
         type: entry.type,
         linkpath: entry.linkpath,
         size: entry.size,
+        mode: entry.mode,
       });
     },
   });
@@ -423,6 +506,10 @@ export async function createVerifiedPackageEvidenceBackup(params: {
   try {
     params.assertCurrent?.();
     const sourceInventory = await inventory(sourceRoot, allowedExternalSymlinks);
+    const sourceRootSnapshot = sourceInventory.observations.get(sourceRoot);
+    if (sourceRootSnapshot !== snapshot(sourceStat)) {
+      throw new Error("Evidence source root changed before archiving.");
+    }
     params.assertCurrent?.();
     let archiveBytes = 0;
     const deadline = AbortSignal.timeout(UPDATE_RUNNER_TIMEOUT_MS);
@@ -484,11 +571,16 @@ export async function createVerifiedPackageEvidenceBackup(params: {
     const tarMembers = await listAndValidateTar(tempArchive, rootName, allowedExternalSymlinks);
     await assertArchive();
     const roots = tarMembers.filter((entry) => safeRelative(entry.path) === rootName);
-    if (roots.length !== 1 || roots[0]!.type !== "Directory") {
+    if (
+      roots.length !== 1 ||
+      roots[0]!.type !== "Directory" ||
+      roots[0]!.mode !== Number(sourceStat.mode & 0o7777n)
+    ) {
       throw new Error("Evidence archive must contain exactly the source root directory.");
     }
     const expectedPaths = new Set(sourceInventory.portable.map((entry) => entry.path));
     const archivedPaths = new Set<string>();
+    const archivedByPath = new Map<string, TarMember>();
     for (const entry of tarMembers) {
       const member = safeRelative(entry.path);
       if (member === rootName) {
@@ -497,7 +589,9 @@ export async function createVerifiedPackageEvidenceBackup(params: {
       if (!member.startsWith(rootName + "/")) {
         throw new Error("Evidence archive contains a foreign root.");
       }
-      archivedPaths.add(member.slice(rootName.length + 1));
+      const relative = member.slice(rootName.length + 1);
+      archivedPaths.add(relative);
+      archivedByPath.set(relative, entry);
     }
     for (const entry of expectedPaths) {
       if (!archivedPaths.has(entry)) {
@@ -506,6 +600,11 @@ export async function createVerifiedPackageEvidenceBackup(params: {
     }
     if ([...archivedPaths].some((entry) => !expectedPaths.has(entry))) {
       throw new Error("Evidence archive contains a path absent from the source inventory.");
+    }
+    for (const entry of sourceInventory.portable) {
+      if (archivedByPath.get(entry.path)?.mode !== entry.mode) {
+        throw new Error("Evidence archive entry mode differs from source inventory: " + entry.path);
+      }
     }
 
     await fs.mkdir(verificationRoot, { mode: 0o700 });
@@ -542,6 +641,10 @@ export async function createVerifiedPackageEvidenceBackup(params: {
       const destination = path.join(extractedRoot, ...safeRelative(relative).split("/"));
       await fs.symlink(target, destination);
     }
+    // Restore source inventory modes after extraction, which the caller umask may filter.
+    // The verification root remains private and the inventory is rechecked immediately below.
+    await restoreExtractedModes(extractedRoot, sourceInventory.portable);
+    await restoreExtractedRootMode(extractedRoot, Number(sourceStat.mode & 0o7777n));
     const extractedInventory = await inventory(extractedRoot, allowedExternalSymlinks);
     const sourceInventoryAfter = await inventory(sourceRoot, allowedExternalSymlinks);
     const sourceFingerprintAfter = params.protectedPackageRoot
@@ -550,6 +653,7 @@ export async function createVerifiedPackageEvidenceBackup(params: {
     if (
       JSON.stringify(sourceInventory.portable) !== JSON.stringify(sourceInventoryAfter.portable) ||
       JSON.stringify(sourceInventory.portable) !== JSON.stringify(extractedInventory.portable) ||
+      sourceRootSnapshot !== sourceInventoryAfter.observations.get(sourceRoot) ||
       (params.protectedPackageRoot &&
         JSON.stringify(sourceFingerprintBefore) !== JSON.stringify(sourceFingerprintAfter))
     ) {
