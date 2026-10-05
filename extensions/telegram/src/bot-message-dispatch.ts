@@ -47,6 +47,8 @@ import { cacheSticker, describeStickerImage } from "./sticker-cache.js";
 
 const EMPTY_RESPONSE_FALLBACK = "No response generated. Please try again.";
 const silentReplyDispatchLogger = createSubsystemLogger("telegram/silent-reply-dispatch");
+const progressRoutingLogger = createSubsystemLogger("telegram/progress-routing");
+const reportedPreviewGateStates = new Set<string>();
 
 async function resolveStickerVisionSupport(
   cfg: DispatchTelegramMessageParams["cfg"],
@@ -312,12 +314,26 @@ export const dispatchTelegramMessage = async (
   // Draft messages are provider-visible before final modifiers run. Suppress them when a hook
   // can rewrite or cancel, or the original payload can flash before the normal delivery gate.
   const hookRunner = getGlobalHookRunner();
+  const groupThread = Boolean(dispatchContext.ctxPayload.GroupThread);
+  const hasReplyPayloadSendingHooks = hookRunner?.hasHooks("reply_payload_sending") ?? false;
+  const hasMessageSendingHooks = hookRunner?.hasHooks("message_sending") ?? false;
   const allowProviderPreview =
-    !dispatchContext.ctxPayload.GroupThread &&
-    !(
-      (hookRunner?.hasHooks("reply_payload_sending") ?? false) ||
-      (hookRunner?.hasHooks("message_sending") ?? false)
-    );
+    !groupThread && !hasReplyPayloadSendingHooks && !hasMessageSendingHooks;
+  if (!allowProviderPreview && dispatchParams.streamMode === "progress") {
+    const gateState = [groupThread, hasReplyPayloadSendingHooks, hasMessageSendingHooks].join(":");
+    if (!reportedPreviewGateStates.has(gateState)) {
+      reportedPreviewGateStates.add(gateState);
+      try {
+        progressRoutingLogger.info("Telegram provider preview suppressed by gate", {
+          groupThread,
+          replyPayloadSendingHooks: hasReplyPayloadSendingHooks,
+          messageSendingHooks: hasMessageSendingHooks,
+        });
+      } catch {
+        // Preview diagnostics are best-effort and cannot block dispatch.
+      }
+    }
+  }
   const isDispatchSuperseded = () => turnAdoptionLifecycle?.abortSignal?.aborted === true;
   const turnConfig = {
     ...dispatchParams,

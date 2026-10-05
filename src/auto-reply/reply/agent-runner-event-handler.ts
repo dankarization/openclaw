@@ -16,6 +16,7 @@ import {
 } from "./compaction-notice.js";
 
 const agentCompactionLog = createSubsystemLogger("auto-reply/compaction");
+const agentProgressRoutingLog = createSubsystemLogger("auto-reply/progress-routing");
 const CODEX_APP_SERVER_COMPACTION_BACKEND = "codex-app-server";
 
 export type MessageToolDeliveryState = {
@@ -45,6 +46,43 @@ export function createAgentRunEventHandler(params: {
     params.sourceRepliesAreToolOnly &&
     params.messageToolDeliveryState.completed &&
     params.turn.opts?.allowProgressCallbacksWhenSourceDeliverySuppressed !== true;
+  const isTelegramTurn =
+    params.turn.sessionCtx.Provider === "telegram" || params.turn.sessionCtx.Surface === "telegram";
+  const reportedSourceSuppressionStreams = new Set<"tool" | "item">();
+  const noteSourceDeliverySuppression = (stream: "tool" | "item") => {
+    if (!isTelegramTurn || reportedSourceSuppressionStreams.has(stream)) {
+      return;
+    }
+    reportedSourceSuppressionStreams.add(stream);
+    try {
+      agentProgressRoutingLog.info("agent progress callback suppressed by source delivery policy", {
+        stream,
+        gate: "message_tool_only_delivery_completed",
+        sourceRepliesAreToolOnly: params.sourceRepliesAreToolOnly,
+        sourceDeliveryCompleted: params.messageToolDeliveryState.completed,
+        allowProgressCallbacksWhenSourceDeliverySuppressed:
+          params.turn.opts?.allowProgressCallbacksWhenSourceDeliverySuppressed === true,
+      });
+    } catch {
+      // Diagnostics are best-effort and cannot interrupt event forwarding.
+    }
+  };
+
+  const reportedMissingProgressCallbacks = new Set<"tool" | "item">();
+  const noteMissingProgressCallback = (stream: "tool" | "item") => {
+    if (!isTelegramTurn || reportedMissingProgressCallbacks.has(stream)) {
+      return;
+    }
+    reportedMissingProgressCallbacks.add(stream);
+    try {
+      agentProgressRoutingLog.info("agent progress callback unavailable", {
+        stream,
+        reason: "channel_callback_not_configured",
+      });
+    } catch {
+      // Diagnostics are best-effort and cannot interrupt event forwarding.
+    }
+  };
 
   const currentMessageId =
     params.turn.sessionCtx.MessageSidFull ?? params.turn.sessionCtx.MessageSid;
@@ -106,9 +144,13 @@ export function createAgentRunEventHandler(params: {
         params.messageToolDeliveryState.toolCallIds.add(toolCallId);
       }
       if (shouldSuppressProgressAfterMessageToolDelivery()) {
+        noteSourceDeliverySuppression("tool");
         return;
       }
       if (phase === "start" || phase === "update") {
+        if (!params.turn.opts?.onToolStart) {
+          noteMissingProgressCallback("tool");
+        }
         const toolStartProgressPromise = params.turn.opts?.onToolStart?.({
           itemId: readStringValue(evt.data.itemId),
           toolCallId: readStringValue(evt.data.toolCallId),
@@ -138,6 +180,9 @@ export function createAgentRunEventHandler(params: {
       params.messageToolDeliveryState.toolCallIds.has(itemToolCallId);
     const suppressProgressAfterMessageToolDelivery =
       shouldSuppressProgressAfterMessageToolDelivery();
+    if (evt.stream === "item" && suppressProgressAfterMessageToolDelivery) {
+      noteSourceDeliverySuppression("item");
+    }
     if (completedMessageToolDelivery) {
       params.messageToolDeliveryState.toolCallIds.delete(itemToolCallId);
       params.messageToolDeliveryState.completed = true;
@@ -147,6 +192,9 @@ export function createAgentRunEventHandler(params: {
       evt.stream === "item" &&
       (!suppressProgressAfterMessageToolDelivery || completedMessageToolDelivery)
     ) {
+      if (!params.turn.opts?.onItemEvent) {
+        noteMissingProgressCallback("item");
+      }
       const itemSummary = readStringValue(evt.data.summary);
       const itemProgressText = readStringValue(evt.data.progressText);
       const itemMeta = readStringValue(evt.data.meta);

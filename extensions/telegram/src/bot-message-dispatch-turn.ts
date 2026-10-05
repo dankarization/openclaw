@@ -47,11 +47,14 @@ import { resolveHumanDelayConfig } from "./bot-message-dispatch.agent.runtime.js
 import type { TelegramDispatchTurn as Turn } from "./bot-message-dispatch.types.js";
 import { TELEGRAM_CHAT_ACTION_INTERVAL_MS } from "./chat-action-timing.js";
 import { telegramInboundEventDelivery } from "./inbound-event-delivery.js";
+import { createTelegramProgressRoutingDiagnostics } from "./progress-routing-diagnostics.js";
 
 const TELEGRAM_MAX_CONSECUTIVE_TYPING_FAILURES = 5;
 
 export async function runTelegramDispatchTurn(turn: Turn) {
   const { context } = turn;
+  const progressDiagnostics = createTelegramProgressRoutingDiagnostics();
+  let sourceRepliesAreToolOnly: boolean | null = null;
   let sessionMetaTask: Promise<unknown> | undefined;
   const isRoomEvent = context.ctxPayload.InboundEventKind === "room_event";
   const toolProgressEnabled =
@@ -61,6 +64,8 @@ export async function runTelegramDispatchTurn(turn: Turn) {
       turn.streamMode !== "progress",
       turn.streamMode,
     );
+  const allowProgressCallbacksWhenSourceDeliverySuppressed =
+    !isRoomEvent && Boolean(turn.answerLane.stream);
   const beginDeliveryCorrelation = () =>
     telegramInboundEventDelivery.begin(
       context.ctxPayload.SessionKey,
@@ -298,8 +303,7 @@ export async function runTelegramDispatchTurn(turn: Turn) {
             suppressDefaultToolProgressMessages:
               !turn.streamDeliveryEnabled || Boolean(turn.answerLane.stream),
             suppressToolProgressMessages: !toolProgressEnabled,
-            allowProgressCallbacksWhenSourceDeliverySuppressed:
-              !isRoomEvent && Boolean(turn.answerLane.stream),
+            allowProgressCallbacksWhenSourceDeliverySuppressed,
             onVerboseProgressVisibility: (isActive) => {
               turn.verboseProgressActive = isActive;
             },
@@ -313,8 +317,16 @@ export async function runTelegramDispatchTurn(turn: Turn) {
             shouldDeliverCommentaryPayloads:
               turn.progressPreambleEnabled === true ? () => false : undefined,
             reasoningPayloadsEnabled: turn.durableReasoningPayloadsEnabled,
-            onToolStart: (payload) => handleToolStart(turn, payload),
-            onItemEvent: (payload) => handleItemEvent(turn, payload),
+            onToolStart: async (payload) => {
+              const visible = await handleToolStart(turn, payload);
+              progressDiagnostics.noteToolStart(visible);
+              return visible;
+            },
+            onItemEvent: async (payload) => {
+              const visible = await handleItemEvent(turn, payload);
+              progressDiagnostics.noteItemEvent(payload.kind, visible);
+              return visible;
+            },
             onPlanUpdate: (payload) => handlePlanUpdate(turn, payload),
             onApprovalEvent: (payload) => handleApprovalEvent(turn, payload),
             onToolResult: async (payload) => {
@@ -357,6 +369,8 @@ export async function runTelegramDispatchTurn(turn: Turn) {
       (turnResult.dispatchResult.settledReceipt?.counts.final.failedAfterSend ?? 0) > 0;
     turn.agentRunFailed = readAgentRunTerminalOutcome(turnResult.dispatchResult) === "failed";
     turn.sendPolicyDenied = turnResult.dispatchResult.sendPolicyDenied === true;
+    sourceRepliesAreToolOnly =
+      turnResult.dispatchResult.sourceReplyDeliveryMode === "message_tool_only";
     turn.noVisibleReplyFallbackEligible =
       turnResult.dispatchResult.noVisibleReplyFallbackEligible === true;
     turn.suppressSilentReplyFallback ||=
@@ -366,6 +380,22 @@ export async function runTelegramDispatchTurn(turn: Turn) {
     }
     return true;
   } finally {
-    endDeliveryCorrelation();
+    try {
+      if (turn.streamMode === "progress") {
+        progressDiagnostics.report({
+          streamMode: turn.streamMode,
+          toolProgressEnabled,
+          commentaryProgressEnabled: turn.commentaryProgressEnabled,
+          progressPreambleEnabled: turn.progressPreambleEnabled === true,
+          answerStreamActive: Boolean(turn.answerLane.stream),
+          roomEvent: isRoomEvent,
+          allowProgressCallbacksWhenSourceDeliverySuppressed,
+          providerPreviewAllowed: turn.allowProviderPreview,
+          sourceRepliesAreToolOnly,
+        });
+      }
+    } finally {
+      endDeliveryCorrelation();
+    }
   }
 }

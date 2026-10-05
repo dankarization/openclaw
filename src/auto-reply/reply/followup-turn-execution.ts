@@ -3,6 +3,7 @@ import { loadSessionEntryReadOnly } from "../../config/sessions/session-accessor
 import { sessionPersonalProfileId } from "../../config/sessions/session-entry-provenance.js";
 import { logVerbose } from "../../globals.js";
 import { formatErrorMessage } from "../../infra/errors.js";
+import { createSubsystemLogger } from "../../logging/subsystem.js";
 import { isFastModeAutoProgressPayload } from "../reply-payload.js";
 import type { TemplateContext } from "../templating.js";
 import type { VerboseLevel } from "../thinking.js";
@@ -21,6 +22,8 @@ import { prepareReplyToolAuthority } from "./reply-tool-authority.js";
 import { resolveSourceReplyExpectation } from "./source-reply-delivery-mode.js";
 import { resolveReplySourceTurnId, setChannelSourceTurnId } from "./source-turn-id.js";
 import { createTypingSignaler, type TypingSignaler } from "./typing-mode.js";
+
+const progressRoutingLogger = createSubsystemLogger("auto-reply/progress-routing");
 
 export type FollowupExecutionResult = {
   commentaryPayloadsEnabled: boolean;
@@ -147,6 +150,40 @@ export async function executeFollowupTurn(params: {
       options: sourceOpts,
       resolveVerboseProgressVisibility: () => progressAllowed() && shouldEmitVerboseToolResult(),
     });
+  const reportedItemProgressGates = new Set<string>();
+  const isTelegramTurn =
+    turn.queued.originatingChannel === "telegram" || turn.queued.run.messageProvider === "telegram";
+  const noteSuppressedItemProgress = (kind: "preamble" | "other") => {
+    if (!isTelegramTurn) {
+      return;
+    }
+    const gate =
+      turn.sendPolicy !== "allow"
+        ? "send_policy_denied"
+        : roomEvent
+          ? "room_event"
+          : "structured_progress_hidden";
+    const key = kind + ":" + gate;
+    if (reportedItemProgressGates.has(key)) {
+      return;
+    }
+    reportedItemProgressGates.add(key);
+    try {
+      progressRoutingLogger.info("queued item progress callback suppressed", {
+        stream: "item",
+        kind,
+        gate,
+        sendPolicy: turn.sendPolicy,
+        roomEvent,
+        progressAllowed: progressAllowed(),
+        commentaryPayloadsEnabled,
+        draftOwnsCommentaryProgress,
+        structuredProgressAllowed: shouldEmitStructuredProgress(),
+      });
+    } catch {
+      // Diagnostics are best-effort and cannot interrupt the admitted turn.
+    }
+  };
   let progressChain: Promise<void> = Promise.resolve();
   let visibleReplyDelivered = false;
   let pendingProgressTaskFailure: unknown;
@@ -238,6 +275,7 @@ export async function executeFollowupTurn(params: {
             const draftOwnsPreamble =
               progressAllowed() && item.kind === "preamble" && draftOwnsCommentaryProgress;
             if (!draftOwnsPreamble && !shouldEmitStructuredProgress()) {
+              noteSuppressedItemProgress(item.kind === "preamble" ? "preamble" : "other");
               return false;
             }
             const visible = (
