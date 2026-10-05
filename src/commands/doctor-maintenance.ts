@@ -65,6 +65,7 @@ export async function beginDoctorMaintenance(
   if (!(params.options.repair === true || params.options.yes === true)) {
     return undefined;
   }
+  resolveRemainingDoctorServiceInspectionTimeoutMs(params.serviceInspectionDeadlineAtMs);
   const env = { ...process.env, ...(params.runId ? { [UPDATE_RUN_ID_ENV]: params.runId } : {}) };
   // Ordinary activation remains with the parent. Stale-instance recovery below
   // retains custody through offline repair and verified restoration.
