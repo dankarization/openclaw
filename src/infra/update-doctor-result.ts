@@ -166,6 +166,8 @@ export type UpdateDoctorWriteAuthority = {
   assertCurrent: () => void;
   postCoreSchemaRepair?: { runId: string; assertCurrent: () => void };
   databaseGenerations?: UpdateDatabaseGenerations;
+  /** Parent Doctor phase deadline for nested managed-service inspection. */
+  serviceInspectionDeadlineAtMs?: number;
 };
 
 /** Receipts describe the caller's existing maintenance interval without owning its lifecycle. */

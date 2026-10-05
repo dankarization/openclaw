@@ -46,6 +46,7 @@ import type {
   DoctorMaintenanceParams,
 } from "./doctor-maintenance-types.js";
 import { isDoctorUpdateRepairMode, resolveDoctorRepairMode } from "./doctor-repair-mode.js";
+import { resolveRemainingDoctorServiceInspectionTimeoutMs } from "./doctor-service-inspection-budget.js";
 import {
   assertDoctorServiceSelection,
   isServiceRepairExternallyManaged,
@@ -415,6 +416,9 @@ export async function beginDoctorMaintenance(
           shouldRestart: true,
           jsonMode: true,
           phase: "inspect",
+          timeoutMs: resolveRemainingDoctorServiceInspectionTimeoutMs(
+            params.serviceInspectionDeadlineAtMs,
+          ),
         });
         assertDoctorMaintenanceInspection(inspection, env);
         if (inspection.serviceUpdateVerdict?.kind !== "absent" && inspection.offline !== true) {
@@ -505,6 +509,9 @@ export async function beginDoctorMaintenance(
                           jsonMode: true,
                           expectedService: inspection,
                           retainNativeIdentity: true,
+                          timeoutMs: resolveRemainingDoctorServiceInspectionTimeoutMs(
+                            params.serviceInspectionDeadlineAtMs,
+                          ),
                           assertCurrent: () => assertServiceCurrent?.(),
                           warn,
                           onStopped: (before) => {
