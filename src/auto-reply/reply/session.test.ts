@@ -21,10 +21,12 @@ import {
   listSessionParticipantsReadOnly,
   loadSessionEntry,
   loadTranscriptEvents,
+  recordInboundSessionMeta,
   upsertSessionEntryCore,
 } from "../../config/sessions/session-accessor.js";
 import { runExclusiveSessionStoreWrite } from "../../config/sessions/store-writer.js";
 import { resolveWorkerPlacementSessionTarget } from "../../gateway/server-worker-placement-session-target.js";
+import { resolveGatewaySessionDisplayName } from "../../gateway/session-utils-display.js";
 import { resolveGatewaySessionStoreTargetWithStore } from "../../gateway/session-utils-store-lookup.js";
 import { resolveCanonicalSessionEntryFromStoreKeys } from "../../gateway/session-utils-store.js";
 import { formatZonedTimestamp } from "../../infra/format-time/format-datetime.ts";
@@ -411,6 +413,63 @@ afterEach(async () => {
   await closeOpenClawStateDatabaseAsync();
 });
 describe("initSessionState guarded initialization", () => {
+  it.each([undefined, "New Chat"])(
+    "keeps private Telegram topic renames visible after reply session initialization (cached: %s)",
+    async (cachedDisplayName) => {
+      const stateDir = await makeCaseDir("openclaw-private-topic-first-turn-");
+      const storePath = path.join(stateDir, "sessions.json");
+      const sessionKey = "agent:main:main:thread:42001:77";
+      await withEnvAsync({ OPENCLAW_STATE_DIR: stateDir }, async () => {
+        await writeSessionStoreFast(storePath, {
+          [sessionKey]: {
+            sessionId: "private-topic-first-turn",
+            updatedAt: Date.now(),
+            ...(cachedDisplayName ? { displayName: cachedDisplayName } : {}),
+          },
+        });
+        const ctx = {
+          Provider: "telegram",
+          Surface: "telegram",
+          ChatType: "direct",
+          From: "telegram:direct:42001",
+          To: "telegram:42001",
+          AccountId: "default",
+          MessageThreadId: "77",
+          SessionKey: sessionKey,
+        };
+        const rename = async (title: string) => {
+          const updated = await recordInboundSessionMeta({
+            storePath,
+            sessionKey,
+            ctx: { ...ctx, ThreadLabel: title },
+            createIfMissing: false,
+          });
+          expect(resolveGatewaySessionDisplayName(sessionKey, updated ?? undefined)).toBe(title);
+          expect(updated?.sessionId).toBe("private-topic-first-turn");
+        };
+        await rename("Test 4");
+        await rename("Test 5");
+        const initialized = await initSessionState({
+          ctx: { ...ctx, ThreadLabel: "Test 5", Body: "Hello", RawBody: "Hello" },
+          cfg: { session: { store: storePath } },
+        });
+        expect(initialized.sessionEntry.displayName).toBe(cachedDisplayName ?? "Test 5");
+        expect(resolveGatewaySessionDisplayName(sessionKey, initialized.sessionEntry)).toBe(
+          "Test 5",
+        );
+        await appendTranscriptMessage(
+          { agentId: "main", storePath, sessionKey, sessionId: initialized.sessionId },
+          { message: { role: "assistant", content: "Hello back" } },
+        );
+        const beforeRename = loadSessionEntry({ storePath, sessionKey });
+        await rename("Test 6");
+        const afterRename = loadSessionEntry({ storePath, sessionKey });
+        expect(afterRename?.updatedAt).toBe(beforeRename?.updatedAt);
+        expect(afterRename?.displayName).toBe(cachedDisplayName ?? "Test 5");
+      });
+    },
+  );
+
   it("registers per-group ambient visibility when direct messages use isolated sessions", async () => {
     const stateDir = await makeCaseDir("openclaw-per-group-main-watch-");
     const storePath = path.join(stateDir, "sessions.json");
