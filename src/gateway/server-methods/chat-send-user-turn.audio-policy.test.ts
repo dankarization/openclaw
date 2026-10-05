@@ -60,7 +60,7 @@ describe("chat.send voice transcription policy boundary", () => {
         },
       },
     };
-    const prepared = prepareChatSendUserTurn({
+    const prepared = await prepareChatSendUserTurn({
       request: {
         inboundMessage: "caption",
         clientInfo: createClientInfo({
