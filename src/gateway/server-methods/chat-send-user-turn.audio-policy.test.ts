@@ -121,17 +121,18 @@ describe("chat.send voice transcription policy boundary", () => {
 
   it("rechecks UI admission after media preparation and before transcription I/O", async () => {
     await withEnvAsync({ PATH: "" }, async () => {
-      let assertions = 0;
+      let admissionExpired = false;
       const assertClientUploadAllowed = vi.fn(() => {
-        assertions += 1;
-        if (assertions >= 2) {
+        if (admissionExpired) {
           throw new Error("admission expired");
         }
+        admissionExpired = true;
       });
       await expect(prepare({ default: "allow" }, assertClientUploadAllowed)).rejects.toThrow(
         "admission expired",
       );
-      expect(assertions).toBe(3);
+      expect(admissionExpired).toBe(true);
+      expect(assertClientUploadAllowed).toHaveBeenCalled();
       expect(runExec).not.toHaveBeenCalled();
     });
   });
