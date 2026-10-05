@@ -126,6 +126,7 @@ export async function runUpdateFinalizationDoctorInFreshProcess(params: {
   json: boolean;
   workspaceSuggestions?: boolean;
   timeoutMs?: number;
+  serviceInspectionDeadlineAtMs?: number;
   nodeRunner?: string;
   entryPath?: string;
   onWarnings?: (warnings: string[]) => void;
@@ -133,6 +134,16 @@ export async function runUpdateFinalizationDoctorInFreshProcess(params: {
   /** Propagate a refused child authority to the finalization owner without retrying it. */
   onAuthorityRefused?: () => void;
 }): Promise<PluginUpdateWarning | void> {
+  const requestedTimeoutMs = params.opts
+    ? parseUpdateTimeoutMs(params.opts.timeout)
+    : params.timeoutMs;
+  const serviceInspectionDeadlineAtMs =
+    params.serviceInspectionDeadlineAtMs ??
+    (requestedTimeoutMs === undefined ? undefined : Date.now() + requestedTimeoutMs);
+  const timeoutMs =
+    params.serviceInspectionDeadlineAtMs !== undefined
+      ? resolveRemainingDoctorServiceInspectionTimeoutMs(params.serviceInspectionDeadlineAtMs)
+      : requestedTimeoutMs;
   const {
     run,
     executorFence,
@@ -156,9 +167,6 @@ export async function runUpdateFinalizationDoctorInFreshProcess(params: {
     ...(params.workspaceSuggestions ? [] : ["--no-workspace-suggestions"]),
     ...(params.yes ? ["--yes"] : []),
   ];
-  const timeoutMs = params.opts ? parseUpdateTimeoutMs(params.opts.timeout) : params.timeoutMs;
-  const serviceInspectionDeadlineAtMs =
-    timeoutMs === undefined ? undefined : Date.now() + timeoutMs;
   const baseEnv = stripGatewayServiceMarkerEnv(disableUpdatedPackageCompileCacheEnv(process.env));
   delete baseEnv[UPDATE_POST_CORE_CONVERGENCE_ENV];
   const doctorResultPath = createUpdatePostInstallDoctorResultPath();
