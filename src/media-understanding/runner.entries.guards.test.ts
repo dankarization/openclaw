@@ -78,10 +78,10 @@ describe("media-understanding admission guards", () => {
     "rechecks host request authority after %s and before audio upload",
     async (revokeAt) => {
       await withAudioFixture("openclaw-audio-authority", async ({ ctx, cache }) => {
-        const captureStarted = createDeferred<void>();
-        const releaseCapture = createDeferred<void>();
-        const dnsStarted = createDeferred<void>();
-        const releaseDns = createDeferred<void>();
+        const captureStarted = createDeferred();
+        const releaseCapture = createDeferred();
+        const dnsStarted = createDeferred();
+        const releaseDns = createDeferred();
         let admitted = true;
         const assertCurrent = () => {
           if (!admitted) {
@@ -108,7 +108,17 @@ describe("media-understanding admission guards", () => {
         const run = runProviderEntry({
           capability: "audio",
           entry: { provider: "fixture", model: "fixture-audio" },
-          cfg: { models: { providers: { fixture: { apiKey: "fixture-key" } } } },
+          cfg: {
+            models: {
+              providers: {
+                fixture: {
+                  apiKey: "fixture-key",
+                  baseUrl: "https://fixture.example/v1",
+                  models: [],
+                },
+              },
+            },
+          },
           ctx,
           attachmentIndex: 0,
           cache,
@@ -143,7 +153,17 @@ describe("media-understanding admission guards", () => {
       const result = runProviderEntry({
         capability: "audio",
         entry: { provider: "fixture", model: "fixture-audio" },
-        cfg: { models: { providers: { fixture: { apiKey: "fixture-key" } } } },
+        cfg: {
+          models: {
+            providers: {
+              fixture: {
+                apiKey: "fixture-key",
+                baseUrl: "https://fixture.example/v1",
+                models: [],
+              },
+            },
+          },
+        },
         ctx,
         attachmentIndex: 0,
         cache,

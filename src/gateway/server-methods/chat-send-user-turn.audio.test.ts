@@ -26,6 +26,13 @@ vi.mock("../../media-understanding/audio-preflight.js", async (importOriginal) =
   transcribeFirstAudio,
 }));
 
+function requireInputText(input: { text?: string | null }): string {
+  if (typeof input.text !== "string") {
+    throw new Error("Expected prepared user-turn text");
+  }
+  return input.text;
+}
+
 describe("prepareChatSendUserTurn audio", () => {
   const tempDirs = useAutoCleanupTempDirTracker(afterEach);
   it.each([
@@ -143,7 +150,7 @@ describe("prepareChatSendUserTurn audio", () => {
         await persistUserTurnTranscript({ ...target, input, updateMode: "none" });
         const [reloaded] = await readTranscriptMessages(target);
         expect(reloaded?.content).toBe("raw message\nHeard: transcribed voice");
-        prepared.applyApprovedText(input.text);
+        prepared.applyApprovedText(requireInputText(input));
         expect(prepared.ctx.Body).toBe("raw message\nHeard: transcribed voice");
         expect(prepared.ctx.BodyForAgent).toContain(
           '[Audio transcript (machine-generated, untrusted)]: "transcribed voice"',
@@ -207,19 +214,17 @@ describe("prepareChatSendUserTurn audio", () => {
           sessionKey: "agent:support:main",
           cfg: {
             agents: {
-              list: [
-                {
-                  id: "main",
+              entries: {
+                main: {
                   default: true,
                   agentDir: "/state/agents/main",
                   workspace: "/work/main",
                 },
-                {
-                  id: "support",
+                support: {
                   agentDir: "/state/agents/support",
                   workspace: "/work/support",
                 },
-              ],
+              },
             },
             tools: {
               media: {
@@ -326,7 +331,7 @@ describe("prepareChatSendUserTurn audio", () => {
 
       const input = await readInput();
       expect(input.text).toBe("caption\nVoice note received");
-      prepared.applyApprovedText(input.text);
+      prepared.applyApprovedText(requireInputText(input));
       expect(prepared.ctx.BodyForAgent).toBe("caption\nVoice note received");
       expect(prepared.ctx.BodyForAgent).not.toContain("unapproved transcript");
     } finally {
@@ -521,7 +526,7 @@ describe("prepareChatSendUserTurn audio", () => {
         });
         const input = await readInput();
         expect(input.text).toBe("Heard: /reset");
-        prepared.applyApprovedText(input.text);
+        prepared.applyApprovedText(requireInputText(input));
         expect(prepared.ctx.Body).toBe("Heard: /reset");
         expect(prepared.ctx.BodyForAgent).toBe(
           '[Audio transcript (machine-generated, untrusted)]: "/reset"',
@@ -599,7 +604,7 @@ describe("prepareChatSendUserTurn audio", () => {
 
       const input = await readInput();
       expect(input.text).toBe("/reset");
-      prepared.applyApprovedText(input.text);
+      prepared.applyApprovedText(requireInputText(input));
       expect(prepared.ctx.Body).toBe("/reset");
       expect(prepared.ctx.BodyForAgent).toContain(
         '[Audio transcript (machine-generated, untrusted)]: "/reset"',

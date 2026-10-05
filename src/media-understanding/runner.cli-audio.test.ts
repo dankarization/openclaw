@@ -344,8 +344,8 @@ describe("media-understanding CLI audio entry", () => {
   });
 
   it("does not convert or transcribe when admission expires during attachment path resolution", async () => {
-    const pathResolutionStarted = createDeferred<void>();
-    const releasePathResolution = createDeferred<void>();
+    const pathResolutionStarted = createDeferred();
+    const releasePathResolution = createDeferred();
     await withMediaFixture(
       {
         filePrefix: "openclaw-cli-expired-admission",
