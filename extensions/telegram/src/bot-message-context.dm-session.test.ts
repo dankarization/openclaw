@@ -409,7 +409,8 @@ describe("Telegram recorded session destinations", () => {
       entry: {
         sessionId: "private-topic-session",
         updatedAt: 1,
-        label: "Manual title",
+        displayName: "New Chat",
+        topicName: "Old topic name",
         delivery: normalizeSessionDeliveryState({
           context: {
             channel: "telegram",
@@ -435,12 +436,13 @@ describe("Telegram recorded session destinations", () => {
       chat,
       from,
       message_thread_id: 77,
-      is_topic_message: true,
       forum_topic_edited: { name: "Renamed personal topic" },
     });
 
     const updated = getSessionEntry({ storePath, sessionKey });
-    expect(updated?.label).toBe("Manual title");
+    expect(updated?.label).toBeUndefined();
+    expect(updated?.displayName).toBe("New Chat");
+    expect(updated?.topicName).toBe("Renamed personal topic");
     expect(updated?.updatedAt).toBe(1);
     expect(updated?.delivery).toMatchObject({
       context: {
@@ -463,6 +465,15 @@ describe("Telegram recorded session destinations", () => {
   it("does not create a private topic session from a title-only service update", async () => {
     const sessionKey = "agent:main:main:thread:42001:77";
     const bot = await createBot(false, true, cfg, true);
+    await receive(bot, {
+      message_id: 7003,
+      date: 1736380700,
+      chat,
+      from,
+      forum_topic_edited: { name: "Topic without a thread identity" },
+    });
+    expect(getSessionEntry({ storePath, sessionKey })).toBeUndefined();
+    expect(harness.replySpy).not.toHaveBeenCalled();
     await receive(bot, {
       message_id: 7002,
       date: 1736380700,

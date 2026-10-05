@@ -296,7 +296,6 @@ export async function resolveTelegramInboundBody(params: {
   }
   const privateTopicTitleUpdate =
     msg.chat.type === "private" &&
-    msg.is_topic_message === true &&
     msg.message_thread_id != null &&
     isTelegramForumTopicTitleUpdate(msg);
   if (!rawBody && nativeMediaFacts.length === 0 && !privateTopicTitleUpdate) {

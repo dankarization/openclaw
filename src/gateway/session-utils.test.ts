@@ -1300,10 +1300,13 @@ describe("gateway session utils", () => {
       sessionId: "private-topic-77",
       updatedAt: 1,
       chatType: "direct",
+      displayName: "New Chat",
+      topicName: "Renamed personal topic",
       delivery: normalizeSessionDeliveryState({
         context: { channel: "telegram", to: "telegram:42001", threadId: "77" },
         origin: {
           provider: "telegram",
+          chatType: "direct",
           from: "telegram:direct:42001",
           to: "telegram:42001",
           threadId: "77",
@@ -1319,7 +1322,25 @@ describe("gateway session utils", () => {
     });
     expect(row.displayName).toBe("Renamed personal topic");
 
-    const manuallyNamed = { ...entry, label: "Operator label" };
+    const originOnly = { ...entry, topicName: undefined };
+    const originOnlyRow = buildGatewaySessionRow({
+      cfg,
+      store: { [key]: originOnly },
+      key,
+      entry: originOnly,
+    });
+    expect(originOnlyRow.displayName).toBe("New Chat");
+
+    const originOnlyWithoutDisplayName = { ...originOnly, displayName: undefined };
+    const originOnlyWithoutDisplayNameRow = buildGatewaySessionRow({
+      cfg,
+      store: { [key]: originOnlyWithoutDisplayName },
+      key,
+      entry: originOnlyWithoutDisplayName,
+    });
+    expect(originOnlyWithoutDisplayNameRow.displayName).toBe("Renamed personal topic");
+
+    const manuallyNamed = { ...entry, displayName: "New Chat", label: "Operator label" };
     const manualRow = buildGatewaySessionRow({
       cfg,
       store: { [key]: manuallyNamed },
@@ -1327,6 +1348,55 @@ describe("gateway session utils", () => {
       entry: manuallyNamed,
     });
     expect(manualRow.displayName).toBe("Operator label");
+
+    const ordinaryThread = {
+      ...entry,
+      topicName: undefined,
+      displayName: "Regular conversation",
+      delivery: normalizeSessionDeliveryState({
+        context: { channel: "telegram", to: "telegram:42001", threadId: "77" },
+        origin: {
+          provider: "telegram",
+          chatType: "direct",
+          from: "telegram:direct:42001",
+          to: "telegram:42001",
+          threadId: "77",
+          label: "Sender fallback",
+        },
+      }),
+    };
+    const ordinaryThreadRow = buildGatewaySessionRow({
+      cfg,
+      store: { [key]: ordinaryThread },
+      key,
+      entry: ordinaryThread,
+    });
+    expect(ordinaryThreadRow.displayName).toBe("Regular conversation");
+
+    const directMessagesTopicKey = "agent:main:telegram:group:-100123:direct-topic:77";
+    const directMessagesTopic = {
+      ...ordinaryThread,
+      chatType: "group",
+      displayName: "Direct messages topic",
+      delivery: normalizeSessionDeliveryState({
+        context: { channel: "telegram", to: "telegram:-100123:direct-topic:77", threadId: "77" },
+        origin: {
+          provider: "telegram",
+          chatType: "group",
+          from: "telegram:group:-100123:direct-topic:77",
+          to: "telegram:-100123:direct-topic:77",
+          threadId: "77",
+          label: "Group sender",
+        },
+      }),
+    } as SessionEntry;
+    const directMessagesTopicRow = buildGatewaySessionRow({
+      cfg,
+      store: { [directMessagesTopicKey]: directMessagesTopic },
+      key: directMessagesTopicKey,
+      entry: directMessagesTopic,
+    });
+    expect(directMessagesTopicRow.displayName).toBe("Direct messages topic");
   });
 
   test("buildGatewaySessionRow does not promote direct route identities as display names", () => {

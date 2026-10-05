@@ -324,3 +324,63 @@ describe("session origin across a non-delivery turn", () => {
     expect(afterTelegram.origin?.threadId).toBeUndefined();
   });
 });
+
+describe("Telegram private topic origin preservation", () => {
+  const topicEntry: SessionEntry = {
+    sessionId: "telegram-private-topic",
+    updatedAt: 10,
+    topicName: "Known topic",
+    delivery: normalizeSessionDeliveryState({
+      context: { channel: "telegram", accountId: "default", to: "telegram:42001", threadId: "77" },
+      origin: {
+        provider: "telegram",
+        chatType: "direct",
+        accountId: "default",
+        from: "telegram:direct:42001",
+        to: "telegram:42001",
+        threadId: "77",
+        label: "Known topic",
+      },
+    }),
+  };
+  const sparseSameTopic = {
+    Provider: "telegram",
+    Surface: "telegram",
+    ChatType: "direct",
+    From: "telegram:direct:42001",
+    To: "telegram:42001",
+    AccountId: "default",
+    MessageThreadId: "77",
+  } satisfies Partial<MsgContext>;
+
+  it("retains the known topic label for same-account messages without ThreadLabel", () => {
+    const updated = applyOrigin(topicEntry, sparseSameTopic);
+    expect(updated.origin?.label).toBe("Known topic");
+  });
+
+  it.each([
+    ["a different Telegram peer", { From: "telegram:direct:42002", To: "telegram:42002" }],
+    ["a different Telegram account", { AccountId: "other" }],
+    [
+      "another provider",
+      {
+        Provider: "slack",
+        Surface: "slack",
+        From: "slack:U42001",
+        To: "slack:D42001",
+      },
+    ],
+  ])("does not preserve the label for %s", (_case, context) => {
+    const updated = applyOrigin(topicEntry, {
+      ...sparseSameTopic,
+      ...context,
+    });
+    expect(updated.origin?.label).not.toBe("Known topic");
+  });
+
+  it("does not treat a legacy origin label as a topic title without topicName", () => {
+    const legacyEntry = { ...topicEntry, topicName: undefined };
+    const updated = applyOrigin(legacyEntry, sparseSameTopic);
+    expect(updated.origin?.label).not.toBe("Known topic");
+  });
+});

@@ -220,8 +220,41 @@ export function deriveSessionMetaPatch(params: {
   }
 
   const patch: Partial<SessionEntry> = groupPatch ? { ...groupPatch } : {};
+  const privateTelegramTopicLabel =
+    params.ctx.ChatType === "direct" &&
+    params.ctx.MessageThreadId != null &&
+    origin?.provider === "telegram"
+      ? normalizeOptionalString(params.ctx.ThreadLabel)
+      : undefined;
+  if (privateTelegramTopicLabel) {
+    // A private Telegram bot topic supplies its authoritative title as
+    // ThreadLabel. Persist it as topicName for the shared native-title
+    // projection; explicit user renames in `label` retain their priority.
+    patch.topicName = privateTelegramTopicLabel;
+  }
   const existingOrigin = sessionDeliveryOrigin(params.existing);
-  const mergedOrigin = mergeSessionOrigin(existingOrigin, origin);
+  const existingTelegramTopicName = normalizeOptionalString(params.existing?.topicName);
+  const keepExistingTelegramTopicOriginLabel =
+    params.ctx.ChatType === "direct" &&
+    params.ctx.MessageThreadId != null &&
+    !normalizeOptionalString(params.ctx.ThreadLabel) &&
+    existingTelegramTopicName !== undefined &&
+    existingOrigin?.provider === "telegram" &&
+    existingOrigin.chatType === "direct" &&
+    origin?.provider === "telegram" &&
+    origin.chatType === "direct" &&
+    normalizeOptionalString(existingOrigin.accountId) !== undefined &&
+    existingOrigin.accountId === origin.accountId &&
+    normalizeOptionalString(existingOrigin.from) !== undefined &&
+    normalizeOptionalString(existingOrigin.from) === normalizeOptionalString(origin.from) &&
+    normalizeOptionalString(existingOrigin.to) !== undefined &&
+    normalizeOptionalString(existingOrigin.to) === normalizeOptionalString(origin.to) &&
+    String(existingOrigin.threadId ?? "") === String(params.ctx.MessageThreadId) &&
+    normalizeOptionalString(existingOrigin.label) === existingTelegramTopicName;
+  const mergedOrigin = mergeSessionOrigin(
+    existingOrigin,
+    keepExistingTelegramTopicOriginLabel && origin ? { ...origin, label: undefined } : origin,
+  );
   if (mergedOrigin) {
     if (!patch.chatType && mergedOrigin.chatType) {
       patch.chatType = mergedOrigin.chatType;
