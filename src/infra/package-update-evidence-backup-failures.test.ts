@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
@@ -164,6 +165,40 @@ it("round-trips production-like directory and file permissions", async () => {
   expect(fs.statSync(restored).mode & 0o777).toBe(0o775);
   expect(fs.statSync(path.join(restored, "previous")).mode & 0o777).toBe(0o775);
   expect(fs.statSync(path.join(restored, "previous", "package.json")).mode & 0o777).toBe(0o644);
+});
+
+it("preserves archived modes under a restrictive caller umask", async () => {
+  const f = await fixture();
+  await fsp.chmod(f.source, 0o775);
+  const launchers = path.join(f.source, "launchers");
+  await fsp.mkdir(launchers, { mode: 0o775 });
+  await fsp.writeFile(path.join(launchers, "openclaw"), "launcher\n");
+  await fsp.chmod(launchers, 0o775);
+  await fsp.chmod(path.join(launchers, "openclaw"), 0o644);
+
+  const backupModule = new URL("./package-update-evidence-backup.ts", import.meta.url).href;
+  const childScript = `
+    process.umask(0o077);
+    const { createVerifiedPackageEvidenceBackup } = await import(${JSON.stringify(backupModule)});
+    const result = await createVerifiedPackageEvidenceBackup({
+      sourceRoot: ${JSON.stringify(f.source)},
+      backupParent: ${JSON.stringify(f.backupParent)},
+      operationId: ${JSON.stringify(randomUUID())},
+    });
+    console.log(JSON.stringify({ verificationRoot: result.verificationRoot }));
+  `;
+  const child = spawnSync(
+    process.execPath,
+    ["--import", import.meta.resolve("tsx"), "--input-type=module", "--eval", childScript],
+    { cwd: process.cwd(), encoding: "utf8", timeout: 120_000 },
+  );
+  expect(child.status, child.stderr || child.error?.message).toBe(0);
+  const result = JSON.parse(child.stdout.trim()) as { verificationRoot: string };
+  const extracted = path.join(result.verificationRoot, "anchor");
+  expect(fs.statSync(result.verificationRoot).mode & 0o777).toBe(0o700);
+  expect(fs.statSync(extracted).mode & 0o777).toBe(0o775);
+  expect(fs.statSync(path.join(extracted, "launchers")).mode & 0o777).toBe(0o775);
+  expect(fs.statSync(path.join(extracted, "launchers", "openclaw")).mode & 0o777).toBe(0o644);
 });
 
 it("detects source changes after the archive has been synced", async () => {
