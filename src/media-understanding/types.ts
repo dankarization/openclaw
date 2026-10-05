@@ -130,8 +130,6 @@ type AudioTranscriptionContext = Omit<AudioTranscriptionRequest, "apiKey" | "aut
   workspaceDir?: string;
   profile?: string;
   preferredProfile?: string;
-  /** Recheck request admission after auth/setup awaits and before audio upload. */
-  assertCurrent?: () => void;
 };
 
 export type VideoDescriptionRequest = {

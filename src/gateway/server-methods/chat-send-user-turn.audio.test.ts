@@ -173,6 +173,109 @@ describe("prepareChatSendUserTurn audio", () => {
     },
   );
 
+  it("resolves transcript credentials and workspace from the selected agent", async () => {
+    const persist = vi
+      .spyOn(chatAttachments, "persistInboundImagesForTranscript")
+      .mockResolvedValueOnce({ entries: [], omission: "none" });
+    let selectedPaths: { agentDir?: string; workspaceDir?: string } | undefined;
+    transcribeFirstAudio.mockImplementationOnce(async ({ ctx, agentDir, workspaceDir }) => {
+      selectedPaths = { agentDir, workspaceDir };
+      if (ctx.media?.[0]) {
+        ctx.media[0] = { ...ctx.media[0], transcribed: true };
+      }
+      return "support transcript";
+    });
+    try {
+      const { controller, readInput } = createUserTurnInputController("caption");
+      const prepared = prepareChatSendUserTurn({
+        request: {
+          inboundMessage: "caption",
+          clientInfo: createClientInfo({
+            id: GATEWAY_CLIENT_IDS.WEBCHAT_UI,
+            mode: GATEWAY_CLIENT_MODES.WEBCHAT,
+          }),
+          suppressCommandInterpretation: false,
+          systemInputProvenance: undefined,
+          systemProvenanceReceipt: undefined,
+        },
+        session: {
+          agentId: "support",
+          clientRunId: "run-support-voice",
+          sessionKey: "agent:support:main",
+          cfg: {
+            agents: {
+              list: [
+                {
+                  id: "main",
+                  default: true,
+                  agentDir: "/state/agents/main",
+                  workspace: "/work/main",
+                },
+                {
+                  id: "support",
+                  agentDir: "/state/agents/support",
+                  workspace: "/work/support",
+                },
+              ],
+            },
+            tools: {
+              media: {
+                audio: {
+                  echoTranscript: true,
+                  echoFormat: "Heard: {transcript}",
+                  scope: { default: "allow" },
+                },
+              },
+            },
+          },
+        },
+        admission: {
+          originatingRoute: { originatingChannel: "webchat", explicitDeliverRoute: false },
+        },
+        attachments: createAttachments({
+          parsedMessage: "caption",
+          mediaPathOffloads: [
+            {
+              path: "/state/media/inbound/support-voice.ogg",
+              contentType: "audio/ogg",
+              fileName: "support-voice.ogg",
+            },
+          ],
+          offloadedRefs: [
+            {
+              mediaRef: "media://inbound/support-voice.ogg",
+              id: "support-voice.ogg",
+              path: "/state/media/inbound/support-voice.ogg",
+              kind: "audio",
+              mimeType: "audio/ogg",
+              label: "support-voice.ogg",
+              sizeBytes: 12,
+              sourceIndex: 0,
+            },
+          ],
+        }),
+        client: null,
+        logGateway: { warn: vi.fn() } as never,
+        userTurn: controller,
+      });
+
+      const input = await readInput();
+      expect(input.text).toBe("caption\nHeard: support transcript");
+      expect(prepared.ctx.AgentId).toBe("support");
+      expect(selectedPaths).toEqual({
+        agentDir: "/state/agents/support",
+        workspaceDir: "/work/support",
+      });
+      expect(selectedPaths).not.toEqual({
+        agentDir: "/state/agents/main",
+        workspaceDir: "/work/main",
+      });
+    } finally {
+      persist.mockRestore();
+      transcribeFirstAudio.mockReset();
+    }
+  });
+
   it("does not treat a static echo label as approval of the transcript", async () => {
     const persist = vi
       .spyOn(chatAttachments, "persistInboundImagesForTranscript")

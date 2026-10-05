@@ -39,6 +39,7 @@ import type {
 import { logVerbose, shouldLogVerbose } from "../globals.js";
 import { hasErrnoCode } from "../infra/errors.js";
 import { writeExternalFileWithinRoot } from "../infra/fs-safe.js";
+import { withGuardedFetchRequestAuthority } from "../infra/net/fetch-request-authority.js";
 import { resolveProxyFetchFromEnv } from "../infra/net/proxy-fetch.js";
 import { resolvePreferredOpenClawTmpDir } from "../infra/tmp-openclaw-dir.js";
 import { ImageOptimizationLimitError } from "../media/image-optimization-error.js";
@@ -775,16 +776,16 @@ export async function runProviderEntry(params: {
     };
     let result: AudioTranscriptionResult;
     if (provider.transcribeAudioWithContext) {
-      params.assertCurrent?.();
-      const attempt = await provider.transcribeAudioWithContext({
-        ...input,
-        cfg,
-        agentDir: params.agentDir,
-        workspaceDir: params.workspaceDir,
-        profile: entry.profile,
-        preferredProfile: entry.preferredProfile,
-        assertCurrent: params.assertCurrent,
-      });
+      const attempt = await withGuardedFetchRequestAuthority(params.assertCurrent, () =>
+        provider.transcribeAudioWithContext!({
+          ...input,
+          cfg,
+          agentDir: params.agentDir,
+          workspaceDir: params.workspaceDir,
+          profile: entry.profile,
+          preferredProfile: entry.preferredProfile,
+        }),
+      );
       if (!attempt.ok) {
         return attempt;
       }
@@ -803,10 +804,11 @@ export async function runProviderEntry(params: {
         agentDir: params.agentDir,
         workspaceDir: params.workspaceDir,
       });
-      result = await executeProviderRequest(providerId, auth, (requestAuth) => {
-        params.assertCurrent?.();
-        return transcribeAudio({ ...input, ...requestAuth });
-      });
+      result = await withGuardedFetchRequestAuthority(params.assertCurrent, () =>
+        executeProviderRequest(providerId, auth, (requestAuth) =>
+          transcribeAudio({ ...input, ...requestAuth }),
+        ),
+      );
     }
     if (isTranscriptArtifactText(result.text)) {
       return ok(null);
