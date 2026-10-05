@@ -280,6 +280,7 @@ async function resolveCliMediaPath(params: {
   command: string;
   mediaPath: string;
   outputDir: string;
+  assertCurrent?: () => void;
 }): Promise<string> {
   const commandId = commandBase(params.command);
   if (params.capability !== "audio" || commandId !== "whisper-cli") {
@@ -297,6 +298,7 @@ async function resolveCliMediaPath(params: {
     rootDir: params.outputDir,
     path: path.basename(wavPath),
     write: async (outputPath) => {
+      params.assertCurrent?.();
       await runFfmpeg([
         "-y",
         "-i",
@@ -923,6 +925,7 @@ export async function runCliEntry(params: {
     const stat = await fs.stat(attachmentPath);
     assertMinAudioSize({ size: stat.size, attachmentIndex });
   }
+  params.assertCurrent?.();
   const outputDir = await fs.mkdtemp(
     path.join(resolvePreferredOpenClawTmpDir(), "openclaw-media-cli-"),
   );
@@ -932,6 +935,7 @@ export async function runCliEntry(params: {
       command,
       mediaPath: attachmentPath,
       outputDir,
+      assertCurrent: params.assertCurrent,
     });
     const outputBase = path.join(outputDir, path.parse(mediaPath).name);
 

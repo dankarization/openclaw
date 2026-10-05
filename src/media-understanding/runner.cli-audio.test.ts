@@ -3,6 +3,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { createDeferred } from "../../test/helpers/promise.js";
 import type { OpenClawConfig } from "../config/types.js";
 import type { MediaUnderstandingModelConfig } from "../config/types.tools.js";
 import { logWarn } from "../logger.js";
@@ -461,6 +462,54 @@ describe("media-understanding CLI audio entry", () => {
     const result = await runAudioEntry(testCase);
 
     expect(result?.text).toBe("file transcript");
+  });
+
+  it("does not convert or transcribe when admission expires during attachment path resolution", async () => {
+    const pathResolutionStarted = createDeferred<void>();
+    const releasePathResolution = createDeferred<void>();
+    await withMediaFixture(
+      {
+        filePrefix: "openclaw-cli-expired-admission",
+        extension: "mp3",
+        mediaType: "audio/mpeg",
+        fileContents: createSafeAudioFixtureBuffer(),
+      },
+      async (fixture) => {
+        const getPath = fixture.cache.getPath.bind(fixture.cache);
+        vi.spyOn(fixture.cache, "getPath").mockImplementation(async (params) => {
+          pathResolutionStarted.resolve();
+          await releasePathResolution.promise;
+          return await getPath(params);
+        });
+        let admitted = true;
+        const assertCurrent = () => {
+          if (!admitted) {
+            throw new Error("admission expired");
+          }
+        };
+        const transcription = runCliEntry({
+          capability: "audio",
+          entry: {
+            type: "cli",
+            command: "whisper-cli",
+            args: ["-otxt", "-of", "{{OutputBase}}", "{{MediaPath}}"],
+          },
+          cfg: { tools: { media: { audio: {} } } } as OpenClawConfig,
+          ctx: fixture.ctx,
+          attachment: requireFirstAttachment(fixture.media),
+          cache: fixture.cache,
+          config: {} as never,
+          assertCurrent,
+        });
+
+        await pathResolutionStarted.promise;
+        admitted = false;
+        releasePathResolution.resolve();
+        await expect(transcription).rejects.toThrow("admission expired");
+        expect(runFfmpegMock).not.toHaveBeenCalled();
+        expect(runExecMock).not.toHaveBeenCalled();
+      },
+    );
   });
 
   it("removes the CLI scratch directory when audio conversion fails", async () => {

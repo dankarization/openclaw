@@ -35,6 +35,7 @@ function request(params: {
   signal?: AbortSignal;
   chatId?: string;
   assertCurrent?: () => void;
+  workspaceDir?: string;
 }) {
   const ctx: MsgContext = {
     Provider: "telegram",
@@ -49,6 +50,7 @@ function request(params: {
     ctx,
     cfg: params.cfg ?? {},
     assertCurrent: params.assertCurrent,
+    workspaceDir: params.workspaceDir,
     telegramVoice: { chatId: params.chatId ?? "-123", messageId: params.messageId },
     signal: params.signal,
   };
@@ -90,6 +92,40 @@ describe("Telegram voice preflight sharing", () => {
         await transcribeFirstAudio(request({ file: b, account: "gamma", messageId, cfg })),
       ).toBe("@alpha @beta hello");
       expect(transcribe).toHaveBeenCalledOnce();
+    });
+  });
+
+  it("does not share transcription across explicit selected workspaces", async () => {
+    await fixture(async ([a, b]) => {
+      const messageId = String(nextMessageId++);
+      transcribe.mockImplementation(async ({ workspaceDir }: { workspaceDir?: string }) => ({
+        transcript: workspaceDir,
+      }));
+      const first = request({
+        file: a,
+        account: "alpha",
+        messageId,
+        workspaceDir: "/workspaces/alpha",
+      });
+      const second = request({
+        file: b,
+        account: "beta",
+        messageId,
+        workspaceDir: "/workspaces/beta",
+      });
+
+      expect(
+        await Promise.all([transcribeFirstAudio(first), transcribeFirstAudio(second)]),
+      ).toEqual(["/workspaces/alpha", "/workspaces/beta"]);
+      expect(transcribe).toHaveBeenCalledTimes(2);
+      expect(transcribe).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ workspaceDir: "/workspaces/alpha" }),
+      );
+      expect(transcribe).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ workspaceDir: "/workspaces/beta" }),
+      );
     });
   });
 
