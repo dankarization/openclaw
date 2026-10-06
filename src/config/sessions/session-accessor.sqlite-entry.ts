@@ -19,6 +19,7 @@ import {
   type OpenClawAgentDatabase,
 } from "../../state/openclaw-agent-db.js";
 import { supportsOpenClawAgentDatabaseExecution } from "../../state/openclaw-agent-execution.js";
+import { sessionDeliveryOrigin } from "../../utils/delivery-context.read.js";
 import { deriveLastRoutePatch, deriveSessionMetaPatch } from "./metadata.js";
 import type {
   RecordInboundSessionMetaParams,
@@ -641,7 +642,7 @@ export async function recordInboundSessionMeta(
     (_entry, context) => {
       const existing = context.existingEntry;
       hadExistingEntry = existing !== undefined;
-      previousOriginLabel = existing?.delivery?.origin?.label;
+      previousOriginLabel = sessionDeliveryOrigin(existing)?.label;
       previousTopicName = existing?.topicName;
       const metadataPatch = deriveSessionMetaPatch({
         ctx: params.ctx,
@@ -674,12 +675,13 @@ export async function recordInboundSessionMeta(
   const topicNameChangedForTelegramTopic =
     previousTopicName !== updated?.topicName &&
     updated?.topicName === topicLabel &&
-    updated?.delivery?.origin?.provider === "telegram";
+    sessionDeliveryOrigin(updated ?? undefined)?.provider === "telegram";
   if (
     hadExistingEntry &&
     topicLabel &&
-    updated?.delivery?.origin?.label === topicLabel &&
-    (previousOriginLabel !== topicLabel || topicNameChangedForTelegramTopic)
+    ((sessionDeliveryOrigin(updated ?? undefined)?.label === topicLabel &&
+      previousOriginLabel !== topicLabel) ||
+      topicNameChangedForTelegramTopic)
   ) {
     emitSessionLifecycleEvent({
       sessionKey: params.sessionKey,

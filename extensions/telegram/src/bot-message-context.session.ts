@@ -28,6 +28,7 @@ import { normalizeOptionalLowercaseString } from "openclaw/plugin-sdk/string-coe
 import { truncateUtf16Safe } from "openclaw/plugin-sdk/text-utility-runtime";
 import type { NormalizedAllowFrom } from "./bot-access.js";
 import { normalizeAllowFrom } from "./bot-access.js";
+import { loadTelegramMessageContextSessionRuntime } from "./bot-message-context.session-runtime-loader.js";
 import type {
   TelegramMediaRef,
   TelegramMessageContextOptions,
@@ -85,48 +86,6 @@ type TelegramInboundContextPayload = BuiltChannelInboundEventContext & {
 
 type TelegramMessageContextSessionRuntime =
   typeof import("./bot-message-context.session.runtime.js");
-
-const sessionRuntimeMethods = [
-  "buildChannelInboundEventContext",
-  "readAmbientTranscriptWatermark",
-  "readSessionUpdatedAtAsync",
-  "recordInboundSession",
-  "resolveAmbientTranscriptWatermarkKey",
-  "resolveInboundLastRouteSessionKey",
-  "resolvePinnedMainDmOwnerFromAllowlist",
-  "resolveStorePath",
-] as const satisfies readonly (keyof TelegramMessageContextSessionRuntime)[];
-
-function hasCompleteSessionRuntime(
-  runtime: TelegramMessageContextSessionRuntimeOverrides | undefined,
-): runtime is TelegramMessageContextSessionRuntime {
-  return Boolean(
-    runtime && sessionRuntimeMethods.every((method) => typeof runtime[method] === "function"),
-  );
-}
-
-async function loadTelegramMessageContextSessionRuntime(
-  runtime: TelegramMessageContextSessionRuntimeOverrides | undefined,
-): Promise<TelegramMessageContextSessionRuntime> {
-  if (hasCompleteSessionRuntime(runtime)) {
-    return runtime;
-  }
-  return {
-    ...(await import("./bot-message-context.session.runtime.js")),
-    ...runtime,
-  };
-}
-
-export async function resolveTelegramMessageContextStorePath(params: {
-  cfg: OpenClawConfig;
-  agentId: string;
-  sessionRuntime?: TelegramMessageContextSessionRuntimeOverrides;
-}): Promise<string> {
-  const sessionRuntime = await loadTelegramMessageContextSessionRuntime(params.sessionRuntime);
-  return sessionRuntime.resolveStorePath(params.cfg.session?.store, {
-    agentId: params.agentId,
-  });
-}
 
 function replyTargetToChainEntry(
   replyTarget: TelegramReplyTarget,
@@ -925,3 +884,5 @@ export async function buildTelegramInboundContextPayload(params: {
   };
 }
 /* oxlint-disable max-lines -- TODO: split this grandfathered oversized file. */
+
+export { resolveTelegramMessageContextStorePath } from "./bot-message-context.session-runtime-loader.js";
