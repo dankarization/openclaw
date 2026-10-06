@@ -89,7 +89,7 @@ describe("prepareChatSendUserTurn audio", () => {
           default: "allow" as const,
           rules: [{ match: { channel: "webchat" }, action: "allow" as const }],
         };
-        const prepared = await prepareChatSendUserTurn({
+        const prepared = prepareChatSendUserTurn({
           request: {
             inboundMessage: "raw message",
             clientInfo,
@@ -197,7 +197,7 @@ describe("prepareChatSendUserTurn audio", () => {
     });
     try {
       const { controller, readInput } = createUserTurnInputController("caption");
-      const prepared = await prepareChatSendUserTurn({
+      const prepared = prepareChatSendUserTurn({
         request: {
           inboundMessage: "caption",
           clientInfo: createClientInfo({
@@ -295,7 +295,7 @@ describe("prepareChatSendUserTurn audio", () => {
     });
     try {
       const { controller, readInput } = createUserTurnInputController("caption");
-      const prepared = await prepareChatSendUserTurn({
+      const prepared = prepareChatSendUserTurn({
         request: {
           inboundMessage: "caption",
           clientInfo: createClientInfo({
@@ -351,7 +351,7 @@ describe("prepareChatSendUserTurn audio", () => {
     });
     try {
       const { controller, readInput } = createUserTurnInputController("caption");
-      const prepared = await prepareChatSendUserTurn({
+      const prepared = prepareChatSendUserTurn({
         request: {
           inboundMessage: "caption",
           clientInfo: createClientInfo({
@@ -414,7 +414,7 @@ describe("prepareChatSendUserTurn audio", () => {
     });
     try {
       const { controller, readInput } = createUserTurnInputController("a longer caption");
-      const prepared = await prepareChatSendUserTurn({
+      const prepared = prepareChatSendUserTurn({
         request: {
           inboundMessage: "a longer caption",
           clientInfo: createClientInfo({
@@ -477,7 +477,7 @@ describe("prepareChatSendUserTurn audio", () => {
       try {
         const { controller, readInput } = createUserTurnInputController("");
         controller.baseInput.text = baseText;
-        const prepared = await prepareChatSendUserTurn({
+        const prepared = prepareChatSendUserTurn({
           request: {
             inboundMessage: "",
             clientInfo: createClientInfo({
@@ -557,7 +557,7 @@ describe("prepareChatSendUserTurn audio", () => {
     try {
       const { controller, readInput } = createUserTurnInputController("");
       const sessionEntry = { sessionId: "voice-session", updatedAt: 1 };
-      const prepared = await prepareChatSendUserTurn({
+      const prepared = prepareChatSendUserTurn({
         request: {
           inboundMessage: "",
           clientInfo: createClientInfo({
@@ -643,7 +643,7 @@ describe("prepareChatSendUserTurn audio", () => {
     transcribeFirstAudio.mockResolvedValueOnce("uncommitted voice");
     try {
       const { controller, readInput } = createUserTurnInputController("");
-      const prepared = await prepareChatSendUserTurn({
+      const prepared = prepareChatSendUserTurn({
         request: {
           inboundMessage: "",
           clientInfo: createClientInfo({
@@ -701,7 +701,7 @@ describe("prepareChatSendUserTurn audio", () => {
     transcribeFirstAudio.mockResolvedValueOnce("must not run");
     try {
       const { controller, readInput } = createUserTurnInputController();
-      await prepareChatSendUserTurn({
+      prepareChatSendUserTurn({
         request: {
           inboundMessage: "",
           clientInfo: createClientInfo(),

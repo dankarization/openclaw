@@ -240,11 +240,11 @@ async function resolveCliOutput(params: {
 
 type ProviderQuery = Record<string, string | number | boolean>;
 
-function resolveProviderQuery(params: {
-  providerId: string;
-  config?: MediaUnderstandingConfig;
-  entry: MediaUnderstandingModelConfig;
-}): ProviderQuery | undefined {
+function resolveProviderQuery(
+  params: Pick<Parameters<typeof runProviderEntry>[0], "config" | "entry"> & {
+    providerId: string;
+  },
+): ProviderQuery | undefined {
   const { providerId, config, entry } = params;
   const query: ProviderQuery = {};
   for (const [key, value] of Object.entries({
@@ -306,10 +306,7 @@ export function buildModelDecision(params: {
   };
 }
 
-export type MediaRequestOverrides = {
-  prompt?: string;
-  language?: string;
-};
+export type MediaRequestOverrides = Pick<AudioTranscriptionRequest, "prompt" | "language">;
 
 type ProviderExecutionAuth =
   | {
@@ -344,15 +341,12 @@ function executeProviderRequest<T>(
       });
 }
 
-async function resolveProviderExecutionAuth(params: {
-  capability: MediaUnderstandingCapability;
-  providerId: string;
-  provider?: MediaUnderstandingProvider;
-  cfg: OpenClawConfig;
-  entry: MediaUnderstandingModelConfig;
-  agentDir?: string;
-  workspaceDir?: string;
-}): Promise<ProviderExecutionAuth> {
+async function resolveProviderExecutionAuth(
+  params: Pick<
+    Parameters<typeof runProviderEntry>[0],
+    "capability" | "cfg" | "entry" | "agentDir" | "workspaceDir"
+  > & { providerId: string; provider?: MediaUnderstandingProvider },
+): Promise<ProviderExecutionAuth> {
   const apiKeyAuth = (apiKey: string, source?: string): ProviderExecutionAuth => ({
     kind: "api-key",
     apiKeys: collectProviderApiKeysForExecution({
@@ -412,12 +406,11 @@ async function resolveProviderExecutionAuth(params: {
   }
 }
 
-function resolveProviderRequestContext(params: {
-  providerId: string;
-  cfg: OpenClawConfig;
-  entry: MediaUnderstandingModelConfig;
-  config?: MediaUnderstandingConfig;
-}) {
+function resolveProviderRequestContext(
+  params: Pick<Parameters<typeof runProviderEntry>[0], "cfg" | "entry" | "config"> & {
+    providerId: string;
+  },
+) {
   const providerConfig = findNormalizedProviderValue(
     params.cfg.models?.providers,
     params.providerId,
@@ -791,17 +784,12 @@ export async function runProviderEntry(params: {
   });
 }
 
-export async function runCliEntry(params: {
-  capability: MediaUnderstandingCapability;
-  entry: MediaUnderstandingModelConfig;
-  cfg: OpenClawConfig;
-  ctx: MsgContext;
-  attachment: MediaAttachment;
-  cache: MediaAttachmentCache;
-  assertCurrent?: () => void;
-  config?: MediaUnderstandingConfig;
-  request?: MediaRequestOverrides;
-}): Promise<MediaUnderstandingOutput | null> {
+export async function runCliEntry(
+  params: Pick<
+    Parameters<typeof runProviderEntry>[0],
+    "capability" | "entry" | "cfg" | "cache" | "config" | "request" | "assertCurrent"
+  > & { ctx: MsgContext; attachment: MediaAttachment },
+): Promise<MediaUnderstandingOutput | null> {
   const { entry, capability, ctx } = params;
   const attachmentIndex = params.attachment.index;
   const cli = resolveCliModelEntry(entry);
