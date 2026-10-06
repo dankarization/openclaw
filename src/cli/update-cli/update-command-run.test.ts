@@ -170,6 +170,51 @@ it("persists fingerprint warnings before closing a rolled-back run", async () =>
   }
 });
 
+it("retains the admitted SQLite wait budget through progress and terminal writes", () => {
+  const env = { OPENCLAW_STATE_DIR: dirs.make("update-ledger-wait-budget-") };
+  const run = {
+    runId: createUpdateRun({ trigger: "cli" }, { env }).runId,
+    env,
+    ledgerBusyTimeoutMs: 71_000,
+  };
+  const actual = existingStateWrite.runExistingOpenClawStateWriteTransaction;
+  const observedTimeouts: number[] = [];
+  vi.spyOn(existingStateWrite, "runExistingOpenClawStateWriteTransaction").mockImplementation(
+    (operation, options, contract) =>
+      actual(
+        (database) => {
+          if (contract.operationLabel === "update.run") {
+            observedTimeouts.push(
+              Number(database.db.prepare("PRAGMA busy_timeout").get()?.timeout),
+            );
+          }
+          return operation(database);
+        },
+        options,
+        contract,
+      ),
+  );
+  const presentation = createUpdateProgress(true, run);
+  try {
+    const progress = createUpdateRunProgress(run, presentation.progress);
+    const step = { name: "doctor", command: "doctor", index: 0, total: 1 };
+    progress.onStepStart?.(step);
+    progress.onStepComplete?.({ ...step, durationMs: 1, exitCode: 0 });
+    progress.onHeartbeat?.();
+    completeUpdateCommandRun({ status: "ok", mode: "npm", durationMs: 1, steps: [] }, run);
+    expect(getUpdateRun(run.runId, { env })).toMatchObject({
+      status: "succeeded",
+      steps: expect.arrayContaining([
+        expect.objectContaining({ step: "doctor", status: "completed" }),
+      ]),
+    });
+    expect(observedTimeouts.length).toBeGreaterThanOrEqual(4);
+    expect(new Set(observedTimeouts)).toEqual(new Set([71_000]));
+  } finally {
+    presentation.dispose();
+  }
+});
+
 it("presents committed steps without reopening the ledger for display", () => {
   const env = { OPENCLAW_STATE_DIR: dirs.make("update-progress-committed-") };
   const run = { runId: createUpdateRun({ trigger: "cli" }, { env }).runId, env };

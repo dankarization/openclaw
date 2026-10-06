@@ -44,6 +44,7 @@ import { UPDATE_INSTALL_SKIP_GUIDANCE } from "../../shared/update-outcome.js";
 import { pathExists } from "../../utils.js";
 import { COMPLETION_SKIP_PLUGIN_COMMANDS_ENV } from "../completion-runtime.js";
 import { resolveNodeRunner } from "./node-runner.js";
+import { updateRunLedgerOptions } from "./update-command-ledger.js";
 
 export { resolveNodeRunner } from "./node-runner.js";
 
@@ -62,6 +63,8 @@ export type UpdateCommandOptions = Pick<UpdateRunResult, "sourceRuntimePrepared"
   run?: {
     runId: string;
     defaultStepTimeoutMs?: number;
+    /** Per-run SQLite writer wait budget; scoped to this admitted update only. */
+    ledgerBusyTimeoutMs?: number;
     activationTimeoutMs?: number;
     env: NodeJS.ProcessEnv;
     /** Caller-selected scratch root for update state snapshots; never changes the service env. */
@@ -628,7 +631,7 @@ export async function confirmUpdateDowngrade(params: {
     finishUpdateRun(
       run.runId,
       { status: "skipped", reason: "downgrade-confirmation-required" },
-      { env: run.env },
+      updateRunLedgerOptions(run),
     );
     defaultRuntime.error(
       "Downgrade confirmation required.\nDowngrading can break configuration. Re-run in a TTY to confirm.",
@@ -637,7 +640,11 @@ export async function confirmUpdateDowngrade(params: {
     return false;
   }
   if (decision === "cancelled") {
-    finishUpdateRun(run.runId, { status: "skipped", reason: "cancelled" }, { env: run.env });
+    finishUpdateRun(
+      run.runId,
+      { status: "skipped", reason: "cancelled" },
+      updateRunLedgerOptions(run),
+    );
     if (!opts.json) {
       defaultRuntime.log(theme.muted("Update cancelled."));
     }

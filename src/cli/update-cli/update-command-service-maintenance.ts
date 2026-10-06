@@ -34,6 +34,7 @@ import {
   gatewayServiceMembershipBlock,
   gatewayMaintenanceBlock,
 } from "./update-command-handoff.js";
+import { updateRunLedgerOptions } from "./update-command-ledger.js";
 import { UpdateCommandRecoveryPendingError } from "./update-command-recovery-error.js";
 import type {
   ManagedGatewayUpdateVerdict,
@@ -259,7 +260,7 @@ async function stopManagedServiceBeforeMutableUpdate(
             endedAtMs: Date.now(),
             detail: message,
           },
-          { env: updateRun?.env },
+          updateRun ? updateRunLedgerOptions(updateRun) : { env: undefined },
         );
       } catch {
         (params.warn ?? defaultRuntime.error)(
@@ -620,9 +621,12 @@ async function stopManagedServiceBeforeMutableUpdate(
       assertCurrent();
       stoppedAtMs = Date.now();
       if (params.updateRun) {
-        recordUpdateRunPhase(params.updateRun.runId, "activating", undefined, {
-          env: params.updateRun.env,
-        });
+        recordUpdateRunPhase(
+          params.updateRun.runId,
+          "activating",
+          undefined,
+          updateRunLedgerOptions(params.updateRun),
+        );
       }
       await service.stop({
         env: currentState.env,

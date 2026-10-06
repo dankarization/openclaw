@@ -4,6 +4,7 @@ import { recordUpdateRunStep } from "../../infra/update-run-ledger.js";
 import { defaultRuntime } from "../../runtime.js";
 import type { UpdateDisplayProgress } from "./progress.js";
 import type { UpdateCommandOptions } from "./shared.js";
+import { updateRunLedgerOptions } from "./update-command-ledger.js";
 
 export function validateUpdateCandidateWithProgress(
   params: Pick<
@@ -29,7 +30,7 @@ export function validateUpdateCandidateWithProgress(
     onProgress: (step) => {
       params.assertCurrent();
       if (run) {
-        recordUpdateRunStep(run.runId, step, { env: run.env });
+        recordUpdateRunStep(run.runId, step, updateRunLedgerOptions(run));
       }
       defaultRuntime[execution.opts.json ? "error" : "log"](
         `${step.step}: ${step.detail ?? step.status}`,

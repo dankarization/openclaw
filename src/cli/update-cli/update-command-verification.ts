@@ -28,6 +28,7 @@ import {
   type GatewayRestartSnapshot,
 } from "../daemon-cli/restart-health.js";
 import type { UpdateCommandOptions } from "./shared.js";
+import { updateRunLedgerOptions } from "./update-command-ledger.js";
 import {
   createPluginUpdateWarning,
   type PluginUpdateWarning,
@@ -110,7 +111,7 @@ export async function recordFailedUpdateGatewayState(
   const facts = await readFailedUpdateGatewayState(run, env, timeoutMs);
   assertCurrent();
   if (run && facts) {
-    recordUpdateRunVerification(run.runId, facts, { env: run.env });
+    recordUpdateRunVerification(run.runId, facts, updateRunLedgerOptions(run));
   }
 }
 
@@ -153,7 +154,7 @@ export async function verifyPreviousManagedGatewayForUpdate(
           : "Previous gateway was not verified; automatic rollback cannot restart it.",
         endedAtMs: Date.now(),
       },
-      { env: run.env },
+      updateRunLedgerOptions(run),
     );
   }
 }
@@ -167,9 +168,11 @@ function recordUpdateGatewayHealth(
   if (!run) {
     return;
   }
-  recordUpdateRunVerification(run.runId, updateGatewayHealthFacts(health, port, readyz), {
-    env: run.env,
-  });
+  recordUpdateRunVerification(
+    run.runId,
+    updateGatewayHealthFacts(health, port, readyz),
+    updateRunLedgerOptions(run),
+  );
 }
 
 function updateGatewayHealthFacts(
@@ -269,7 +272,7 @@ export async function verifyUpdatedGateway(
         recordUpdateRunStep(
           run.runId,
           { failureFacts: undefined, ...row, endedAtMs, detail: row.detail ?? detail },
-          { env: run.env },
+          updateRunLedgerOptions(run),
         );
       }
     }

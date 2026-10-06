@@ -50,6 +50,7 @@ import {
   handoffUpdateFromGateway,
   parkForegroundUpdateForActivation,
 } from "./update-command-handoff.js";
+import { updateRunLedgerOptions } from "./update-command-ledger.js";
 import {
   captureOwnedManagedUpdateContext,
   readUpdateCandidateSource,
@@ -375,7 +376,8 @@ export async function executeMutableUpdate(
     assertUpdateCommandRecovery(opts);
     const env = ownedManagedUpdateContext?.env ?? opts.run?.env ?? process.env;
     if (opts.run) {
-      recordUpdateRunPhase(opts.run.runId, "validating", undefined, { env: opts.run.env });
+      const ledger = updateRunLedgerOptions(opts.run);
+      recordUpdateRunPhase(opts.run.runId, "validating", undefined, ledger);
     }
     try {
       if (params.updateInstallKind === "package") {
@@ -540,7 +542,8 @@ export async function executeMutableUpdate(
     await prepareMutableUpdate(env, activationTimeoutMs);
     assertExecutionCurrent();
     if (opts.run) {
-      recordUpdateRunPhase(opts.run.runId, "activating", undefined, { env: opts.run.env });
+      const ledger = updateRunLedgerOptions(opts.run);
+      recordUpdateRunPhase(opts.run.runId, "activating", undefined, ledger);
     }
     await stopManagedServiceBeforeMutableUpdate(roots);
     await recheckSchemas(admittedTargetSchemaVersions);

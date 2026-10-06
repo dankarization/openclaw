@@ -79,6 +79,7 @@ import {
   observeManagedServiceUpdateHandoffClose,
   SYSTEM_SERVICE_UPDATE_SETTLED_MARKER,
 } from "./update-managed-service-handoff-service.js";
+import { MANAGED_HANDOFF_TERMINAL_SOURCE } from "./update-managed-service-handoff-terminal-source.js";
 import type {
   ActiveManagedServiceUpdateHandoff,
   ManagedServiceUpdateHandoffParams,
@@ -106,6 +107,7 @@ const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
 const params = JSON.parse(fs.readFileSync(process.argv[2], "utf-8"));
+const ledgerOptions = { busyTimeoutMs: params.ledgerBusyTimeoutMs };
 const requiresRequesterAcknowledgement = params.requester?.authorizationSource?.startsWith("profile:") === true;
 
 function appendLog(line) {
@@ -141,7 +143,7 @@ function recordRunWarnings(ledger) {
   if (!params.runId) return;
   for (const [step, detail] of runWarnings) {
     try {
-      ledger.recordUpdateRunStep(params.runId, { step, status: "completed", detail, endedAtMs: Date.now() });
+      ledger.recordUpdateRunStep(params.runId, { step, status: "completed", detail, endedAtMs: Date.now() }, ledgerOptions);
       runWarnings.delete(step);
     } catch { /* The candidate runtime records warnings after state migration. */ }
   }
@@ -294,26 +296,7 @@ let runOutcome;
 let terminalRuntimePath = params.recoveryModulePath;
 let serviceStoppedAtMs, serviceDowntimeMs;
 
-async function finishManagedUpdateRun() {
-  if (!runLedger || !runOutcome) return;
-  if (foregroundParked && runOutcome.status === "succeeded") return;
-  if (!ownsManagedUpdateLease()) throw new Error("managed update terminal writer lost its current claim");
-  const terminalResult = { ...runOutcome, ...(serviceDowntimeMs !== undefined ? { downtimeMs: serviceDowntimeMs } : {}) };
-  if (!updaterStarted) { recordRunWarnings(runLedger); await runLedger.finishUpdateRun(params.runId, terminalResult); }
-  else {
-    // Doctor may have advanced the schema. A new process loads the candidate's
-    // entire module graph; a cache-busted import would retain old DB readers.
-    const payload = JSON.stringify([terminalRuntimePath, params.runId, terminalResult, [...runWarnings],
-      path.join(params.cwd, "runtime", ${JSON.stringify(MANAGED_HANDOFF_RUNTIME_ENTRY)}),
-      params.updateLeaseDatabaseIdentity, params.updateLeaseKey, params.handoffId, managedUpdateLease.helper]);
-    if (Buffer.byteLength(payload) > 64 * 1024) throw new Error("managed update terminal result exceeds the command payload limit");
-    const exit = await runOwnedUpdateCommand("finalize", [process.execPath, "--input-type=module", "-e",
-      'import { pathToFileURL } from "node:url"; const [modulePath, runId, result, warnings, leaseRuntime, databaseIdentity, root, owner, helper] = JSON.parse(process.argv[1]); const { finishUpdateRun, recordUpdateRunDiagnostic, recordUpdateRunStep } = await import(pathToFileURL(modulePath).href); const { createManagedHandoffLeaseStore } = await import(pathToFileURL(leaseRuntime).href); const store = createManagedHandoffLeaseStore({ databasePath: databaseIdentity.databasePath, existingIdentity: databaseIdentity }); const current = store.read(root); const lease = current.kind === "current" ? current.lease : null; if (!lease || lease.owner !== owner || lease.executor.pid !== process.pid || JSON.stringify(lease.helper) !== JSON.stringify(helper) || !(store.isProcessIdentityCurrent(lease.executor) || (process.connected && store.acceptParentBoundExecutor(lease)))) throw new Error("managed update terminal writer lost its current claim"); for (const [step, detail] of warnings) { try { if (recordUpdateRunDiagnostic) recordUpdateRunDiagnostic(runId, detail, undefined, step); else recordUpdateRunStep(runId, {step,status:"completed",detail,endedAtMs:Date.now()}); } catch {} } await finishUpdateRun(runId, result);',
-      payload], params.recoveryTimeoutMs);
-    if (exit.signal || exit.code !== 0) throw new Error("installed runtime could not finalize the update run");
-  }
-  runOutcome = undefined;
-}
+${MANAGED_HANDOFF_TERMINAL_SOURCE}
 
 function isFailedUpdateOutcome(status, reason) {
   return status === "error" || (status === "skipped" &&
@@ -595,7 +578,7 @@ function recordServiceStop() {
   pendingServiceStop?.then((stopped) => {
     runLedger?.recordUpdateRunStep(params.runId, {
       step: "service-stop", status: stopped.code === 0 || (params.serviceRecovery?.kind === "launchd" && isLaunchdNotLoaded(stopped)) ? "completed" : "failed", endedAtMs: Date.now(),
-    });
+    }, ledgerOptions);
   }).catch((error) => appendLog("could not record service stop completion: " + String(error)));
   try {
     const metaFile = JSON.parse(fs.readFileSync(params.metaPath, "utf-8"));
@@ -603,7 +586,7 @@ function recordServiceStop() {
     fs.writeFileSync(params.metaPath, JSON.stringify(metaFile), { mode: 0o600 });
     runLedger?.recordUpdateRunStep(params.runId, {
       step: "service-stop", status: "in_progress", startedAtMs: metaFile.meta.serviceStoppedAtMs,
-    });
+    }, ledgerOptions);
   } catch (error) {
     appendLog("could not record service stop time: " + String(error));
   }
@@ -828,7 +811,7 @@ async function restoreGatewayService(reason, decision = params.recovery, childSt
   runLedger?.recordUpdateRunVerification(params.runId, {
     serviceRunning, pid: servicePid, runningVersion: undefined, runningBuildId: undefined, versionMatch: undefined,
     readyz: undefined, settled: undefined, channelsReady: undefined, pluginErrors: undefined,
-  });
+  }, ledgerOptions);
   if (restored) {
     try {
       const { waitForGatewayUpdateRecovery } = await import(pathToFileURL(params.recoveryModulePath).href);
@@ -847,7 +830,7 @@ async function restoreGatewayService(reason, decision = params.recovery, childSt
         settled: health.healthy === true,
         channelsReady: health.healthy === true && !health.channelProbeErrors?.length,
         pluginErrors: health.activatedPluginErrors?.map((error) => JSON.stringify(error)) ?? [],
-      });
+      }, ledgerOptions);
     } catch (error) {
       appendLog("Gateway recovery readiness failed: " + String(error));
       restored = false;
@@ -916,7 +899,7 @@ async function finishGatewayServicePark() {
       await sleep(Math.min(500, Math.max(0, deadline - Date.now())));
     }
   }
-  runLedger?.recordUpdateRunVerification(params.runId, { serviceRunning: false });
+  runLedger?.recordUpdateRunVerification(params.runId, { serviceRunning: false }, ledgerOptions);
 }
 
 let transferPrepared = false;
@@ -1116,7 +1099,7 @@ let automaticRequested = false;
       }
       if (!ownsManagedUpdateLease()) throw new Error("managed update lease no longer owns the helper");
       // Retain prior drivers while recording this helper's independent lifetime.
-      runLedger.adoptUpdateRun(params.runId);
+      runLedger.adoptUpdateRun(params.runId, ledgerOptions);
       recordRunWarnings(runLedger);
       if (params.foregroundOrigin) await assertForegroundOrigin();
     }
@@ -1453,7 +1436,7 @@ async function spawnManagedServiceUpdateHandoff(
               detail: message,
               endedAtMs: Date.now(),
             },
-            { env: serviceEnv },
+            { env: serviceEnv, busyTimeoutMs: params.ledgerBusyTimeoutMs },
           );
         } catch {
           /* Identity warnings must not abort an update. */
@@ -1571,6 +1554,7 @@ async function spawnManagedServiceUpdateHandoff(
   const helperParams = {
     operatorRestartWarning: owner.operatorRestartWarning,
     runId: metaFile.meta.runId,
+    ledgerBusyTimeoutMs: params.ledgerBusyTimeoutMs,
     beforePark: Boolean(params.beforePark),
     requester: resolveManagedUpdateRequester(params.requester),
     serviceManagerEnv: resolveServiceManagerEnv(serviceEnv),

@@ -86,6 +86,7 @@ import {
 } from "./shared.js";
 import { suppressDeprecations } from "./suppress-deprecations.js";
 import { resolveForegroundUpdateAdmission } from "./update-command-handoff.js";
+import { updateRunLedgerOptions } from "./update-command-ledger.js";
 import { revalidateUpdateDatabaseContext } from "./update-command-managed-context.js";
 import {
   admitMutableUpdateSignalRun,
@@ -126,7 +127,7 @@ export function recordUpdateCommandTarget(
     run.runId,
     "requested",
     patch,
-    { env: run.env },
+    updateRunLedgerOptions(run),
     (record) => {
       before = record;
     },
@@ -343,6 +344,7 @@ export async function admitUpdateCommandRun(params: {
   const run = {
     runId: record.runId,
     defaultStepTimeoutMs: record.trigger === "campaign" ? AUTO_UPDATE_STEP_TIMEOUT_MS : undefined,
+    ledgerBusyTimeoutMs: ledgerOptions.busyTimeoutMs,
     env,
     ...(params.snapshotTempDir?.trim() ? { snapshotTempDir: params.snapshotTempDir.trim() } : {}),
     ...(record.trigger !== "cli" &&
@@ -437,7 +439,7 @@ export function createUpdateRunProgress(
       return undefined;
     }
     try {
-      return recordUpdateRunStep(run.runId, step, { env: run.env });
+      return recordUpdateRunStep(run.runId, step, updateRunLedgerOptions(run));
     } catch (cause) {
       throw new Error(
         `Could not record update step "${step.step}" (${step.status}): ${formatErrorMessage(cause)}`,
@@ -449,12 +451,12 @@ export function createUpdateRunProgress(
     pendingSteps,
     onRollbackOutcome: (rollbackOutcome) => {
       if (!deferred) {
-        recordUpdateRunVerification(run.runId, { rollbackOutcome }, { env: run.env });
+        recordUpdateRunVerification(run.runId, { rollbackOutcome }, updateRunLedgerOptions(run));
       }
     },
     onHeartbeat() {
       if (!deferred) {
-        heartbeatUpdateRun(run.runId, driver, { env: run.env });
+        heartbeatUpdateRun(run.runId, driver, updateRunLedgerOptions(run));
       }
     },
     deferLedgerWrites() {
@@ -533,7 +535,10 @@ export function completeUpdateCommandRun(
       runId: run.runId,
     };
   }
-  const recordOptions = { env: run.env, redactPaths: result.root ? [result.root] : [] };
+  const recordOptions = {
+    ...updateRunLedgerOptions(run),
+    redactPaths: result.root ? [result.root] : [],
+  };
   // Both finalization and outer CLI unwind come here. A verified restored generation
   // stays with its helper until native recovery finishes; neither caller may close it early.
   const helperRecoveryPending =

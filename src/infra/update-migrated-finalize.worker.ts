@@ -6,6 +6,7 @@ import {
   withDelegatedUpdateCommandExecutor,
   withUpdateCommandExecutor,
 } from "../cli/update-cli/update-command-executor.js";
+import { updateRunLedgerOptions } from "../cli/update-cli/update-command-ledger.js";
 import type {
   UpdateDoctorInput,
   UpdatePostCoreInput,
@@ -385,8 +386,10 @@ async function finalizeInput(
     throw new Error("Update finalization requires its migrated update run.");
   }
   const { requesterAuthority: descriptor, ...runIdentity } = transferredRun;
+  // Shipped drivers lack this field but already carry their parsed step budget.
+  runIdentity.ledgerBusyTimeoutMs ??= input.params.updateStepTimeoutMs;
   executorFence.assertCurrent();
-  adoptUpdateRun(runIdentity.runId, { env: runIdentity.env });
+  adoptUpdateRun(runIdentity.runId, updateRunLedgerOptions(runIdentity));
   // Parent closures cannot cross JSON. The fresh runtime retains identity checks
   // under its validated original native update lineage.
   const run: NonNullable<UpdateCommandOptions["run"]> = {
@@ -408,7 +411,7 @@ async function finalizeInput(
   registerRun(run);
   for (const step of input.bufferedSteps) {
     executorFence.assertCurrent();
-    recordUpdateRunStep(run.runId, step, { env: run.env });
+    recordUpdateRunStep(run.runId, step, updateRunLedgerOptions(run));
   }
   const { stopped, restartRequired } = await adoptCandidateManagedServiceStop({
     transferred: input.params.preManagedServiceStop,
@@ -416,7 +419,7 @@ async function finalizeInput(
     mode: input.params.result.mode,
     windowsTaskAutoStartSuspended: input.windowsTaskAutoStartSuspended,
     runId: run.runId,
-    ledger: { env: run.env },
+    ledger: updateRunLedgerOptions(run),
     root: input.params.result.root ?? input.params.root,
     timeoutMs: input.params.updateStepTimeoutMs,
     assertCurrent: () => {

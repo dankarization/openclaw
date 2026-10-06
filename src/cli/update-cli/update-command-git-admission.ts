@@ -5,6 +5,7 @@ import { recordUpdateRunPhase } from "../../infra/update-run-ledger.js";
 import { isFailedUpdateStep } from "../../infra/update-run-step.js";
 import type { UpdateRunnerOptions, UpdateRunResult } from "../../infra/update-runner-types.js";
 import { UpdatePreMutationError, type UpdateCommandOptions } from "./shared.js";
+import { updateRunLedgerOptions } from "./update-command-ledger.js";
 
 type BeforeGitMutation = NonNullable<UpdateRunnerOptions["beforeGitMutation"]>;
 
@@ -51,7 +52,7 @@ export function recordInspectedGitTarget(
       {
         target: { kind: "git", sha: target.sha, version: target.version },
       },
-      { env: run.env },
+      updateRunLedgerOptions(run),
     );
   }
   assertReadableGitTarget(target);

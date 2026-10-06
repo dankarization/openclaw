@@ -124,16 +124,17 @@ export function createManagedServiceManagerBoundary({
           { env },
         )
       : undefined;
-    const { sourceRuntimeImport, ledgerRuntimeImport } = await prepareManagedServiceRuntimeFixture({
-      recoveryModulePath,
-      statePath,
-      configPath: env.OPENCLAW_CONFIG_PATH,
-      validationReleasePath,
-      activationGatePath,
-      activationReleasePath,
-      ledger: Boolean(run),
-      options,
-    });
+    const { sourceRuntimeImport, ledgerRuntimeImport, observedLedgerExports } =
+      await prepareManagedServiceRuntimeFixture({
+        recoveryModulePath,
+        statePath,
+        configPath: env.OPENCLAW_CONFIG_PATH,
+        validationReleasePath,
+        activationGatePath,
+        activationReleasePath,
+        ledger: Boolean(run),
+        options,
+      });
     let helper: import("node:child_process").ChildProcess | undefined;
     let helperCompletion: Promise<number | null> | undefined;
     let helperLogPath: string | undefined;
@@ -143,6 +144,7 @@ export function createManagedServiceManagerBoundary({
       await startManagedServiceUpdateHandoff({
         ...(options?.systemScope ? { supervisor: "systemd" as const } : {}),
         runId: run?.runId,
+        ledgerBusyTimeoutMs: options?.ledgerBusyTimeoutMs,
         ...(options?.beforeParkNotice ? { beforePark: async () => {} } : {}),
         ...(options?.profileRequester ? { requesterAuthority: { assertCurrent() {} } } : {}),
         root,
@@ -217,8 +219,9 @@ export function createManagedServiceManagerBoundary({
         })().catch((error) => { console.error(error); process.exit(18); });`;
       }
       if (options?.replaceLedgerWriter) {
-        const installedLedgerModule = `${ledgerRuntimeImport}
-        export const { finishUpdateRun, recordUpdateRunDiagnostic } = ledger;
+        const installedLedgerModule = `import fs from "node:fs";
+${ledgerRuntimeImport}
+        ${observedLedgerExports ?? "export const { finishUpdateRun, recordUpdateRunDiagnostic } = ledger;"}
       `;
         updaterScript =
           `require("node:fs").writeFileSync(${JSON.stringify(recoveryModulePath)}, ${JSON.stringify(installedLedgerModule)});` +
@@ -624,6 +627,14 @@ export function createManagedServiceManagerBoundary({
       }
       return {
         ...(run ? { run: getUpdateRun(run.runId, { env }) } : {}),
+        ...(options?.observeLedgerBudget
+          ? {
+              ledgerWriteBudgets: (await fs.readFile(statePath + ".ledger-budgets", "utf8"))
+                .trim()
+                .split("\n")
+                .map((value) => JSON.parse(value) as number | null),
+            }
+          : {}),
         ...(options?.expireParentWhileStopPending
           ? { stopSettlement: JSON.parse(await fs.readFile(stopSettlementPath, "utf8")) }
           : {}),

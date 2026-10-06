@@ -21,6 +21,7 @@ export async function prepareManagedServiceRuntimeFixture(params: {
   ledger: boolean;
   options?: {
     replaceLedgerWriter?: boolean;
+    observeLedgerBudget?: true;
     requester?: UpdateRequester;
     cancelAtActivation?: "requester" | "inspection";
   };
@@ -43,13 +44,37 @@ export async function prepareManagedServiceRuntimeFixture(params: {
   const ledgerRuntimeImport = `
     const ledger = await import(${JSON.stringify(resolveRuntimeWorkerUrl(triageTestRuntimeEntrypoints.updateRunLedger).href)});
   `;
+  const observedLedgerExports = options?.observeLedgerBudget
+    ? [
+        "adoptUpdateRun",
+        "finishUpdateRun",
+        "recordUpdateRunStep",
+        "recordUpdateRunVerification",
+        "recordUpdateRunDiagnostic",
+      ]
+        .map(
+          (name) => `export function ${name}(...args) {
+          fs.appendFileSync(${JSON.stringify(statePath + ".ledger-budgets")}, JSON.stringify(args[${name === "adoptUpdateRun" ? 1 : 2}]?.busyTimeoutMs ?? null) + "\\n");
+          return ledger.${name}(...args);
+        }`,
+        )
+        .join("\n") + "\nexport const { getUpdateRun } = ledger;"
+    : undefined;
   if (ledger) {
     await fs.appendFile(
       recoveryModulePath,
       `
       ${ledgerRuntimeImport}
-      export const { adoptUpdateRun, getUpdateRun, recordUpdateRunStep, recordUpdateRunVerification } = ledger;
-      ${options?.replaceLedgerWriter ? 'export function finishUpdateRun() { throw new Error("the previous runtime must not finalize the candidate"); }' : "export const { finishUpdateRun } = ledger;"}
+      ${
+        (options?.replaceLedgerWriter
+          ? observedLedgerExports?.replace(
+              "return ledger.finishUpdateRun(...args);",
+              'throw new Error("the previous runtime must not finalize the candidate");',
+            )
+          : observedLedgerExports) ??
+        `export const { adoptUpdateRun, getUpdateRun, recordUpdateRunStep, recordUpdateRunVerification } = ledger;
+      ${options?.replaceLedgerWriter ? 'export function finishUpdateRun() { throw new Error("the previous runtime must not finalize the candidate"); }' : "export const { finishUpdateRun } = ledger;"}`
+      }
     `,
     );
   }
@@ -63,7 +88,7 @@ export async function prepareManagedServiceRuntimeFixture(params: {
         export const { prepareManagedUpdateRequesterIdentity } = requesterRuntime;
       `,
       );
-      return { sourceRuntimeImport, ledgerRuntimeImport };
+      return { sourceRuntimeImport, ledgerRuntimeImport, observedLedgerExports };
     }
     await fs.writeFile(
       configPath,
@@ -93,7 +118,7 @@ export async function prepareManagedServiceRuntimeFixture(params: {
     `,
     );
   }
-  return { sourceRuntimeImport, ledgerRuntimeImport };
+  return { sourceRuntimeImport, ledgerRuntimeImport, observedLedgerExports };
 }
 
 export async function prepareManagedServiceSpawn(
