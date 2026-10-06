@@ -1,0 +1,57 @@
+{
+  "sourceHead": "911e0f238e86451c0d2d24b9efe2b391398305e1",
+  "syntheticProfilesOnly": true,
+  "httpTransportMocked": false,
+  "processExecutionDelegatedToNativeOwner": true,
+  "noInstantStopClaim": true,
+  "traces": [
+    {
+      "route": "provider",
+      "revokedDuringPreparation": false,
+      "initialAdmissionObserved": true,
+      "checks": 4,
+      "httpRequests": 1,
+      "selectedAgentCredentialOnWire": true,
+      "defaultAgentCredentialOnWire": false,
+      "uploadBytes": 32319,
+      "ffmpegProcesses": 0,
+      "cliProcesses": 0
+    },
+    {
+      "route": "provider",
+      "revokedDuringPreparation": true,
+      "initialAdmissionObserved": true,
+      "checks": 3,
+      "httpRequests": 0,
+      "selectedAgentCredentialOnWire": null,
+      "defaultAgentCredentialOnWire": null,
+      "uploadBytes": 0,
+      "ffmpegProcesses": 0,
+      "cliProcesses": 0
+    },
+    {
+      "route": "cli",
+      "revokedDuringPreparation": false,
+      "initialAdmissionObserved": true,
+      "checks": 5,
+      "httpRequests": 0,
+      "selectedAgentCredentialOnWire": null,
+      "defaultAgentCredentialOnWire": null,
+      "uploadBytes": 0,
+      "ffmpegProcesses": 1,
+      "cliProcesses": 1
+    },
+    {
+      "route": "cli",
+      "revokedDuringPreparation": true,
+      "initialAdmissionObserved": true,
+      "checks": 3,
+      "httpRequests": 0,
+      "selectedAgentCredentialOnWire": null,
+      "defaultAgentCredentialOnWire": null,
+      "uploadBytes": 0,
+      "ffmpegProcesses": 0,
+      "cliProcesses": 0
+    }
+  ]
+}

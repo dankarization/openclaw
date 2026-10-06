@@ -1,0 +1,66 @@
+[vitest-workers] local cache hit after 10820ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared 109ce28ff1df in 10978ms (14612 inputs, 18658 outputs)
+[test] starting test/vitest/vitest.infra.config.ts
+
+ RUN  v5.0.1 <isolated-proof-checkout>
+
+stdout | src/gateway/server-methods/chat-send-user-turn.authority.diagnostic.test.ts > priority voice real final-effect diagnostic > observes selected-agent HTTP credentials and revoked upload/conversion
+audio-preflight: transcribing attachment 0 for mention check
+
+stdout | src/gateway/server-methods/chat-send-user-turn.authority.diagnostic.test.ts > priority voice real final-effect diagnostic > observes selected-agent HTTP credentials and revoked upload/conversion
+Media understanding audio: success (1/1) via openai/whisper-1
+
+stdout | src/gateway/server-methods/chat-send-user-turn.authority.diagnostic.test.ts > priority voice real final-effect diagnostic > observes selected-agent HTTP credentials and revoked upload/conversion
+audio-preflight: transcribed 60 chars from attachment 0
+
+stdout | src/gateway/server-methods/chat-send-user-turn.authority.diagnostic.test.ts > priority voice real final-effect diagnostic > observes selected-agent HTTP credentials and revoked upload/conversion
+audio-preflight: transcribing attachment 0 for mention check
+
+stdout | src/gateway/server-methods/chat-send-user-turn.authority.diagnostic.test.ts > priority voice real final-effect diagnostic > observes selected-agent HTTP credentials and revoked upload/conversion
+audio understanding failed: Error: diagnostic admission revoked during preparation
+
+stderr | src/gateway/server-methods/chat-send-user-turn.authority.diagnostic.test.ts > priority voice real final-effect diagnostic > observes selected-agent HTTP credentials and revoked upload/conversion
+[media-understanding] audio: failed (0/1) reason=diagnostic admission revoked during preparation
+
+stdout | src/gateway/server-methods/chat-send-user-turn.authority.diagnostic.test.ts > priority voice real final-effect diagnostic > observes selected-agent HTTP credentials and revoked upload/conversion
+audio-preflight: transcribing attachment 0 for mention check
+
+stdout | src/gateway/server-methods/chat-send-user-turn.authority.diagnostic.test.ts > priority voice real final-effect diagnostic > observes selected-agent HTTP credentials and revoked upload/conversion
+Media understanding via CLI: <isolated-test-state>/workspace/whisper-cli <temporary-conversion-output>/synthetic-input.wav
+
+stdout | src/gateway/server-methods/chat-send-user-turn.authority.diagnostic.test.ts > priority voice real final-effect diagnostic > observes selected-agent HTTP credentials and revoked upload/conversion
+synthetic local transcript
+
+stdout | src/gateway/server-methods/chat-send-user-turn.authority.diagnostic.test.ts > priority voice real final-effect diagnostic > observes selected-agent HTTP credentials and revoked upload/conversion
+Media understanding audio: success (1/1) via whisper-cli/<isolated-test-state>/workspace/whisper-cli
+
+stdout | src/gateway/server-methods/chat-send-user-turn.authority.diagnostic.test.ts > priority voice real final-effect diagnostic > observes selected-agent HTTP credentials and revoked upload/conversion
+audio-preflight: transcribed 26 chars from attachment 0
+
+stdout | src/gateway/server-methods/chat-send-user-turn.authority.diagnostic.test.ts > priority voice real final-effect diagnostic > observes selected-agent HTTP credentials and revoked upload/conversion
+audio-preflight: transcribing attachment 0 for mention check
+
+stdout | src/gateway/server-methods/chat-send-user-turn.authority.diagnostic.test.ts > priority voice real final-effect diagnostic > observes selected-agent HTTP credentials and revoked upload/conversion
+audio understanding failed: Error: diagnostic admission revoked during preparation
+
+stderr | src/gateway/server-methods/chat-send-user-turn.authority.diagnostic.test.ts > priority voice real final-effect diagnostic > observes selected-agent HTTP credentials and revoked upload/conversion
+[media-understanding] audio: failed (0/1) reason=diagnostic admission revoked during preparation
+
+stdout | src/gateway/server-methods/chat-send-user-turn.authority.diagnostic.test.ts > priority voice real final-effect diagnostic > observes selected-agent HTTP credentials and revoked upload/conversion
+VOICE_AUTHORITY_EFFECTS [{"route":"provider","revokedDuringPreparation":false,"initialAdmissionObserved":true,"checks":4,"httpRequests":1,"selectedAgentCredentialOnWire":true,"defaultAgentCredentialOnWire":false,"uploadBytes":32319,"ffmpegProcesses":0,"cliProcesses":0},{"route":"provider","revokedDuringPreparation":true,"initialAdmissionObserved":true,"checks":3,"httpRequests":0,"selectedAgentCredentialOnWire":null,"defaultAgentCredentialOnWire":null,"uploadBytes":0,"ffmpegProcesses":0,"cliProcesses":0},{"route":"cli","revokedDuringPreparation":false,"initialAdmissionObserved":true,"checks":5,"httpRequests":0,"selectedAgentCredentialOnWire":null,"defaultAgentCredentialOnWire":null,"uploadBytes":0,"ffmpegProcesses":1,"cliProcesses":1},{"route":"cli","revokedDuringPreparation":true,"initialAdmissionObserved":true,"checks":3,"httpRequests":0,"selectedAgentCredentialOnWire":null,"defaultAgentCredentialOnWire":null,"uploadBytes":0,"ffmpegProcesses":0,"cliProcesses":0}]
+
+stdout | src/gateway/server-methods/chat-send-user-turn.authority.diagnostic.test.ts > priority voice real final-effect diagnostic > observes selected-agent HTTP credentials and revoked upload/conversion
+[state/agent-db] agent database clean-close receipt: written
+[state/agent-db] agent database clean-close receipt: written
+
+ ✓  infra  src/gateway/server-methods/chat-send-user-turn.authority.diagnostic.test.ts > priority voice real final-effect diagnostic > observes selected-agent HTTP credentials and revoked upload/conversion 3053ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  23:25:17
+   Duration  18.34s (transform 49%, import 27%, tests 18%, setup 7%)
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] passed 1 Vitest shard in 37.77s
