@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveRemainingDoctorServiceInspectionTimeoutMs } from "./doctor-service-inspection-budget.js";
+import { resolveRemainingDoctorServiceInspectionTimeoutMs } from "./update-doctor-deadline.js";
 
 describe("Doctor nested service-inspection budget", () => {
   it("limits each nested operation to the remaining parent budget", () => {
