@@ -6,6 +6,7 @@ import {
   GATEWAY_CLIENT_MODES,
 } from "../../../packages/gateway-protocol/src/client-info.js";
 import { useAutoCleanupTempDirTracker } from "../../../test/helpers/temp-dir.js";
+import type { OpenClawConfig } from "../../config/types.js";
 import type { MediaUnderstandingScopeConfig } from "../../config/types.tools.js";
 import { transcribeFirstAudio } from "../../media-understanding/audio-preflight.js";
 import { createSafeAudioFixtureBuffer } from "../../media-understanding/runner.test-utils.js";
@@ -38,7 +39,7 @@ describe("chat.send voice transcription policy boundary", () => {
       omission: "none",
     });
     const { controller, readInput } = createUserTurnInputController("caption");
-    const cfg = {
+    const cfg: OpenClawConfig = {
       // The test exercises an explicit CLI audio model; disable unrelated plugin
       // discovery so the policy boundary stays isolated from global catalog setup.
       plugins: { enabled: false },
@@ -152,6 +153,9 @@ describe("chat.send voice transcription policy boundary", () => {
       expect(prepared.ctx.Transcript).toBe("policy-approved voice");
       expect(prepared.ctx.media?.[0]?.transcribed).toBe(true);
       expect(runExec).toHaveBeenCalledOnce();
+      if (typeof input.text !== "string") {
+        throw new Error("Audio fixture did not produce text");
+      }
       prepared.applyApprovedText(input.text);
       await expect(transcribeFirstAudio({ ctx: prepared.ctx, cfg })).resolves.toBeUndefined();
       expect(runExec).toHaveBeenCalledOnce();

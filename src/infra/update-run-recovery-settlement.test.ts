@@ -16,7 +16,10 @@ import {
   archiveUpdateRecoveryAfterPreviousBoot,
   persistPreviousBootSettlementReceipt,
 } from "./update-run-recovery-settlement.js";
-import type { UpdatePreviousBootSettlementReceipt } from "./update-run-recovery-settlement.types.js";
+import type {
+  UpdatePreviousBootSettlementReceipt,
+  UpdateRecoverySettlementArchive,
+} from "./update-run-recovery-settlement.types.js";
 import { archivePreviousBootRecoveryInWorker } from "./update-run-recovery-settlement.worker.js";
 import { assertNoPendingUpdateRecovery } from "./update-run-recovery.js";
 
@@ -29,7 +32,11 @@ afterEach(async () => {
   await state.cleanup();
 });
 
-function makeArchive(runId: string, operationId: string, raw: string) {
+function makeArchive(
+  runId: string,
+  operationId: string,
+  raw: string,
+): UpdateRecoverySettlementArchive {
   const serviceUid = process.getuid?.() ?? 1000;
   const serviceGid = process.getgid?.() ?? 1000;
   const rawSha256 = createHash("sha256").update(raw).digest("hex");
@@ -45,6 +52,7 @@ function makeArchive(runId: string, operationId: string, raw: string) {
     installRoot: "/opt/openclaw",
     anchorQuarantinePath: "/opt/.previous-boot-anchor",
     controlQuarantinePath: "/opt/.previous-boot-control",
+    inventory: { anchor: [], control: [] },
     serviceUid,
     serviceGid,
     serviceUnit: "openclaw-gateway.service",
@@ -208,7 +216,7 @@ describe("previous-boot recovery archive worker", () => {
   });
 
   it("retains the active barrier when the captured row revision changes before CAS", async () => {
-    const { options, runId, rawRecord, operationId } = await pendingRecord();
+    const { options, runId, rawRecord, operationId, row } = await pendingRecord();
     const archive = makeArchive(runId, operationId, rawRecord);
     const db = (await import("../state/openclaw-state-db.js")).openOpenClawStateDatabase(
       options,

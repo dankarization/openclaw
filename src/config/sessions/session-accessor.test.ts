@@ -563,9 +563,9 @@ describe("session accessor seam", () => {
         ThreadLabel: "New title",
       };
       await recordInboundSessionMeta({ storePath, sessionKey, ctx, createIfMissing: false });
-      expect(loadSessionEntry({ sessionKey, storePath })?.delivery?.origin?.label).toBe(
-        "New title",
-      );
+      expect(loadSessionEntry({ sessionKey, storePath })).toMatchObject({
+        delivery: { kind: "external", origin: { label: "New title" } },
+      });
       expect(loadSessionEntry({ sessionKey, storePath })?.displayName).toBe("New Chat");
       expect(loadSessionEntry({ sessionKey, storePath })?.topicName).toBe("New title");
       expect(loadSessionEntry({ sessionKey, storePath })?.updatedAt).toBe(10);
@@ -583,9 +583,9 @@ describe("session accessor seam", () => {
       });
       expect(loadSessionEntry({ sessionKey, storePath })?.displayName).toBe("New Chat");
       expect(loadSessionEntry({ sessionKey, storePath })?.topicName).toBe("New title");
-      expect(loadSessionEntry({ sessionKey, storePath })?.delivery?.origin?.label).toBe(
-        "New title",
-      );
+      expect(loadSessionEntry({ sessionKey, storePath })).toMatchObject({
+        delivery: { kind: "external", origin: { label: "New title" } },
+      });
       expect(loadSessionEntry({ sessionKey, storePath })?.updatedAt).toBe(10);
       expect(received).toHaveLength(0);
 

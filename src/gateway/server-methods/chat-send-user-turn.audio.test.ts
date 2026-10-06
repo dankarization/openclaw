@@ -140,6 +140,9 @@ describe("prepareChatSendUserTurn audio", () => {
         await persistUserTurnTranscript({ ...target, input, updateMode: "none" });
         const [reloaded] = await readTranscriptMessages(target);
         expect(reloaded?.content).toBe("raw message\nHeard: transcribed voice");
+        if (typeof input.text !== "string") {
+          throw new Error("Audio fixture did not produce text");
+        }
         prepared.applyApprovedText(input.text);
         expect(prepared.ctx.Body).toBe("raw message\nHeard: transcribed voice");
         expect(prepared.ctx.BodyForAgent).toContain(
@@ -323,6 +326,9 @@ describe("prepareChatSendUserTurn audio", () => {
 
       const input = await readInput();
       expect(input.text).toBe("caption\nVoice note received");
+      if (typeof input.text !== "string") {
+        throw new Error("Audio fixture did not produce text");
+      }
       prepared.applyApprovedText(input.text);
       expect(prepared.ctx.BodyForAgent).toBe("caption\nVoice note received");
       expect(prepared.ctx.BodyForAgent).not.toContain("unapproved transcript");
@@ -518,6 +524,9 @@ describe("prepareChatSendUserTurn audio", () => {
         });
         const input = await readInput();
         expect(input.text).toBe("Heard: /reset");
+        if (typeof input.text !== "string") {
+          throw new Error("Audio fixture did not produce text");
+        }
         prepared.applyApprovedText(input.text);
         expect(prepared.ctx.Body).toBe("Heard: /reset");
         expect(prepared.ctx.BodyForAgent).toBe(
@@ -596,6 +605,9 @@ describe("prepareChatSendUserTurn audio", () => {
 
       const input = await readInput();
       expect(input.text).toBe("/reset");
+      if (typeof input.text !== "string") {
+        throw new Error("Audio fixture did not produce text");
+      }
       prepared.applyApprovedText(input.text);
       expect(prepared.ctx.Body).toBe("/reset");
       expect(prepared.ctx.BodyForAgent).toContain(
