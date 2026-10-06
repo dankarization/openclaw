@@ -450,7 +450,7 @@ describe("Telegram recorded session destinations", () => {
         threadId: "77",
       },
       origin: {
-        label: "Renamed personal topic",
+        label: "Alice id:42001",
         threadId: 77,
       },
     });
