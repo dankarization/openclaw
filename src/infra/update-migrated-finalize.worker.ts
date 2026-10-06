@@ -365,6 +365,9 @@ async function runDelegatedDoctor(input: UpdateDoctorInput): Promise<void> {
             ref: input.originalRecoveryCapture,
           },
           ...(input.databaseGenerations ? { databaseGenerations: input.databaseGenerations } : {}),
+          ...(input.serviceInspectionDeadlineAtMs !== undefined
+            ? { serviceInspectionDeadlineAtMs: input.serviceInspectionDeadlineAtMs }
+            : {}),
           ...(input.postCoreSchemaRepair === true
             ? { postCoreSchemaRepair: { runId: input.runId, assertCurrent } }
             : {}),

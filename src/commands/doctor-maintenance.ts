@@ -41,6 +41,7 @@ import {
 import { createDoctorMaintenanceState } from "./doctor-maintenance-state.js";
 import type { DoctorConfigWriter, DoctorMaintenanceParams } from "./doctor-maintenance-types.js";
 import { isDoctorUpdateRepairMode, resolveDoctorRepairMode } from "./doctor-repair-mode.js";
+import { resolveRemainingDoctorServiceInspectionTimeoutMs } from "./doctor-service-inspection-budget.js";
 import {
   assertDoctorServiceSelection,
   isServiceRepairExternallyManaged,
@@ -57,6 +58,7 @@ export async function beginDoctorMaintenance(params: DoctorMaintenanceParams) {
   if (!(params.options.repair === true || params.options.yes === true)) {
     return undefined;
   }
+  resolveRemainingDoctorServiceInspectionTimeoutMs(params.serviceInspectionDeadlineAtMs);
   const env = { ...process.env, ...(params.runId ? { [UPDATE_RUN_ID_ENV]: params.runId } : {}) };
   // Ordinary activation remains with the parent. Stale-instance recovery below
   // retains custody through offline repair and verified restoration.
@@ -413,6 +415,9 @@ export async function beginDoctorMaintenance(params: DoctorMaintenanceParams) {
           shouldRestart: true,
           jsonMode: true,
           phase: "inspect",
+          timeoutMs: resolveRemainingDoctorServiceInspectionTimeoutMs(
+            params.serviceInspectionDeadlineAtMs,
+          ),
         });
         assertDoctorMaintenanceInspection(inspection, env);
         serviceUpdateVerdict = inspection.serviceUpdateVerdict;
@@ -504,6 +509,9 @@ export async function beginDoctorMaintenance(params: DoctorMaintenanceParams) {
                           jsonMode: true,
                           expectedService: inspection,
                           retainNativeIdentity: true,
+                          timeoutMs: resolveRemainingDoctorServiceInspectionTimeoutMs(
+                            params.serviceInspectionDeadlineAtMs,
+                          ),
                           assertCurrent: () => assertServiceCurrent?.(),
                           warn,
                           onStopped: (before) => {
