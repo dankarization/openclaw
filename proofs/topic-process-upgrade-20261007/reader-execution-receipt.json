@@ -1,0 +1,22 @@
+{
+  "phase": "read",
+  "exitCode": 0,
+  "wallSeconds": 50.881,
+  "MemoryHigh": "3840M",
+  "MemoryMax": "4G",
+  "MemorySwapMax": "512M",
+  "command": [
+    "systemd-run",
+    "--user",
+    "--scope",
+    "--quiet",
+    "--unit=openclaw-topic-proof-reader-canonical-20261007",
+    "--property=MemoryHigh=3840M",
+    "--property=MemoryMax=4G",
+    "--property=MemorySwapMax=512M",
+    "node",
+    "scripts/run-vitest.mjs",
+    "src/config/sessions/session-accessor.process-upgrade.diagnostic.test.ts",
+    "--maxWorkers=1"
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "phase": "read",
+  "pid": 256480,
+  "seedPid": 255209,
+  "exactEntryReadback": true,
+  "observations": [
+    {
+      "sessionIdPreserved": true,
+      "activityPreserved": true,
+      "cachedNameRetained": true,
+      "initialDisplay": "Released topic",
+      "finalDisplay": "Renamed after upgrade 77",
+      "manualLabel": null,
+      "renameEvents": 1
+    },
+    {
+      "sessionIdPreserved": true,
+      "activityPreserved": true,
+      "cachedNameRetained": true,
+      "initialDisplay": "My manual GUI label",
+      "finalDisplay": "My manual GUI label",
+      "manualLabel": "My manual GUI label",
+      "renameEvents": 1
+    },
+    {
+      "sessionIdPreserved": true,
+      "activityPreserved": true,
+      "cachedNameRetained": true,
+      "initialDisplay": "Released second account",
+      "finalDisplay": "Renamed after upgrade 79",
+      "manualLabel": null,
+      "renameEvents": 1
+    }
+  ]
+}

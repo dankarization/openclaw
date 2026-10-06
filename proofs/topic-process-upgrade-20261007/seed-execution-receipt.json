@@ -1,0 +1,22 @@
+{
+  "phase": "seed",
+  "exitCode": 0,
+  "wallSeconds": 78.086,
+  "MemoryHigh": "3840M",
+  "MemoryMax": "4G",
+  "MemorySwapMax": "512M",
+  "command": [
+    "systemd-run",
+    "--user",
+    "--scope",
+    "--quiet",
+    "--unit=openclaw-topic-proof-seed-canonical-20261007",
+    "--property=MemoryHigh=3840M",
+    "--property=MemoryMax=4G",
+    "--property=MemorySwapMax=512M",
+    "node",
+    "scripts/run-vitest.mjs",
+    "src/config/sessions/session-accessor.process-upgrade.diagnostic.test.ts",
+    "--maxWorkers=1"
+  ]
+}

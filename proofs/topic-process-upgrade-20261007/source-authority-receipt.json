@@ -1,0 +1,9 @@
+{
+  "seedSource": "7287648fcbd6fac09ef033bad3a3e35f2b64ed89",
+  "readerSource": "bdc8bf4d8e50d44df3e2fafd150235eabb955936",
+  "releaseSource": "fc23bc864e4553c2d215e479eeec47b67a0bf943",
+  "releasedSessionOwnerDifferences": [],
+  "stateOwnerDifferences": [
+    "src/state/openclaw-state-db-existing-write.ts"
+  ]
+}

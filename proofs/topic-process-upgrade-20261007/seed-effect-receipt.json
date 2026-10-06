@@ -1,0 +1,124 @@
+{
+  "phase": "seed",
+  "pid": 255209,
+  "entries": [
+    {
+      "key": "agent:main:telegram:direct:42001:thread:77",
+      "entry": {
+        "sessionId": "synthetic-retained-new-chat",
+        "updatedAt": 123,
+        "displayName": "New Chat",
+        "topicName": "Released topic",
+        "delivery": {
+          "kind": "external",
+          "route": {
+            "channel": "telegram",
+            "accountId": "first-account",
+            "target": {
+              "to": "telegram:42001"
+            },
+            "thread": {
+              "id": "77"
+            }
+          },
+          "context": {
+            "channel": "telegram",
+            "to": "telegram:42001",
+            "accountId": "first-account",
+            "threadId": "77"
+          },
+          "origin": {
+            "label": "Synthetic Sender",
+            "provider": "telegram",
+            "surface": "telegram",
+            "chatType": "direct",
+            "from": "telegram:direct:42001",
+            "to": "telegram:42001",
+            "accountId": "first-account",
+            "threadId": "77"
+          }
+        },
+        "chatType": "direct"
+      }
+    },
+    {
+      "key": "agent:main:telegram:direct:42001:thread:78",
+      "entry": {
+        "sessionId": "synthetic-retained-manual-label",
+        "updatedAt": 123,
+        "displayName": "New Chat",
+        "topicName": "Released manual topic",
+        "label": "My manual GUI label",
+        "delivery": {
+          "kind": "external",
+          "route": {
+            "channel": "telegram",
+            "accountId": "first-account",
+            "target": {
+              "to": "telegram:42001"
+            },
+            "thread": {
+              "id": "78"
+            }
+          },
+          "context": {
+            "channel": "telegram",
+            "to": "telegram:42001",
+            "accountId": "first-account",
+            "threadId": "78"
+          },
+          "origin": {
+            "label": "Synthetic Sender",
+            "provider": "telegram",
+            "surface": "telegram",
+            "chatType": "direct",
+            "from": "telegram:direct:42001",
+            "to": "telegram:42001",
+            "accountId": "first-account",
+            "threadId": "78"
+          }
+        },
+        "chatType": "direct"
+      }
+    },
+    {
+      "key": "agent:main:telegram:direct:42001:thread:79",
+      "entry": {
+        "sessionId": "synthetic-retained-other-account",
+        "updatedAt": 123,
+        "displayName": "New Chat",
+        "topicName": "Released second account",
+        "delivery": {
+          "kind": "external",
+          "route": {
+            "channel": "telegram",
+            "accountId": "second-account",
+            "target": {
+              "to": "telegram:42001"
+            },
+            "thread": {
+              "id": "79"
+            }
+          },
+          "context": {
+            "channel": "telegram",
+            "to": "telegram:42001",
+            "accountId": "second-account",
+            "threadId": "79"
+          },
+          "origin": {
+            "label": "Synthetic Sender",
+            "provider": "telegram",
+            "surface": "telegram",
+            "chatType": "direct",
+            "from": "telegram:direct:42001",
+            "to": "telegram:42001",
+            "accountId": "second-account",
+            "threadId": "79"
+          }
+        },
+        "chatType": "direct"
+      }
+    }
+  ]
+}
