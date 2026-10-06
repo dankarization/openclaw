@@ -1,0 +1,28 @@
+{
+  "phase": "read",
+  "exitCode": 0,
+  "wallSeconds": 1269.441,
+  "MemorySwapMax": "512M",
+  "command": [
+    "systemd-run",
+    "--user",
+    "--scope",
+    "--quiet",
+    "--unit=openclaw-replay-proof-reader-after-deps-20261007",
+    "--property=MemoryHigh=2G",
+    "--property=MemoryMax=3G",
+    "--property=MemorySwapMax=512M",
+    "node",
+    "scripts/run-vitest.mjs",
+    "src/media-understanding/echo-transcript.process-upgrade.diagnostic.test.ts",
+    "--maxWorkers=1"
+  ],
+  "launchMemoryHigh": "2G",
+  "launchMemoryMax": "3G",
+  "finalMemoryHigh": "3840M",
+  "finalMemoryMax": "4G",
+  "scopeAdjustmentReceipts": [
+    "reader-own-scope-soft-limit-adjustment.json",
+    "reader-own-scope-final-limit-adjustment.json"
+  ]
+}

@@ -1,0 +1,96 @@
+[vitest-workers] local cache miss after 46076ms
+[PLUGIN_TIMINGS] Plugin hooks ran for 2.7s of this 10.1s build (27%).
+1 hook is listed without a time. Its calls overlapped, so the time inside one call includes work from other calls. To find its cost, profile the build with `node --cpu-prof`:
+  - tsdown:deps resolveId (2360 calls)
+See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
+
+[PLUGIN_TIMINGS] Plugin hooks ran for 6.0s of this 6.5s build (92%).
+The slowest hooks, timed inside each callback (the wait before a callback starts is excluded, the time it awaits is included):
+  - openclaw:worker-build-inputs load (67%, 4.4s, 1211 calls)
+Additional hook time came from the hooks below and from hooks under 1s.
+1 hook is listed without a time. Its calls overlapped, so the time inside one call includes work from other calls. To find its cost, profile the build with `node --cpu-prof`:
+  - tsdown:deps resolveId (2020 calls)
+See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
+
+node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/resolve-evaluate-options.js (48:0) [MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "" in "node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/resolve-evaluate-options.js" may not be preserved when bundling.
+    ╭─[ node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/resolve-evaluate-options.js:48:1 ]
+    │
+ 48 │ ''
+    │ ─┬  
+    │  ╰── module level directive may not be preserved
+    │ 
+    │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+────╯
+
+node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-create.js (6:0) [MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "" in "node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-create.js" may not be preserved when bundling.
+   ╭─[ node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-create.js:6:1 ]
+   │
+ 6 │ ''
+   │ ─┬  
+   │  ╰── module level directive may not be preserved
+   │ 
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-is-declaration.js (11:0) [MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "" in "node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-is-declaration.js" may not be preserved when bundling.
+    ╭─[ node_modules/.pnpm/@mdx-js+mdx@3.1.1_supports-color@10.2.2/node_modules/@mdx-js/mdx/lib/util/estree-util-is-declaration.js:11:1 ]
+    │
+ 11 │ ''
+    │ ─┬  
+    │  ╰── module level directive may not be preserved
+    │ 
+    │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+────╯
+
+node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/comment.js (12:0) [MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "" in "node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/comment.js" may not be preserved when bundling.
+    ╭─[ node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/comment.js:12:1 ]
+    │
+ 12 │ ''
+    │ ─┬  
+    │  ╰── module level directive may not be preserved
+    │ 
+    │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+────╯
+
+node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/text.js (9:0) [MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "" in "node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/text.js" may not be preserved when bundling.
+   ╭─[ node_modules/.pnpm/hast-util-to-estree@3.1.3_supports-color@10.2.2/node_modules/hast-util-to-estree/lib/handlers/text.js:9:1 ]
+   │
+ 9 │ ''
+   │ ─┬  
+   │  ╰── module level directive may not be preserved
+   │ 
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[vitest-workers] prepared a01f3f676eb2 in 1144644ms (13946 inputs, 17527 outputs)
+[test] starting test/vitest/vitest.infra.config.ts
+
+ RUN  v5.0.1 <consumer-checkout>
+
+[vitest] still running with no output for 30000ms.
+[vitest] still running with no output for 30000ms.
+stdout | src/media-understanding/echo-transcript.process-upgrade.diagnostic.test.ts > preserves existing queue entries across separate old and new native processes
+PROOF_STAGE read start
+
+stdout | src/media-understanding/echo-transcript.process-upgrade.diagnostic.test.ts > preserves existing queue entries across separate old and new native processes
+[state/db] state database schema migration pending; verifying integrity first
+
+stdout | src/media-understanding/echo-transcript.process-upgrade.diagnostic.test.ts > preserves existing queue entries across separate old and new native processes
+media: echo-transcript delivery failed: Error: Stable delivery intent is already queued: transcript-echo:v1:07f08fc5cd3f87ddc34520485a8856d84c7cd0737bf6361af1455ec0b9d958b5
+
+stdout | src/media-understanding/echo-transcript.process-upgrade.diagnostic.test.ts > preserves existing queue entries across separate old and new native processes
+media: echo-transcript delivery failed: Error: Stable delivery intent is already queued: transcript-echo:v1:5faacbfea989dbbcf373d3ff56b75c3cd9a7d4b02556c5460afb8a9413dd18ef
+
+stdout | src/media-understanding/echo-transcript.process-upgrade.diagnostic.test.ts > preserves existing queue entries across separate old and new native processes
+REPLAY_UPGRADE_READ {"pid":230653,"recovered":2,"adapterCalls":2,"remainingPending":0}
+
+ ✓  infra  src/media-understanding/echo-transcript.process-upgrade.diagnostic.test.ts > preserves existing queue entries across separate old and new native processes 5655ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  00:47:07
+   Duration  100.06s (transform 64%, import 25%, tests 6%, setup 5%)
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] passed 1 Vitest shard in 1264.62s

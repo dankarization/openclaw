@@ -1,0 +1,32 @@
+[vitest-workers] local cache hit after 12905ms
+[vitest-workers] reused local compiler outputs
+[vitest-workers] prepared e295fc7d58ef in 13053ms (16675 inputs, 17243 outputs)
+[test] starting test/vitest/vitest.infra.config.ts
+
+ RUN  v5.0.1 <producer-checkout>
+
+stdout | src/media-understanding/echo-transcript.process-upgrade.diagnostic.test.ts > preserves existing queue entries across separate old and new native processes
+PROOF_STAGE seed start
+
+stdout | src/media-understanding/echo-transcript.process-upgrade.diagnostic.test.ts > preserves existing queue entries across separate old and new native processes
+PROOF_STAGE before-completed-echo
+
+stdout | src/media-understanding/echo-transcript.process-upgrade.diagnostic.test.ts > preserves existing queue entries across separate old and new native processes
+media: echo-transcript sent to telegram/telegram:-100123:topic:7
+
+stdout | src/media-understanding/echo-transcript.process-upgrade.diagnostic.test.ts > preserves existing queue entries across separate old and new native processes
+PROOF_STAGE completed-echo-returned
+
+stdout | src/media-understanding/echo-transcript.process-upgrade.diagnostic.test.ts > preserves existing queue entries across separate old and new native processes
+REPLAY_UPGRADE_SEED {"pid":180391,"pending":2,"completed":2}
+
+ ✓  infra  src/media-understanding/echo-transcript.process-upgrade.diagnostic.test.ts > preserves existing queue entries across separate old and new native processes 5624ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  00:00:55
+   Duration  24.49s (transform 48%, tests 24%, import 22%, setup 6%)
+
+[vitest-workers] verifying completed generation before cleanup
+[vitest-workers] retained completed compiler outputs for reuse
+[test] passed 1 Vitest shard in 46.05s

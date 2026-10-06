@@ -1,0 +1,10 @@
+{
+  "seedSource": "7287648fcbd6fac09ef033bad3a3e35f2b64ed89",
+  "readerSource": "53bfd434bfe35bd7e00c240df9c01b77c505db49",
+  "releaseSource": "fc23bc864e4553c2d215e479eeec47b67a0bf943",
+  "releaseQueueWriterMatchesSeed": true,
+  "queueWriterSha256": "96877f04053bdc1381a51e01669031fc2fc66886fcdf107006ddb031c3a95f7a",
+  "seedOwnerDiffFromRelease": [
+    "src/state/openclaw-state-db-existing-write.ts"
+  ]
+}

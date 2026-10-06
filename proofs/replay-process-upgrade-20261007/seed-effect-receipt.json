@@ -1,0 +1,100 @@
+{
+  "phase": "seed",
+  "pid": 180391,
+  "entries": [
+    {
+      "id": "transcript-echo:v1:07f08fc5cd3f87ddc34520485a8856d84c7cd0737bf6361af1455ec0b9d958b5",
+      "enqueuedAt": 1791316879002,
+      "retryCount": 0,
+      "acknowledgedAt": 1791316879002,
+      "completionRetention": {
+        "idPrefix": "transcript-echo:v1:",
+        "maxAgeMs": 86400000,
+        "maxEntries": 2000
+      },
+      "recoveryState": "completed_bounded"
+    },
+    {
+      "id": "existing-release:completed",
+      "enqueuedAt": 1791316879057,
+      "retryCount": 0,
+      "acknowledgedAt": 1791316879057,
+      "completionRetention": {
+        "idPrefix": "existing-release:",
+        "maxAgeMs": 86400000,
+        "maxEntries": 2000
+      },
+      "recoveryState": "completed_bounded"
+    },
+    {
+      "id": "transcript-echo:v1:5faacbfea989dbbcf373d3ff56b75c3cd9a7d4b02556c5460afb8a9413dd18ef",
+      "enqueuedAt": 1791316879061,
+      "channel": "telegram",
+      "to": "telegram:-100123:topic:7",
+      "accountId": "synthetic-account",
+      "queuePolicy": "required",
+      "preparedBatch": {
+        "schemaVersion": 1,
+        "sourcePayloadCount": 1,
+        "entries": [
+          {
+            "sourceIndex": 0,
+            "status": "accepted",
+            "payload": {
+              "text": "📝 \"synthetic pending keyed echo\""
+            },
+            "replyHookChanged": false,
+            "messageHookChanged": false,
+            "preparedMediaCount": 0
+          }
+        ]
+      },
+      "threadId": 7,
+      "bestEffort": false,
+      "completionRetention": {
+        "idPrefix": "transcript-echo:v1:",
+        "maxAgeMs": 86400000,
+        "maxEntries": 2000
+      },
+      "retainOnFailure": true,
+      "retryCount": 0,
+      "attemptCount": 0
+    },
+    {
+      "id": "e7d70480-708f-4390-a409-f789070c7f0b",
+      "enqueuedAt": 1791316879065,
+      "channel": "telegram",
+      "to": "telegram:-100123",
+      "accountId": "synthetic-account",
+      "queuePolicy": "best_effort",
+      "preparedBatch": {
+        "schemaVersion": 1,
+        "sourcePayloadCount": 1,
+        "entries": [
+          {
+            "sourceIndex": 0,
+            "status": "accepted",
+            "payload": {
+              "text": "📝 \"synthetic pending released unkeyed echo\""
+            },
+            "replyHookChanged": false,
+            "messageHookChanged": false,
+            "preparedMediaCount": 0
+          }
+        ]
+      },
+      "bestEffort": true,
+      "retryCount": 0,
+      "attemptCount": 0
+    }
+  ],
+  "pendingIds": [
+    "transcript-echo:v1:5faacbfea989dbbcf373d3ff56b75c3cd9a7d4b02556c5460afb8a9413dd18ef",
+    "e7d70480-708f-4390-a409-f789070c7f0b"
+  ],
+  "completedIds": [
+    "transcript-echo:v1:07f08fc5cd3f87ddc34520485a8856d84c7cd0737bf6361af1455ec0b9d958b5",
+    "existing-release:completed"
+  ],
+  "adapterCalls": 2
+}

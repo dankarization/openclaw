@@ -1,0 +1,13 @@
+{
+  "phase": "read",
+  "pid": 230653,
+  "seedPid": 180391,
+  "unchangedEntryReadback": true,
+  "retainedCompletedReceipts": 2,
+  "recoveredPending": 2,
+  "failed": 0,
+  "adapterCalls": 2,
+  "completedKeyReplayAddedCalls": 0,
+  "recoveredKeyReplayAddedCalls": 0,
+  "remainingPending": 0
+}
