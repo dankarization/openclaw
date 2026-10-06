@@ -5,10 +5,7 @@ import path from "node:path";
 import { findNormalizedProviderValue } from "@openclaw/model-catalog-core/provider-id";
 import { expectDefined } from "@openclaw/normalization-core";
 import { ok, type Result } from "@openclaw/normalization-core/result";
-import {
-  normalizeLowercaseStringOrEmpty,
-  normalizeNullableString,
-} from "@openclaw/normalization-core/string-coerce";
+import { normalizeNullableString } from "@openclaw/normalization-core/string-coerce";
 import { normalizeStringEntries } from "@openclaw/normalization-core/string-normalization";
 import { truncateUtf16Safe } from "@openclaw/normalization-core/utf16-slice";
 import { MediaUnderstandingSkipError } from "../../packages/media-understanding-common/src/errors.js";
@@ -38,12 +35,10 @@ import type {
 } from "../config/types.tools.js";
 import { logVerbose, shouldLogVerbose } from "../globals.js";
 import { hasErrnoCode } from "../infra/errors.js";
-import { writeExternalFileWithinRoot } from "../infra/fs-safe.js";
 import { withGuardedFetchRequestAuthority } from "../infra/net/fetch-request-authority.js";
 import { resolveProxyFetchFromEnv } from "../infra/net/proxy-fetch.js";
 import { resolvePreferredOpenClawTmpDir } from "../infra/tmp-openclaw-dir.js";
 import { ImageOptimizationLimitError } from "../media/image-optimization-error.js";
-import { runFfmpeg } from "../media/media-services.js";
 import {
   getOfficialExternalPluginCatalogManifest,
   listOfficialExternalProviderCatalogEntries,
@@ -68,6 +63,7 @@ import {
 import { resolveOpenAiAudioAuthModelApi } from "./openai-audio-api.js";
 import { getMediaUnderstandingProvider, normalizeMediaProviderId } from "./provider-registry.js";
 import { resolveCliModelEntry, resolveEntryRunOptions } from "./resolve.js";
+import { resolveCliMediaPath } from "./runner.cli-media.js";
 import { isTranscriptArtifactText } from "./transcription-text.js";
 import type {
   AudioTranscriptionResult,
@@ -83,26 +79,6 @@ import type {
 type ProviderRegistry = Map<string, MediaUnderstandingProvider>;
 const loadModelAuth = createLazyRuntimeModule(async () => await import("../agents/model-auth.js"));
 
-function sanitizeProviderHeaders(
-  headers: Record<string, unknown> | undefined,
-): Record<string, string> | undefined {
-  if (!headers) {
-    return undefined;
-  }
-  const next: Record<string, string> = {};
-  for (const [key, value] of Object.entries(headers)) {
-    if (typeof value !== "string") {
-      continue;
-    }
-    // Intentionally preserve marker-shaped values here. This path handles
-    // explicit config/runtime provider headers, where literal values may
-    // legitimately match marker patterns; discovered models.json entries are
-    // sanitized separately in the model registry path.
-    next[key] = value;
-  }
-  return Object.keys(next).length > 0 ? next : undefined;
-}
-
 function trimOutput(text: string, maxChars?: number): string {
   const trimmed = text.trim();
   if (!maxChars || trimmed.length <= maxChars) {
@@ -111,16 +87,12 @@ function trimOutput(text: string, maxChars?: number): string {
   return truncateUtf16Safe(trimmed, maxChars).trim();
 }
 
-function extractSherpaOnnxText(raw: string): { matched: boolean; text: string } {
-  const noMatch = { matched: false, text: "" };
-  const tryParse = (value: string): { matched: boolean; text: string } => {
+function extractSherpaOnnxText(raw: string): string | undefined {
+  const tryParse = (value: string): string | undefined => {
     const trimmed = value.trim();
-    if (!trimmed) {
-      return noMatch;
-    }
     const head = trimmed[0];
     if (head !== "{" && head !== '"') {
-      return noMatch;
+      return undefined;
     }
     try {
       const parsed = JSON.parse(trimmed) as unknown;
@@ -130,35 +102,30 @@ function extractSherpaOnnxText(raw: string): { matched: boolean; text: string } 
       if (parsed && typeof parsed === "object") {
         const text = (parsed as { text?: unknown }).text;
         if (typeof text === "string") {
-          return { matched: true, text: text.trim() };
+          return text.trim();
         }
       }
     } catch {}
-    return noMatch;
+    return undefined;
   };
 
   const direct = tryParse(raw);
-  if (direct.matched) {
+  if (direct !== undefined) {
     return direct;
   }
 
   const lines = normalizeStringEntries(raw.split("\n"));
   for (let i = lines.length - 1; i >= 0; i -= 1) {
     const parsed = tryParse(lines[i] ?? "");
-    if (parsed.matched) {
+    if (parsed !== undefined) {
       return parsed;
     }
   }
-  return noMatch;
+  return undefined;
 }
 
 function commandBase(command: string): string {
   return path.parse(command).name;
-}
-
-function isAntigravityCliCommand(command: string): boolean {
-  const commandId = commandBase(command);
-  return commandId === "agy" || commandId === "antigravity";
 }
 
 function findArgValue(args: string[], keys: string[]): string | undefined {
@@ -182,10 +149,6 @@ function findArgValue(args: string[], keys: string[]): string | undefined {
   return undefined;
 }
 
-function hasArg(args: string[], keys: string[]): boolean {
-  return args.some((arg) => keys.includes(arg));
-}
-
 function resolveWhisperOutputPath(args: string[], mediaPath: string): string | null {
   const outputDir = findArgValue(args, ["--output_dir", "-o"]);
   if (!outputDir) {
@@ -199,7 +162,7 @@ function resolveWhisperOutputPath(args: string[], mediaPath: string): string | n
 }
 
 function resolveWhisperCppOutputPath(args: string[]): string | null {
-  if (!hasArg(args, ["-otxt", "--output-txt"])) {
+  if (!args.some((arg) => arg === "-otxt" || arg === "--output-txt")) {
     return null;
   }
   const outputBase = findArgValue(args, ["-of", "--output-file"]);
@@ -267,55 +230,12 @@ async function resolveCliOutput(params: {
 
   if (commandId === "sherpa-onnx-offline") {
     const response = extractSherpaOnnxText(params.stdout);
-    if (response.matched) {
-      return response.text;
+    if (response !== undefined) {
+      return response;
     }
   }
 
   return params.stdout.trim();
-}
-
-async function resolveCliMediaPath(params: {
-  capability: MediaUnderstandingCapability;
-  command: string;
-  mediaPath: string;
-  outputDir: string;
-  assertCurrent?: () => void;
-}): Promise<string> {
-  const commandId = commandBase(params.command);
-  if (params.capability !== "audio" || commandId !== "whisper-cli") {
-    return params.mediaPath;
-  }
-
-  const ext = normalizeLowercaseStringOrEmpty(path.extname(params.mediaPath));
-  if (ext === ".wav") {
-    return params.mediaPath;
-  }
-
-  const wavPath = path.join(params.outputDir, `${path.parse(params.mediaPath).name}.wav`);
-  await fs.mkdir(params.outputDir, { recursive: true });
-  await writeExternalFileWithinRoot({
-    rootDir: params.outputDir,
-    path: path.basename(wavPath),
-    write: async (outputPath) => {
-      params.assertCurrent?.();
-      await runFfmpeg([
-        "-y",
-        "-i",
-        params.mediaPath,
-        "-ac",
-        "1",
-        "-ar",
-        "16000",
-        "-c:a",
-        "pcm_s16le",
-        "-f",
-        "wav",
-        outputPath,
-      ]);
-    },
-  });
-  return wavPath;
 }
 
 type ProviderQuery = Record<string, string | number | boolean>;
@@ -451,20 +371,6 @@ async function resolveProviderExecutionAuth(params: {
   if (literalApiKey) {
     return apiKeyAuth(literalApiKey, `models.providers.${params.providerId}.apiKey`);
   }
-  const resolveMediaProviderAuth = (): ProviderExecutionAuth | undefined => {
-    const context = {
-      config: params.cfg,
-      provider: params.providerId,
-      providerConfig,
-    };
-    const providerAuth = params.provider?.resolveAuth?.(context);
-    if (providerAuth?.kind === "none") {
-      return providerAuth;
-    }
-    const keyAuth = providerAuth ?? params.provider?.resolveSyntheticAuth?.(context);
-    const apiKey = keyAuth?.apiKey.trim();
-    return apiKey ? apiKeyAuth(apiKey, keyAuth?.source) : undefined;
-  };
   const { isProviderAuthError, requireApiKey, resolveApiKeyForProviderCore } =
     await loadModelAuth();
   try {
@@ -488,9 +394,19 @@ async function resolveProviderExecutionAuth(params: {
     ) {
       throw err;
     }
-    const mediaAuth = resolveMediaProviderAuth();
-    if (mediaAuth) {
-      return mediaAuth;
+    const context = {
+      config: params.cfg,
+      provider: params.providerId,
+      providerConfig,
+    };
+    const providerAuth = params.provider?.resolveAuth?.(context);
+    if (providerAuth?.kind === "none") {
+      return providerAuth;
+    }
+    const keyAuth = providerAuth ?? params.provider?.resolveSyntheticAuth?.(context);
+    const apiKey = keyAuth?.apiKey.trim();
+    if (apiKey) {
+      return apiKeyAuth(apiKey, keyAuth?.source);
     }
     throw err;
   }
@@ -507,11 +423,15 @@ function resolveProviderRequestContext(params: {
     params.providerId,
   );
   const baseUrl = params.entry.baseUrl ?? params.config?.baseUrl ?? providerConfig?.baseUrl;
-  const mergedHeaders = {
-    ...sanitizeProviderHeaders(providerConfig?.headers as Record<string, unknown> | undefined),
-    ...sanitizeProviderHeaders(params.config?.headers as Record<string, unknown> | undefined),
-    ...sanitizeProviderHeaders(params.entry.headers as Record<string, unknown> | undefined),
-  };
+  const mergedHeaders: Record<string, string> = {};
+  for (const headers of [providerConfig?.headers, params.config?.headers, params.entry.headers]) {
+    for (const [key, value] of Object.entries(headers ?? {})) {
+      // Literal marker-shaped headers are valid here; discovery sanitizes its own headers.
+      if (typeof value === "string") {
+        mergedHeaders[key] = value;
+      }
+    }
+  }
   const headers = Object.keys(mergedHeaders).length > 0 ? mergedHeaders : undefined;
   const request = mergeModelProviderRequestOverrides(
     sanitizeConfiguredModelProviderRequest(providerConfig?.request),
@@ -622,7 +542,6 @@ export async function runProviderEntry(params: {
   capability: MediaUnderstandingCapability;
   entry: MediaUnderstandingModelConfig;
   cfg: OpenClawConfig;
-  ctx: MsgContext;
   attachmentIndex: number;
   cache: MediaAttachmentCache;
   agentId?: string;
@@ -645,12 +564,8 @@ export async function runProviderEntry(params: {
   if (params.secretOwnerId) {
     assertSecretOwnerAvailable("capability", params.secretOwnerId);
   }
-  const { maxBytes, maxChars, timeoutMs, prompt, hasConfiguredPrompt } = resolveEntryRunOptions({
-    capability,
-    entry,
-    cfg,
-    config: params.config,
-  });
+  const { maxBytes, maxChars, timeoutMs, prompt, hasConfiguredPrompt } =
+    resolveEntryRunOptions(params);
 
   if (capability === "image") {
     if (!params.agentDir) {
@@ -744,15 +659,12 @@ export async function runProviderEntry(params: {
     // STT prompts are spelling/context hints; injected instructions can be echoed on silence.
     const audioPrompt = params.request?.prompt ?? (hasConfiguredPrompt ? prompt : undefined);
     const transport = resolveProviderRequestContext({
+      ...params,
       providerId,
-      cfg,
-      entry,
-      config: params.config,
     });
     const providerQuery = resolveProviderQuery({
+      ...params,
       providerId,
-      config: params.config,
-      entry,
     });
     const model =
       entry.model?.trim() ||
@@ -797,13 +709,9 @@ export async function runProviderEntry(params: {
         "audio transcription callback",
       );
       const auth = await resolveProviderExecutionAuth({
-        capability,
+        ...params,
         providerId,
         provider,
-        cfg,
-        entry,
-        agentDir: params.agentDir,
-        workspaceDir: params.workspaceDir,
       });
       result = await withGuardedFetchRequestAuthority(params.assertCurrent, () =>
         executeProviderRequest(providerId, auth, (requestAuth) =>
@@ -841,19 +749,13 @@ export async function runProviderEntry(params: {
     );
   }
   const auth = await resolveProviderExecutionAuth({
-    capability,
+    ...params,
     providerId,
     provider,
-    cfg,
-    entry,
-    agentDir: params.agentDir,
-    workspaceDir: params.workspaceDir,
   });
   const { baseUrl, headers, request } = resolveProviderRequestContext({
+    ...params,
     providerId,
-    cfg,
-    entry,
-    config: params.config,
   });
   const model =
     entry.model?.trim() ||
@@ -900,7 +802,7 @@ export async function runCliEntry(params: {
   config?: MediaUnderstandingConfig;
   request?: MediaRequestOverrides;
 }): Promise<MediaUnderstandingOutput | null> {
-  const { entry, capability, cfg, ctx } = params;
+  const { entry, capability, ctx } = params;
   const attachmentIndex = params.attachment.index;
   const cli = resolveCliModelEntry(entry);
   if (!cli.ok) {
@@ -908,12 +810,7 @@ export async function runCliEntry(params: {
   }
   const { command, args } = cli.value;
   const language = params.request?.language ?? entry.language ?? params.config?.language;
-  const { maxBytes, maxChars, timeoutMs, prompt } = resolveEntryRunOptions({
-    capability,
-    entry,
-    cfg,
-    config: params.config,
-  });
+  const { maxBytes, maxChars, timeoutMs, prompt } = resolveEntryRunOptions(params);
   const attachmentPath = await params.cache.getPath({
     attachmentIndex,
     maxBytes,
@@ -972,7 +869,9 @@ export async function runCliEntry(params: {
     const { stdout, stderr } = await runExec(command, argv, {
       timeoutMs,
       maxBuffer: CLI_OUTPUT_MAX_BUFFER,
-      cwd: isAntigravityCliCommand(command) ? path.dirname(mediaPath) : undefined,
+      cwd: ["agy", "antigravity"].includes(commandBase(command))
+        ? path.dirname(mediaPath)
+        : undefined,
     });
     const requestedBackend =
       capability === "audio"

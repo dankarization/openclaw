@@ -45,6 +45,7 @@ describe("audio preflight attachment handoff", () => {
         },
       };
       const cfg: OpenClawConfig = {
+        plugins: { enabled: false },
         tools: { media: { audio: {} } },
       };
       const ctx: MsgContext = {

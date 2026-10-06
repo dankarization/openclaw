@@ -66,7 +66,6 @@ function missingProvider(provider: string) {
     capability: "audio",
     entry: { provider },
     cfg: {},
-    ctx: {} as RunProviderEntryParams["ctx"],
     attachmentIndex: 0,
     cache: {} as RunProviderEntryParams["cache"],
     providerRegistry: new Map(),
@@ -209,7 +208,7 @@ describe("media-understanding SecretRef owner isolation", () => {
         ownerId,
         appendConfigPathSegment("tools.media.audio.request.headers", sharedHeader),
       );
-      await withAudioFixture("openclaw-media-header-owner", async ({ ctx, cache }) => {
+      await withAudioFixture("openclaw-media-header-owner", async ({ cache }) => {
         const transcribeAudioWithContext = vi.fn<
           NonNullable<MediaUnderstandingProvider["transcribeAudioWithContext"]>
         >(async (request) => {
@@ -233,7 +232,6 @@ describe("media-understanding SecretRef owner isolation", () => {
           },
           cfg: {},
           config: { request: { headers: {} } },
-          ctx,
           attachmentIndex: 0,
           cache,
           providerRegistry: new Map([
@@ -271,7 +269,6 @@ describe("media-understanding SecretRef owner isolation", () => {
         cfg,
         config: cfg.tools.media.audio,
         secretOwnerId: ownerId,
-        ctx: {} as RunProviderEntryParams["ctx"],
         attachmentIndex: 0,
         cache: {} as RunProviderEntryParams["cache"],
         providerRegistry: new Map(),
@@ -302,7 +299,6 @@ describe("media-understanding SecretRef owner isolation", () => {
         entry,
         cfg,
         config: cfg.tools.media.audio,
-        ctx: {} as RunProviderEntryParams["ctx"],
         attachmentIndex: 0,
         cache: {} as RunProviderEntryParams["cache"],
         providerRegistry: new Map(),

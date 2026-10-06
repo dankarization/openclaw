@@ -115,6 +115,9 @@ vi.mock("../../agents/embedded-agent-runner/run-entry.js", async () => {
 vi.mock("../../agents/agent-bundle-mcp-manager-api.js", () => ({
   peekSessionMcpRuntime: (params: unknown) => state.peekSessionMcpRuntimeMock(params),
 }));
+vi.mock("../../agents/agent-bundle-mcp-manager-cleanup.js", () => ({
+  completeDeferredSessionMcpRuntimeRetirement: async () => false,
+}));
 
 vi.mock("../../agents/cli-runner.js", () => ({
   runCliAgent: (params: unknown) => state.runCliAgentMock(params),
@@ -409,7 +412,7 @@ export type EmbeddedAgentParams = {
   lifecycleGeneration?: string;
   onDeferredLifecycleOwner?: (owner: DeferredEmbeddedRunLifecycleOwner) => void;
   onCompactionAccounting?: RunEmbeddedAgentInternalParams["onCompactionAccounting"];
-  onExecutionStarted?: (info?: { lifecycleGeneration?: string }) => void;
+  onExecutionStarted?: RunEmbeddedAgentInternalParams["onExecutionStarted"];
   onExecutionPhase?: (info: {
     phase:
       | "runner_entered"
@@ -460,11 +463,7 @@ export type EmbeddedAgentParams = {
     approvalId?: string;
     approvalSlug?: string;
   }) => Promise<void> | void;
-  onAgentEvent?: (payload: {
-    stream: string;
-    data: Record<string, unknown>;
-    sessionKey?: string;
-  }) => Promise<void> | void;
+  onAgentEvent?: RunEmbeddedAgentInternalParams["onAgentEvent"];
 };
 
 export function createMockTypingSignaler(): TypingSignaler {
