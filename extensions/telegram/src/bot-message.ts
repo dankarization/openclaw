@@ -237,9 +237,9 @@ export const createTelegramMessageProcessor = (
       );
     }
     if (
+      isTelegramForumTopicTitleUpdate(context.primaryCtx.message) &&
       !context.isGroup &&
-      context.threadSpec.scope === "dm" &&
-      isTelegramForumTopicTitleUpdate(context.primaryCtx.message)
+      context.threadSpec.scope === "dm"
     ) {
       if (context.threadSpec.id == null) {
         // A malformed or incomplete title event has no safe session target.
@@ -261,7 +261,9 @@ export const createTelegramMessageProcessor = (
       });
       await metadataTask;
       if (metadataError !== undefined) {
-        throw metadataError;
+        throw metadataError instanceof Error
+          ? metadataError
+          : new Error("Telegram topic metadata update failed", { cause: metadataError });
       }
       // Topic create/edit service messages update an existing title; they are
       // metadata events, not user turns that should invoke an agent response.
