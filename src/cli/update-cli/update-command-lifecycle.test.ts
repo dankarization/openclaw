@@ -817,7 +817,7 @@ describe("update plugin lifecycle lease boundaries", () => {
         expect(doctorDeadline).toBeGreaterThan(Date.now() - 5_000);
         expect(doctorDeadline).toBeLessThanOrEqual(Date.now() + 5_000);
         expect(
-          runUpdateFinalizationDoctorInFreshProcess.mock.calls[0]?.[0].timeoutMs,
+          vi.mocked(runUpdateFinalizationDoctorInFreshProcess).mock.calls[0]?.[0].timeoutMs,
         ).toBeLessThanOrEqual(5_000);
       }
       expect(completePostCorePluginUpdate).toHaveBeenCalledWith(

@@ -7,6 +7,7 @@ import { createSubsystemLogger } from "../logging/subsystem.js";
 import { CommandProcessCleanupError } from "../process/exec-result.js";
 import { defaultRuntime } from "../runtime.js";
 import { createDeferredCore } from "../shared/deferred.js";
+import { GATEWAY_SERVICE_STOP_TIMEOUT_MS } from "./gateway-shutdown-budget.js";
 
 const fixture = vi.hoisted(() => ({
   close: vi.fn<() => Promise<void>>(),
@@ -482,7 +483,14 @@ it("does not stop a supervised predecessor when the delegated Doctor deadline ex
   const doctor = vi.fn();
   let wallNow = 1_000;
   const deadlineAtMs = wallNow + 500;
+  const errorReported = createDeferredCore();
+  vi.spyOn(process.stderr, "write").mockImplementation((value) => {
+    stderr.push(String(value));
+    errorReported.resolve();
+    return true;
+  });
   vi.spyOn(Date, "now").mockImplementation(() => wallNow);
+  // mock-isolation: Keep real Doctor repair, service and database effects outside this worker fixture.
   vi.doMock("../flows/doctor-health.js", () => {
     wallNow = deadlineAtMs + 1;
     return { runDoctorHealthFlow: doctor };
@@ -501,6 +509,8 @@ it("does not stop a supervised predecessor when the delegated Doctor deadline ex
       },
       "--doctor",
     );
+    // Database cleanup settles before the executable reports its terminal error.
+    await errorReported.promise;
   } finally {
     delete process.env.OPENCLAW_UPDATE_POST_INSTALL_DOCTOR_RESULT_PATH;
     vi.doUnmock("../flows/doctor-health.js");
@@ -516,6 +526,7 @@ it("bounds a supervised predecessor stop by the remaining Doctor deadline", asyn
   const doctor = vi.fn();
   const deadlineAtMs = 1_500;
   vi.spyOn(Date, "now").mockReturnValue(1_000);
+  // mock-isolation: Keep real Doctor repair, service and database effects outside this worker fixture.
   vi.doMock("../flows/doctor-health.js", () => ({ runDoctorHealthFlow: doctor }));
   fixture.ownerLease.mockReturnValue({ state: "live", mode: "supervised" });
   fixture.recordStep.mockImplementation(async (runId: string, step: unknown) => ({
@@ -584,6 +595,7 @@ it.each([
   { name: "does nothing without an owner", owner: undefined, stops: false },
 ])("delegated Doctor $name before entering maintenance", async ({ owner, stops, uncertain }) => {
   const doctor = vi.fn();
+  // mock-isolation: Keep real Doctor repair, service and database effects outside this worker fixture.
   vi.doMock("../flows/doctor-health.js", () => ({ runDoctorHealthFlow: doctor }));
   fixture.ownerLease.mockReturnValue(owner);
   fixture.recordStep.mockImplementation(async (runId: string, step: unknown) => ({
