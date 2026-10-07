@@ -139,9 +139,7 @@ export function registerUpdateRunReceiptTests(dirs: ProgressDirectories) {
               (await updateRunLedger.getUpdateRunAsync(run.runId, { env }))?.steps,
             ).toContainEqual(expect.objectContaining({ step: "fetch", status: "in_progress" }));
             expect(writer.mock.calls.length).toBeGreaterThan(0);
-            expect(
-              writer.mock.calls.every(([, , options]) => options?.busyTimeoutMs === 71_000),
-            ).toBe(true);
+            expect(writer.mock.calls.every((call) => call[2]?.busyTimeoutMs === 71_000)).toBe(true);
             if (custody === "replaced") {
               run.runId = `${originalRunId}-replaced`;
             }

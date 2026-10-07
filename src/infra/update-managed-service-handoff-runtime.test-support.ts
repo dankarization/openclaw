@@ -61,7 +61,9 @@ export async function prepareManagedServiceRuntimeFixture(params: {
         .join("\n") + "\nexport const { getUpdateRun } = ledger;"
     : undefined;
   const installObservedLedgerWriter = (script: string, modulePath: string) => {
-    if (!options?.replaceLedgerWriter) return script;
+    if (!options?.replaceLedgerWriter) {
+      return script;
+    }
     const moduleSource = createObservedLedgerModuleSource(
       ledgerRuntimeImport,
       observedLedgerExports,
@@ -140,7 +142,9 @@ export function createObservedLedgerModuleSource(
 }
 
 export async function readObservedLedgerWriteBudgetResult(statePath: string, enabled?: boolean) {
-  if (!enabled) return {};
+  if (!enabled) {
+    return {};
+  }
   return {
     ledgerWriteBudgets: (await fs.readFile(statePath + ".ledger-budgets", "utf8"))
       .trim()
