@@ -1776,13 +1776,20 @@ class MainViewModel private constructor(
         gatewayId,
         updated.groups.map { it.name },
         updated.sectionOrder.ifEmpty { next },
-        markMigrated = true,
-        consumeLegacy = false,
       )
     }
   }
 
-  suspend fun patchChatSession(
+  internal fun captureChatSessionRequestLease(expectedGatewayStableId: String?): GatewaySession.RequestLease? {
+    val gatewayId = expectedGatewayStableId?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    if (activeGatewayStableId.value != gatewayId) return null
+    return runtimeRef.value
+      ?.chat
+      ?.captureSessionCatalogLease(gatewayId)
+      ?.takeIf { ownsSessionGroupLease(it, gatewayId) }
+  }
+
+  internal suspend fun patchChatSession(
     key: String,
     ownerAgentId: String? = null,
     expectedSessionId: String? = null,
@@ -1797,7 +1804,9 @@ class MainViewModel private constructor(
     pinned: Boolean? = null,
     archived: Boolean? = null,
     unread: Boolean? = null,
+    requestLease: GatewaySession.RequestLease? = null,
   ) {
+    if (requestLease != null && !ownsSessionGroupLease(requestLease, requestLease.endpointStableId)) return
     ensureRuntime().chat.patchSession(
       key = key,
       ownerAgentId = ownerAgentId,
@@ -1813,6 +1822,7 @@ class MainViewModel private constructor(
       pinned = pinned,
       archived = archived,
       unread = unread,
+      requestLease = requestLease,
     )
   }
 
@@ -1864,24 +1874,13 @@ class MainViewModel private constructor(
           gatewayId,
           authoritative,
           listed.sectionOrder,
-          markMigrated = true,
-          consumeLegacy = false,
         )
         if (sessionKey != null && ownsSessionGroupLease(lease, gatewayId)) {
           chat.patchSession(key = sessionKey, ownerAgentId = ownerAgentId, category = trimmed, requestLease = lease)
         }
         return@withLock
       }
-      val includeLegacy =
-        authoritative.isEmpty() &&
-          !prefs.isSessionGroupCatalogMigrated(gatewayId) &&
-          !prefs.isSessionGroupLegacyConsumed()
-      val base =
-        if (includeLegacy) {
-          unionSessionGroupNames(authoritative, prefs.legacySessionCustomGroups())
-        } else {
-          authoritative
-        }
+      val base = unionSessionGroupNames(authoritative, prefs.legacySessionCustomGroups())
       val next = unionSessionGroupNames(base, listOf(trimmed))
       val updated = chat.putSessionGroups(next, lease)
       if (updated == null) {
@@ -1892,8 +1891,6 @@ class MainViewModel private constructor(
           gatewayId,
           retry.groups.map { it.name },
           retry.sectionOrder,
-          markMigrated = false,
-          consumeLegacy = false,
         )
         return@withLock
       }
@@ -1903,8 +1900,6 @@ class MainViewModel private constructor(
         gatewayId,
         updated.groups.map { it.name },
         updated.sectionOrder,
-        markMigrated = true,
-        consumeLegacy = includeLegacy,
       )
       if (sessionKey != null && ownsSessionGroupLease(lease, gatewayId)) {
         chat.patchSession(key = sessionKey, ownerAgentId = ownerAgentId, category = trimmed, requestLease = lease)
@@ -1929,8 +1924,6 @@ class MainViewModel private constructor(
         gatewayId,
         updated.groups.map { it.name },
         updated.sectionOrder,
-        markMigrated = true,
-        consumeLegacy = false,
       )
     }
   }
@@ -1951,8 +1944,6 @@ class MainViewModel private constructor(
         gatewayId,
         updated.groups.map { it.name },
         updated.sectionOrder,
-        markMigrated = true,
-        consumeLegacy = false,
       )
     }
   }
@@ -1969,7 +1960,6 @@ class MainViewModel private constructor(
       decideSessionGroupMigration(
         listedNames = listedNames,
         legacyNames = legacy,
-        alreadyMigrated = prefs.isSessionGroupCatalogMigrated(gatewayId),
         canPut = lease.canPutSessionGroups(),
       )
     if (decision.putLegacy) {
@@ -1980,8 +1970,6 @@ class MainViewModel private constructor(
         gatewayId,
         migrated.groups.map { it.name },
         migrated.sectionOrder,
-        markMigrated = true,
-        consumeLegacy = legacy.all { name -> migrated.groups.any { it.name == name.trim() } },
       )
       return
     }
@@ -1991,16 +1979,12 @@ class MainViewModel private constructor(
       gatewayId,
       listedNames,
       listed.sectionOrder,
-      markMigrated = decision.markMigrated,
-      consumeLegacy = decision.consumeLegacy,
     )
   }
 
   private fun displayedSessionGroups(gatewayId: String?): List<String> {
     val id = gatewayId?.trim()?.takeIf { it.isNotEmpty() } ?: return emptyList()
-    prefs.storedSessionGroupCatalog(id)?.let { return it }
-    if (prefs.isSessionGroupLegacyConsumed() || prefs.isSessionGroupCatalogMigrated(id)) return emptyList()
-    return prefs.legacySessionCustomGroups()
+    return unionSessionGroupNames(prefs.storedSessionGroupCatalog(id).orEmpty(), prefs.legacySessionCustomGroups())
   }
 
   private fun displayedSessionSectionOrder(gatewayId: String?): List<String> {
@@ -2018,16 +2002,15 @@ class MainViewModel private constructor(
     gatewayId: String,
     names: List<String>,
     sectionOrder: List<String>,
-    markMigrated: Boolean,
-    consumeLegacy: Boolean,
   ) {
     lease.commitIfCurrent {
       if (activeGatewayStableId.value != gatewayId) return@commitIfCurrent
       prefs.setStoredSessionGroupCatalog(gatewayId, names)
       prefs.setStoredSessionGroupSectionOrder(gatewayId, sectionOrder)
-      if (markMigrated) prefs.markSessionGroupCatalogMigrated(gatewayId)
-      if (consumeLegacy) prefs.consumeLegacySessionCustomGroups()
-      sessionGroupCatalogState.value = names
+      val migration = decideSessionGroupMigration(names, prefs.legacySessionCustomGroups(), canPut = false)
+      if (migration.markMigrated) prefs.markSessionGroupCatalogMigrated(gatewayId) else prefs.clearSessionGroupCatalogMigrated(gatewayId)
+      if (migration.consumeLegacy) prefs.consumeLegacySessionCustomGroups()
+      sessionGroupCatalogState.value = displayedSessionGroups(gatewayId)
       sessionSectionOrderState.value = sectionOrder
     }
   }

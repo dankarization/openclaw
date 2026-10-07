@@ -1115,6 +1115,12 @@ class SecurePrefs(
     persistStringList(sessionGroupCatalogMigratedKey, loadStringList(sessionGroupCatalogMigratedKey) + trimmed)
   }
 
+  fun clearSessionGroupCatalogMigrated(gatewayId: String) {
+    val current = loadStringList(sessionGroupCatalogMigratedKey)
+    if (gatewayId !in current) return
+    persistStringList(sessionGroupCatalogMigratedKey, current.filterNot { it == gatewayId })
+  }
+
   fun setSidebarPageOrder(pageIds: List<String>) = _sidebarPageOrder.persistStringList(sidebarPageOrderKey, sanitizeSidebarPageOrder(pageIds))
 
   fun setSidebarVisiblePages(pageIds: List<String>) = _sidebarVisiblePages.persistStringList(sidebarVisiblePagesKey, sanitizeSidebarVisiblePages(pageIds))

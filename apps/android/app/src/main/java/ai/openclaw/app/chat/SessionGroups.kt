@@ -58,15 +58,14 @@ internal data class SessionGroupMigrationDecision(
 internal fun decideSessionGroupMigration(
   listedNames: List<String>,
   legacyNames: List<String>,
-  alreadyMigrated: Boolean,
   canPut: Boolean,
 ): SessionGroupMigrationDecision {
   val listed = unionSessionGroupNames(listedNames, emptyList()).toSet()
   val legacy = unionSessionGroupNames(legacyNames, emptyList())
   val hasUnimportedLegacy = legacy.any { it !in listed }
-  val putLegacy = canPut && !alreadyMigrated && hasUnimportedLegacy
-  val consumeLegacy = legacy.isNotEmpty() && (putLegacy || !hasUnimportedLegacy)
-  val markMigrated = alreadyMigrated || !hasUnimportedLegacy || putLegacy
+  val putLegacy = canPut && hasUnimportedLegacy
+  val consumeLegacy = legacy.isNotEmpty() && !hasUnimportedLegacy
+  val markMigrated = !hasUnimportedLegacy
   return SessionGroupMigrationDecision(
     putLegacy = putLegacy,
     consumeLegacy = consumeLegacy,

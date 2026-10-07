@@ -34,17 +34,15 @@ class SessionGroupsTest {
       decideSessionGroupMigration(
         listedNames = emptyList(),
         legacyNames = listOf("Folder"),
-        alreadyMigrated = false,
         canPut = true,
       )
     assertEquals(true, restricted.putLegacy)
-    assertEquals(true, restricted.consumeLegacy)
+    assertEquals(false, restricted.consumeLegacy)
 
     val otherGateway =
       decideSessionGroupMigration(
         listedNames = emptyList(),
         legacyNames = emptyList(),
-        alreadyMigrated = false,
         canPut = true,
       )
     assertEquals(false, otherGateway.putLegacy)
@@ -54,11 +52,10 @@ class SessionGroupsTest {
       decideSessionGroupMigration(
         listedNames = listOf("Work"),
         legacyNames = listOf("Folder"),
-        alreadyMigrated = false,
         canPut = true,
       )
     assertEquals(true, nonempty.putLegacy)
-    assertEquals(true, nonempty.consumeLegacy)
+    assertEquals(false, nonempty.consumeLegacy)
     assertEquals(listOf("Work", "Extra"), unionSessionGroupNames(listOf("Work"), listOf("Extra", "Work")))
   }
 
@@ -110,21 +107,18 @@ class SessionGroupsTest {
 
   @Test
   fun preservesUnimportedLegacyWhenTheCatalogCannotAcceptIt() {
-    for (alreadyMigrated in listOf(false, true)) {
-      val decision =
-        decideSessionGroupMigration(
-          listedNames = listOf("Work"),
-          legacyNames = listOf("Folder", "Work"),
-          alreadyMigrated = alreadyMigrated,
-          canPut = false,
-        )
-      assertEquals(false, decision.putLegacy)
-      assertEquals(false, decision.consumeLegacy)
-      assertEquals(alreadyMigrated, decision.markMigrated)
-    }
+    val decision =
+      decideSessionGroupMigration(
+        listedNames = listOf("Work"),
+        legacyNames = listOf("Folder", "Work"),
+        canPut = false,
+      )
+    assertEquals(false, decision.putLegacy)
+    assertEquals(false, decision.consumeLegacy)
+    assertEquals(false, decision.markMigrated)
     assertEquals(
       true,
-      decideSessionGroupMigration(listOf("Work", "Folder"), listOf("Folder"), alreadyMigrated = false, canPut = false).consumeLegacy,
+      decideSessionGroupMigration(listOf("Work", "Folder"), listOf("Folder"), canPut = false).consumeLegacy,
     )
   }
 

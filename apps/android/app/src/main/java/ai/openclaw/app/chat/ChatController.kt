@@ -1272,7 +1272,7 @@ class ChatController internal constructor(
     limit: Int? = null,
     archived: Boolean = false,
   ) {
-    scope.launch { fetchSessions(limit = limit, archived = archived) }
+    scope.launch { fetchSessionsForCurrentWindow(limit = limit, archived = archived) }
   }
 
   /** Next sidebar roster page. Rows merge into the folders they already belong to. */
@@ -1681,7 +1681,7 @@ class ChatController internal constructor(
         }
       val lease = captureRequestLease(requestCacheScope) ?: throw GatewayRequestNotEnqueued("not connected")
       val createdKey = parseCreatedSessionKey(json, requestSessionCreate(requestCacheScope, params, lease))
-      fetchSessions(limit = sessionsListLimit, archived = false)
+      fetchSessionsForCurrentWindow(archived = false)
       createdKey
     } catch (err: Throwable) {
       updateErrorText(err.message)
@@ -5340,12 +5340,18 @@ class ChatController internal constructor(
     }
   }
 
-  private suspend fun fetchSessionsForCurrentWindow(): Boolean =
+  private suspend fun fetchSessionsForCurrentWindow(
+    limit: Int? = null,
+    archived: Boolean? = null,
+  ): Boolean =
     sessionRosterLoadMutex.withLock {
+      val requestArchived = archived ?: sessionsListArchived
+      val requestedLimit = limit?.takeIf { it > 0 } ?: sessionsListLimit ?: SIDEBAR_SESSION_ROSTER_LIMIT.takeUnless { requestArchived }
+      val loadedLimit = sessionRosterLoadedLimit.takeIf { !requestArchived && !sessionsListArchived }
       fetchSessions(
-        limit = if (sessionsListArchived) sessionsListLimit else sessionRosterLoadedLimit ?: sessionsListLimit,
-        archived = sessionsListArchived,
-        preserveWindow = true,
+        limit = loadedLimit?.let { maxOf(it, requestedLimit ?: it) } ?: requestedLimit,
+        archived = requestArchived,
+        preserveWindow = loadedLimit != null,
       )
     }
 
@@ -5438,13 +5444,7 @@ class ChatController internal constructor(
           if (!applied || lease?.isCurrent() != true || !synchronized(gatewayScopeApplyLock) { ownsSelection() }) return@async
           if (healthy == true && !hasCurrentChatMetadata()) fetchChatMetadata()
           if (refresh.refreshSessions && lease.isCurrent() && synchronized(gatewayScopeApplyLock) { ownsSelection() }) {
-            // Health used to replace the drawer with 50 rows, which dropped folder and
-            // group members the web sidebar still shows. Keep the sidebar roster page.
-            if (sessionsListArchived) {
-              fetchSessions(limit = sessionsListLimit, archived = true)
-            } else {
-              fetchSessions(limit = SIDEBAR_SESSION_ROSTER_LIMIT, archived = false)
-            }
+            fetchSessionsForCurrentWindow()
           }
         } finally {
           synchronized(gatewayScopeApplyLock) { refresh.claimed = false }

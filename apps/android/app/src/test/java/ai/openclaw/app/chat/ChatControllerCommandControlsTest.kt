@@ -584,7 +584,7 @@ class ChatControllerCommandControlsTest {
     }
 
   @Test
-  fun membershipAndCatalogRefreshRetainLoadedRosterPagesAndOriginalPageSize() =
+  fun membershipCatalogAndOrdinaryRefreshRetainLoadedRosterPagesAndOriginalPageSize() =
     runTest {
       val listParams = mutableListOf<kotlinx.serialization.json.JsonObject>()
       val controller =
@@ -627,10 +627,16 @@ class ChatControllerCommandControlsTest {
           ?.name,
       )
       assertEquals(4, controller.sessions.value.size)
+      controller.refresh()
+      advanceUntilIdle()
+      assertEquals("Health refresh must retain the loaded window", 4, controller.sessions.value.size)
+      controller.refreshSessions(limit = 2)
+      advanceUntilIdle()
+      assertEquals("Explicit refresh must retain the loaded window", 4, controller.sessions.value.size)
       assertTrue(controller.loadMoreSessions())
       assertEquals(6, controller.sessions.value.size)
-      assertEquals(listOf(2, 2, 4, 4, 2), listParams.map { it["limit"]?.jsonPrimitive?.content?.toInt() })
-      assertEquals(listOf(null, 2, null, null, 4), listParams.map { it["offset"]?.jsonPrimitive?.content?.toInt() })
+      assertEquals(listOf(2, 2, 4, 4, 4, 4, 2), listParams.map { it["limit"]?.jsonPrimitive?.content?.toInt() })
+      assertEquals(listOf(null, 2, null, null, null, null, 4), listParams.map { it["offset"]?.jsonPrimitive?.content?.toInt() })
     }
 
   @Test

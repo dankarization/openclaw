@@ -695,8 +695,10 @@ internal fun OpenClawSidebar(
           onMoveToGroup =
             if (canMutateSessions) {
               { category ->
-                scope.launch {
-                  viewModel.patchChatSession(key = session.key, ownerAgentId = session.ownerAgentId, category = category)
+                viewModel.captureChatSessionRequestLease(gatewayStableId)?.let { lease ->
+                  scope.launch {
+                    viewModel.patchChatSession(key = session.key, ownerAgentId = session.ownerAgentId, category = category, requestLease = lease)
+                  }
                 }
               }
             } else {
@@ -705,8 +707,10 @@ internal fun OpenClawSidebar(
           onRemoveFromGroup =
             if (canMutateSessions && !session.category.isNullOrBlank()) {
               {
-                scope.launch {
-                  viewModel.patchChatSession(key = session.key, ownerAgentId = session.ownerAgentId, clearCategory = true)
+                viewModel.captureChatSessionRequestLease(gatewayStableId)?.let { lease ->
+                  scope.launch {
+                    viewModel.patchChatSession(key = session.key, ownerAgentId = session.ownerAgentId, clearCategory = true, requestLease = lease)
+                  }
                 }
               }
             } else {
