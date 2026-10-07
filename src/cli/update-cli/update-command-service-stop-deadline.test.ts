@@ -1,4 +1,4 @@
-// Retain the maintained admission fixtures; only native manager observations are synthetic.
+// Install maintained service fixtures before loading the maintenance owner.
 import "./update-command-service-maintenance.test-support.js";
 import path from "node:path";
 import { PassThrough } from "node:stream";
@@ -14,11 +14,8 @@ import { resolveRemainingDoctorServiceInspectionTimeoutMs } from "../../infra/up
 import * as processExec from "../../process/exec.js";
 import { mockProcessPlatform } from "../../test-utils/vitest-spies.js";
 import { maybeStopManagedServiceBeforeMutableUpdate } from "./update-command-service-maintenance.js";
-import {
-  fixtureGatewayPid,
-  mocks,
-  withServiceHome,
-} from "./update-command-service-maintenance.test-support.js";
+const { fixtureGatewayPid, mocks, withServiceHome } =
+  await import("./update-command-service-maintenance.test-support.js");
 
 const deadlineAtMs = 1_500;
 
