@@ -650,6 +650,7 @@ async function stopManagedServiceBeforeMutableUpdate(
         env: currentState.env,
         stdout: params.jsonMode ? JSON_MODE_SERVICE_STDOUT : process.stdout,
         assertCurrent,
+        beforeEffect: params.assertDeadline,
         ...(updateRun
           ? { updateHandoff: { root: params.handoffRoot ?? params.root, runId: updateRun.runId } }
           : {}),
