@@ -24,8 +24,7 @@ import ai.openclaw.app.chat.SessionForkResult
 import ai.openclaw.app.chat.SessionRewindResult
 import ai.openclaw.app.chat.decideSessionGroupMigration
 import ai.openclaw.app.chat.defaultChatThinkingLevelSelection
-import ai.openclaw.app.chat.moveSidebarSectionByDirection
-import ai.openclaw.app.chat.normalizeSidebarSectionOrder
+import ai.openclaw.app.chat.moveSessionGroupCatalogSection
 import ai.openclaw.app.chat.resolveChatComposerOwner
 import ai.openclaw.app.chat.sidebarCategoryNames
 import ai.openclaw.app.chat.unionSessionGroupNames
@@ -1751,7 +1750,6 @@ class MainViewModel private constructor(
     sourceToken: String,
     direction: Int,
     visibleTokens: List<String>,
-    knownGroups: List<String>,
     catalogIds: List<String>,
     expectedGatewayStableId: String,
   ) {
@@ -1763,15 +1761,10 @@ class MainViewModel private constructor(
       val lease = chat.captureSessionCatalogLease(gatewayId) ?: return@withLock
       val listed = chat.listSessionGroups(lease) ?: return@withLock
       if (!ownsSessionGroupLease(lease, gatewayId)) return@withLock
-      val normalized =
-        normalizeSidebarSectionOrder(
-          stored = listed.sectionOrder,
-          knownGroups = knownGroups,
-          catalogIds = catalogIds,
-        )
       val next =
-        moveSidebarSectionByDirection(
-          order = normalized,
+        moveSessionGroupCatalogSection(
+          catalog = listed,
+          catalogIds = catalogIds,
           visibleTokens = visibleTokens,
           source = sourceToken,
           direction = direction,
@@ -1840,7 +1833,7 @@ class MainViewModel private constructor(
 
   /**
    * Loads `sessions.groups.list` on the gateway that was active when the refresh started.
-   * Device-local names migrate once into an empty catalog. A catalog cached from another
+   * Device-local names migrate once without replacing existing catalog names. A catalog cached from another
    * gateway is not treated as that legacy input.
    */
   suspend fun refreshSessionGroups() {
@@ -1851,6 +1844,8 @@ class MainViewModel private constructor(
   suspend fun addChatSessionGroup(
     name: String,
     expectedGatewayStableId: String? = null,
+    sessionKey: String? = null,
+    ownerAgentId: String? = null,
   ) {
     val trimmed = name.trim()
     if (trimmed.isEmpty()) return
@@ -1872,6 +1867,9 @@ class MainViewModel private constructor(
           markMigrated = true,
           consumeLegacy = false,
         )
+        if (sessionKey != null && ownsSessionGroupLease(lease, gatewayId)) {
+          chat.patchSession(key = sessionKey, ownerAgentId = ownerAgentId, category = trimmed, requestLease = lease)
+        }
         return@withLock
       }
       val includeLegacy =
@@ -1908,6 +1906,9 @@ class MainViewModel private constructor(
         markMigrated = true,
         consumeLegacy = includeLegacy,
       )
+      if (sessionKey != null && ownsSessionGroupLease(lease, gatewayId)) {
+        chat.patchSession(key = sessionKey, ownerAgentId = ownerAgentId, category = trimmed, requestLease = lease)
+      }
     }
   }
 
@@ -1972,7 +1973,7 @@ class MainViewModel private constructor(
         canPut = lease.canPutSessionGroups(),
       )
     if (decision.putLegacy) {
-      val migrated = chat.putSessionGroups(legacy, lease) ?: return
+      val migrated = chat.putSessionGroups(unionSessionGroupNames(listedNames, legacy), lease) ?: return
       if (!ownsSessionGroupLease(lease, gatewayId)) return
       publishSessionGroupCatalog(
         lease,
@@ -1980,7 +1981,7 @@ class MainViewModel private constructor(
         migrated.groups.map { it.name },
         migrated.sectionOrder,
         markMigrated = true,
-        consumeLegacy = true,
+        consumeLegacy = legacy.all { name -> migrated.groups.any { it.name == name.trim() } },
       )
       return
     }

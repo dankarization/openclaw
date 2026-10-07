@@ -127,7 +127,7 @@ internal fun SessionsScreen(
   var deleteGroupTarget by key("delete-group-owner") {
     rememberSaveable(stateSaver = SessionGroupActionTargetSaver) { mutableStateOf<SessionGroupActionTarget?>(null) }
   }
-  var newGroupDialogVisible by rememberSaveable { mutableStateOf(false) }
+  var newGroupGatewayId by rememberSaveable { mutableStateOf<String?>(null) }
   val searchState =
     rememberSessionBrowserSearchState(
       viewModel = viewModel,
@@ -165,6 +165,7 @@ internal fun SessionsScreen(
     deleteSessionTarget = deleteSessionTarget?.takeIf { it.matchesGateway(activeGatewayStableId) }
     renameGroupTarget = renameGroupTarget?.takeIf { it.gatewayStableId == activeGatewayStableId }
     deleteGroupTarget = deleteGroupTarget?.takeIf { it.gatewayStableId == activeGatewayStableId }
+    newGroupGatewayId = newGroupGatewayId?.takeIf { it == activeGatewayStableId }
   }
 
   LaunchedEffect(isConnected, filter) {
@@ -357,7 +358,7 @@ internal fun SessionsScreen(
                 SessionGroupHeader(
                   title = title,
                   onRename = { renameGroupTarget = SessionGroupActionTarget(activeGatewayStableId, title) },
-                  onNewGroup = { newGroupDialogVisible = true },
+                  onNewGroup = { newGroupGatewayId = activeGatewayStableId },
                   onDelete = { deleteGroupTarget = SessionGroupActionTarget(activeGatewayStableId, title) },
                 )
               } else {
@@ -526,8 +527,12 @@ internal fun SessionsScreen(
         groupSessionTarget = null
         if (!session.matchesGateway(activeGatewayStableId)) return@SessionTextDialog
         coroutineScope.launch {
-          viewModel.addChatSessionGroup(value, expectedGatewayStableId = session.gatewayStableId)
-          viewModel.patchChatSession(key = session.key, ownerAgentId = session.ownerAgentId, category = value.trim())
+          viewModel.addChatSessionGroup(
+            value,
+            expectedGatewayStableId = session.gatewayStableId,
+            sessionKey = session.key,
+            ownerAgentId = session.ownerAgentId,
+          )
         }
       },
     )
@@ -554,17 +559,18 @@ internal fun SessionsScreen(
     )
   }
 
-  if (newGroupDialogVisible) {
+  newGroupGatewayId?.let { ownerGatewayId ->
     SessionTextDialog(
       title = nativeString("New group"),
-      stateKey = "group-new",
+      stateKey = "group-new:$ownerGatewayId",
       initialValue = "",
       confirmLabel = nativeString("Create"),
       allowEmpty = false,
-      onDismiss = { newGroupDialogVisible = false },
+      onDismiss = { newGroupGatewayId = null },
       onConfirm = { value ->
-        newGroupDialogVisible = false
-        coroutineScope.launch { viewModel.addChatSessionGroup(value) }
+        newGroupGatewayId = null
+        if (ownerGatewayId != viewModel.activeGatewayStableId.value) return@SessionTextDialog
+        coroutineScope.launch { viewModel.addChatSessionGroup(value, expectedGatewayStableId = ownerGatewayId) }
       },
     )
   }

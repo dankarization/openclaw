@@ -45,7 +45,7 @@ internal fun parseSessionGroupsPayload(payload: String): List<GatewaySessionGrou
 }
 
 /**
- * One-shot move of device-local folder names into an empty gateway catalog.
+ * One-shot import of device-local folder names into the gateway catalog.
  * A live catalog cached from another gateway is not legacy input.
  * `canPut` is false when the gateway advertises methods and omits `sessions.groups.put`.
  */
@@ -61,11 +61,12 @@ internal fun decideSessionGroupMigration(
   alreadyMigrated: Boolean,
   canPut: Boolean,
 ): SessionGroupMigrationDecision {
-  val listedCount = listedNames.count { it.isNotBlank() }
-  val legacyCount = legacyNames.count { it.isNotBlank() }
-  val putLegacy = canPut && !alreadyMigrated && listedCount == 0 && legacyCount > 0
-  val consumeLegacy = canPut && legacyCount > 0 && (putLegacy || listedCount > 0)
-  val markMigrated = alreadyMigrated || listedCount > 0 || legacyCount == 0 || putLegacy
+  val listed = unionSessionGroupNames(listedNames, emptyList()).toSet()
+  val legacy = unionSessionGroupNames(legacyNames, emptyList())
+  val hasUnimportedLegacy = legacy.any { it !in listed }
+  val putLegacy = canPut && !alreadyMigrated && hasUnimportedLegacy
+  val consumeLegacy = legacy.isNotEmpty() && (putLegacy || !hasUnimportedLegacy)
+  val markMigrated = alreadyMigrated || !hasUnimportedLegacy || putLegacy
   return SessionGroupMigrationDecision(
     putLegacy = putLegacy,
     consumeLegacy = consumeLegacy,
@@ -205,3 +206,24 @@ internal fun sidebarCategoryNames(order: List<String>): List<String> {
   }
   return names
 }
+
+/** Reorders visible sections against the fresh catalog, retaining other clients' hidden catalogs. */
+internal fun moveSessionGroupCatalogSection(
+  catalog: SessionGroupCatalogSnapshot,
+  catalogIds: List<String>,
+  visibleTokens: List<String>,
+  source: String,
+  direction: Int,
+): List<String>? =
+  moveSidebarSectionByDirection(
+    order =
+      normalizeSidebarSectionOrder(
+        stored = catalog.sectionOrder,
+        knownGroups = catalog.groups.map { it.name },
+        catalogIds =
+          (catalogIds + catalog.sectionOrder.filter { it.startsWith("catalog:") }.map { it.removePrefix("catalog:") }).distinct(),
+      ),
+    visibleTokens = visibleTokens,
+    source = source,
+    direction = direction,
+  )

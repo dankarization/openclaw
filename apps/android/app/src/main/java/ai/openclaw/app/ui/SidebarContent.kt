@@ -1022,7 +1022,6 @@ internal fun OpenClawSidebar(
                 sourceToken = token,
                 direction = direction,
                 visibleTokens = visibleReorderTokens,
-                knownGroups = groupSections.map { it.name },
                 catalogIds = if (catalogAvailable) catalogSections.map { it.catalog.id } else emptyList(),
                 expectedGatewayStableId = gatewayId,
               )
@@ -1380,8 +1379,12 @@ internal fun OpenClawSidebar(
         newGroupForSessionTarget = null
         if (!target.matchesGateway(viewModel.activeGatewayStableId.value)) return@SessionTextDialog
         scope.launch {
-          viewModel.addChatSessionGroup(value, expectedGatewayStableId = target.gatewayStableId)
-          viewModel.patchChatSession(key = target.key, ownerAgentId = target.ownerAgentId, category = value.trim())
+          viewModel.addChatSessionGroup(
+            value,
+            expectedGatewayStableId = target.gatewayStableId,
+            sessionKey = target.key,
+            ownerAgentId = target.ownerAgentId,
+          )
         }
       },
     )

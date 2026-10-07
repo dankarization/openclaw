@@ -824,6 +824,7 @@ class ChatController internal constructor(
   // Retained selection and event rows must not enlarge the next requested page.
   private var sessionsListLimit: Int? = null
   private var sessionRosterNextOffset: Int? = null
+  private var sessionRosterLoadedLimit: Int? = null
   private val _sessionRosterHasMore = MutableStateFlow(false)
   val sessionRosterHasMore: StateFlow<Boolean> = _sessionRosterHasMore.asStateFlow()
   private val _sessionRosterSettled = MutableStateFlow(false)
@@ -834,6 +835,7 @@ class ChatController internal constructor(
 
   private fun clearSessionRosterPaging() {
     sessionRosterNextOffset = null
+    sessionRosterLoadedLimit = null
     _sessionRosterHasMore.value = false
     _sessionRosterLoadingMore.value = false
     _sessionRosterSettled.value = false
@@ -1287,7 +1289,7 @@ class ChatController internal constructor(
       }
     }
 
-  suspend fun patchSession(
+  internal suspend fun patchSession(
     key: String,
     ownerAgentId: String? = null,
     expectedSessionId: String? = null,
@@ -1303,9 +1305,12 @@ class ChatController internal constructor(
     archived: Boolean? = null,
     unread: Boolean? = null,
     unreadExpectation: ChatSessionUnreadExpectation? = null,
+    requestLease: GatewaySession.RequestLease? = null,
   ): Boolean {
     val sessionKey = key.trim().takeIf { it.isNotEmpty() } ?: return false
     val requestCacheScope = currentCacheScope()
+    val lease = requestLease ?: captureRequestLease(requestCacheScope) ?: return false
+    if (!lease.isCurrent()) return false
     val capturedOwnerAgentId =
       resolveAgentIdFromMainSessionKey(sessionKey)
         ?: ownerAgentId?.trim()?.takeIf { it.isNotEmpty() }
@@ -1371,7 +1376,6 @@ class ChatController internal constructor(
                 ?.takeIf { it.key == sessionKey && (it.observedSessionId == null || it.observedSessionId == lifecycleSessionId) }
             active to remembered
           }
-        val lease = captureRequestLease(requestCacheScope) ?: throw GatewayRequestNotEnqueued("not connected")
         lease.request("sessions.patch", params.toString(), 10 * 60_000L)
         lease.commitIfCurrent {
           synchronized(gatewayScopeApplyLock) {
@@ -1397,12 +1401,12 @@ class ChatController internal constructor(
           }
         }
       } else {
-        requestGateway("sessions.patch", params.toString())
+        lease.request("sessions.patch", params.toString())
       }
-      fetchSessionsForCurrentWindow()
+      if (lease.isCurrent() && requestCacheScope == currentCacheScope()) fetchSessionsForCurrentWindow()
       return true
     } catch (err: Throwable) {
-      updateErrorText(err.message)
+      if (lease.isCurrent() && requestCacheScope == currentCacheScope()) updateErrorText(err.message)
       return false
     }
   }
@@ -1510,8 +1514,8 @@ class ChatController internal constructor(
     method: String,
     params: JsonObject,
     reportError: Boolean,
-  ): SessionGroupCatalogSnapshot? =
-    try {
+  ): SessionGroupCatalogSnapshot? {
+    return try {
       if (!lease.isCurrent()) return null
       parseSessionGroupCatalog(lease.request(method, params.toString()))
     } catch (err: CancellationException) {
@@ -1520,6 +1524,7 @@ class ChatController internal constructor(
       if (reportError && lease.isCurrent()) updateErrorText(err.message)
       null
     }
+  }
 
   private suspend fun patchSessionGroupMembers(
     group: String,
@@ -4966,6 +4971,7 @@ class ChatController internal constructor(
     archived: Boolean = false,
     offset: Int? = null,
     append: Boolean = false,
+    preserveWindow: Boolean = false,
   ): Boolean {
     val requestCacheScope = currentCacheScope()
     val requestLimit = limit?.takeIf { it > 0 }
@@ -5032,11 +5038,12 @@ class ChatController internal constructor(
               result.sessions.forEach { observeSessionSettings(it) }
               if (!append) {
                 sessionsListArchived = archived
-                sessionsListLimit = requestLimit
+                if (!preserveWindow) sessionsListLimit = requestLimit
               }
               if (archived) {
                 clearSessionRosterPaging()
               } else {
+                sessionRosterLoadedLimit = requestLimit?.let { it + if (append) offset ?: 0 else 0 }
                 sessionRosterNextOffset = result.nextOffset
                 _sessionRosterHasMore.value = result.hasMore
                 _sessionRosterSettled.value = true
@@ -5333,7 +5340,14 @@ class ChatController internal constructor(
     }
   }
 
-  private suspend fun fetchSessionsForCurrentWindow(): Boolean = fetchSessions(limit = sessionsListLimit, archived = sessionsListArchived)
+  private suspend fun fetchSessionsForCurrentWindow(): Boolean =
+    sessionRosterLoadMutex.withLock {
+      fetchSessions(
+        limit = if (sessionsListArchived) sessionsListLimit else sessionRosterLoadedLimit ?: sessionsListLimit,
+        archived = sessionsListArchived,
+        preserveWindow = true,
+      )
+    }
 
   private fun refreshSessionsForCurrentWindow() {
     scope.launch { fetchSessionsForCurrentWindow() }

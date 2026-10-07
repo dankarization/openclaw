@@ -57,7 +57,7 @@ class SessionGroupsTest {
         alreadyMigrated = false,
         canPut = true,
       )
-    assertEquals(false, nonempty.putLegacy)
+    assertEquals(true, nonempty.putLegacy)
     assertEquals(true, nonempty.consumeLegacy)
     assertEquals(listOf("Work", "Extra"), unionSessionGroupNames(listOf("Work"), listOf("Extra", "Work")))
   }
@@ -106,5 +106,47 @@ class SessionGroupsTest {
       listOf("Alpha", "Beta"),
       sidebarCategoryNames(listOf("category:Alpha", "ungrouped", "category:Beta", "catalog:codex")),
     )
+  }
+
+  @Test
+  fun preservesUnimportedLegacyWhenTheCatalogCannotAcceptIt() {
+    for (alreadyMigrated in listOf(false, true)) {
+      val decision =
+        decideSessionGroupMigration(
+          listedNames = listOf("Work"),
+          legacyNames = listOf("Folder", "Work"),
+          alreadyMigrated = alreadyMigrated,
+          canPut = false,
+        )
+      assertEquals(false, decision.putLegacy)
+      assertEquals(false, decision.consumeLegacy)
+      assertEquals(alreadyMigrated, decision.markMigrated)
+    }
+    assertEquals(
+      true,
+      decideSessionGroupMigration(listOf("Work", "Folder"), listOf("Folder"), alreadyMigrated = false, canPut = false).consumeLegacy,
+    )
+  }
+
+  @Test
+  fun reorderPreservesFreshEmptyFoldersAndUnavailableProviderCatalogs() {
+    val catalog =
+      SessionGroupCatalogSnapshot(
+        groups = listOf(GatewaySessionGroup("Alpha", 0), GatewaySessionGroup("New empty folder", 1)),
+        sectionOrder = listOf("category:Alpha", "category:New empty folder", "ungrouped", "groups", "work", "catalog:unavailable"),
+      )
+    val next =
+      moveSessionGroupCatalogSection(
+        catalog = catalog,
+        catalogIds = emptyList(),
+        visibleTokens = listOf("category:Alpha", "ungrouped", "groups"),
+        source = "category:Alpha",
+        direction = 1,
+      )
+    assertEquals(
+      listOf("category:New empty folder", "ungrouped", "category:Alpha", "groups", "work", "catalog:unavailable"),
+      next,
+    )
+    assertEquals(listOf("New empty folder", "Alpha"), sidebarCategoryNames(requireNotNull(next)))
   }
 }
