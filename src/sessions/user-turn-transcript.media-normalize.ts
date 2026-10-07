@@ -69,6 +69,7 @@ export function normalizeStructuredMediaEntryForTranscript(
     ...(height ? { height } : {}),
     ...(media.transcribed === true ? { transcribed: true } : {}),
     ...(messageId ? { messageId } : {}),
+    ...(media.source === "quote" ? { source: "quote" } : {}),
     ...(workspaceDir ? { workspaceDir } : {}),
     ...(media.hydrationSuppressed === true ? { hydrationSuppressed: true } : {}),
   };

@@ -9,6 +9,39 @@ import {
 } from "./user-turn-transcript.js";
 
 describe("buildPersistedUserTurnMediaInputsFromFields", () => {
+  it("preserves quote provenance through transcript write, reload and reconstruction", () => {
+    const message = buildPersistedUserTurnMessage({
+      text: "follow-up",
+      media: [
+        { path: "/tmp/current.ogg", contentType: "audio/ogg" },
+        { path: "/tmp/quoted.ogg", contentType: "audio/ogg", source: "quote" },
+      ],
+    });
+    const transcriptRecord = JSON.stringify(message);
+    const reloaded = JSON.parse(transcriptRecord) as typeof message;
+    expect(
+      readPersistedMediaFacts(reloaded)?.map(({ path: mediaPath, source }) => ({
+        path: mediaPath,
+        source,
+      })),
+    ).toEqual([
+      { path: "/tmp/current.ogg", source: undefined },
+      { path: "/tmp/quoted.ogg", source: "quote" },
+    ]);
+
+    const recovered = buildPersistedUserTurnMediaInputsFromFields(reloaded);
+    expect(recovered).toEqual([
+      { path: "/tmp/current.ogg", contentType: "audio/ogg", kind: "audio" },
+      { path: "/tmp/quoted.ogg", contentType: "audio/ogg", kind: "audio", source: "quote" },
+    ]);
+    expect(
+      readPersistedMediaFacts(buildPersistedUserTurnMessage({ media: recovered }))?.map(
+        (fact) => fact.source,
+      ),
+    ).toEqual([undefined, "quote"]);
+    expect(reloaded.content).toBe("follow-up");
+  });
+
   it("builds media inputs from canonical persisted facts", () => {
     expect(
       buildPersistedUserTurnMediaInputsFromFields({

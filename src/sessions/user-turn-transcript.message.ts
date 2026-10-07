@@ -51,6 +51,9 @@ export function buildPersistedUserTurnMediaInputsFromFields(
     if (fact.origin) {
       media.origin = fact.origin;
     }
+    if (fact.source === "quote") {
+      media.source = "quote";
+    }
     if (fact.sizeBytes !== undefined) {
       media.sizeBytes = fact.sizeBytes;
     }
