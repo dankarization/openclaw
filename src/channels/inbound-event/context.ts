@@ -267,7 +267,9 @@ function resolveChannelInboundSupplementalForFinalizer(params: {
   const suppressSelfQuoteMedia = params.suppressSelfQuoteMedia ?? true;
   const finalizeQuote = (quoteMedia?: readonly InboundMediaFacts[] | null) => {
     if (!(selfQuote && suppressSelfQuoteMedia)) {
-      media.push(...(quoteMedia ?? []).map((fact) => ({ ...fact, source: "quote" as const })));
+      for (const fact of quoteMedia ?? []) {
+        media.push({ ...fact, source: "quote" });
+      }
     }
     const { media: _media, isSelf: _isSelf, ...stripped } = quote;
     const visibleQuote =
