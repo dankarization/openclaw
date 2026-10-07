@@ -1,3 +1,4 @@
+// Managed gateway service lifecycle before and after an update.
 import { confirm, isCancel } from "@clack/prompts";
 import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
 import { stylePromptMessage } from "../../../packages/terminal-core/src/prompt-style.js";
@@ -31,8 +32,8 @@ import {
 } from "../daemon-cli/restart-health.js";
 import { tryWriteCompletionCache, type UpdateCommandOptions } from "./shared.js";
 import { createUpdateConfigSnapshot } from "./update-command-config-snapshot.js";
-// Managed gateway service lifecycle before and after an update.
 import { updateRunLedgerOptions } from "./update-command-ledger.js";
+import { recordMutableUpdateSignalPhase } from "./update-command-mutable-signals.js";
 import type { PluginUpdateWarning } from "./update-command-plugins-internals.js";
 import { observeUpdateGatewayReadiness } from "./update-command-readiness.js";
 import { UpdateCommandRecoveryPendingError } from "./update-command-recovery-error.js";
@@ -192,6 +193,7 @@ export async function maybeRestartService(params: {
         undefined,
         updateRunLedgerOptions(params.opts.run),
       );
+      recordMutableUpdateSignalPhase(params.opts.run, phase);
     }
   };
   let verificationObserved = false;

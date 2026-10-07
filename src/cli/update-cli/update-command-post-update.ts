@@ -99,6 +99,7 @@ async function finishSettledUpdate(
     assertCurrent,
     originalRun,
     compensate,
+    forward,
     recordPhase,
     sentinelOptions,
   } = captured;
@@ -268,10 +269,8 @@ async function finishSettledUpdate(
     initialRestoreFailure?: { cause: unknown },
     notify = true,
   ): Promise<UpdateRunResult> => {
-    const { result, recoverService } = await recoverFailedResult(
-      initialResult,
-      initialRecoverService,
-    );
+    const input = captured.interruptedResult(initialResult);
+    const { result, recoverService } = await recoverFailedResult(input, initialRecoverService);
     assertCurrent();
     let restoreFailure = initialRestoreFailure;
     let finalResult = completeUpdateCommandResult(params, result, currentServiceStop());
@@ -379,8 +378,9 @@ async function finishSettledUpdate(
     const cleanupFailure = await recordUpdatePackageCompletion(params, finalResult, assertCurrent);
     assertCurrent();
     finalResult = cleanupFailure?.result ?? finalResult;
-    // Compensation of the original service is not proof of the requested installation.
-    if ((finalResult.status === "error" || cleanupFailure) && !originalServiceRecoveryHandled) {
+    // Rollback already verified its Gateway; cleanup failure needs a fresh observation.
+    const needsObservation = cleanupFailure || (!rolledBack && finalResult.status === "error");
+    if (needsObservation && !originalServiceRecoveryHandled) {
       finalResult = await verifyUpdateFailureRecovery({
         result: finalResult,
         root,
@@ -398,7 +398,7 @@ async function finishSettledUpdate(
       triageAllowed &&= !isUpdateGatewayReadinessPending(finalResult);
       rolledBack &&= isVerifiedUpdateRollback(finalResult);
     }
-    pendingResult = completeUpdateCommandResult(params, finalResult);
+    pendingResult = completeUpdateCommandResult(params, captured.interruptedResult(finalResult));
     terminalRecord = deferredTerminal
       ? await captureUpdateCommandTerminalRecord(params, pendingResult, assertCurrent)
       : undefined;
@@ -479,7 +479,7 @@ async function finishSettledUpdate(
           assertCurrent,
           candidateRuntime,
         };
-        const convergence = await convergeUpdatePlugins(pluginParams);
+        const convergence = await forward(() => convergeUpdatePlugins(pluginParams));
         if (convergence.resultWithPostUpdate.status === "error") {
           triageAllowed = !convergence.cancelled;
           const reported = await reportResult(convergence.resultWithPostUpdate);
@@ -565,7 +565,7 @@ async function finishSettledUpdate(
       }
       let verificationFailure = "restart-unhealthy";
       const restart = async () => {
-        const restarted = await withOwnedManagedUpdateEnv(params.ownedManagedUpdateEnv, async () =>
+        const restarted = await forward(() =>
           maybeRestartService({
             onGatewayStartAttempted,
             originalManagedServiceRuntime: params.originalManagedServiceRuntime,

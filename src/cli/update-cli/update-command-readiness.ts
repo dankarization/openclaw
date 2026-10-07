@@ -285,6 +285,12 @@ export async function observeUpdateGatewayReadiness(params: UpdateGatewayReadine
   };
   let launchAgentRecovery: PostUpdateLaunchAgentRecoveryResult | null = null;
   let http: Awaited<ReturnType<typeof waitForGatewayHttpReadiness>> | undefined;
+  const channelProbeTimeouts = new Map<string, { id: string; error: string }>();
+  const retainChannelTimeouts = (snapshot: GatewayRestartSnapshot) => {
+    for (const timeout of snapshot.channelProbeTimeouts ?? []) {
+      channelProbeTimeouts.set(timeout.id, timeout);
+    }
+  };
   const readHealth = async () => {
     assertCurrent();
     if (!waitForStartup) {
@@ -307,6 +313,7 @@ export async function observeUpdateGatewayReadiness(params: UpdateGatewayReadine
       probeTimeoutMs: params.probeTimeoutMs,
       onObservation: (snapshot) => {
         health = snapshot;
+        retainChannelTimeouts(snapshot);
         params.onProgress?.(
           "readiness",
           `${snapshot.startupPhase}; service=${snapshot.runtime.status} PID=${snapshot.runtime.pid ?? "unknown"}${snapshot.runtime.inspectionFailure ? `; native inspection=${snapshot.runtime.inspectionFailure.timeoutMs === undefined ? "unavailable" : `timed out (${snapshot.runtime.inspectionFailure.timeoutMs}ms)`}` : ""}; listener=${snapshot.portUsage.status}; listener PIDs=${snapshot.portUsage.listeners.map(({ pid }) => pid ?? "unknown").join(",") || "none"}; health=${snapshot.healthy ? "ready" : "unverified"}${snapshot.probeError ? `; ${snapshot.probeError}` : ""}`,
@@ -321,9 +328,10 @@ export async function observeUpdateGatewayReadiness(params: UpdateGatewayReadine
     return observed;
   };
   try {
-    return await deadline.run(async () => {
+    const readiness = await deadline.run(async () => {
       assertCurrent();
       health = params.health ?? (await readHealth());
+      retainChannelTimeouts(health);
       if (params.healthOnly) {
         return { health, readyz: false, http: undefined, launchAgentRecovery };
       }
@@ -333,6 +341,7 @@ export async function observeUpdateGatewayReadiness(params: UpdateGatewayReadine
           recoverHealth(health, readHealth, assertCurrent),
         ));
         assertCurrent();
+        retainChannelTimeouts(health);
       }
       if (
         !health.healthy &&
@@ -347,7 +356,7 @@ export async function observeUpdateGatewayReadiness(params: UpdateGatewayReadine
         return { health, readyz: false, http: undefined, launchAgentRecovery };
       }
       params.onProgress?.("http", "checking Gateway HTTP healthz and readyz endpoints");
-      const context = await deadline.read("HTTP probe context", () =>
+      const context = await deadline.read("HTTP check context", () =>
         resolveGatewayRestartProbeContext(params.serviceEnv, undefined, deadline.signal),
       );
       assertCurrent();
@@ -383,12 +392,14 @@ export async function observeUpdateGatewayReadiness(params: UpdateGatewayReadine
           });
         const inspected = await deadline.read("final Gateway identity", inspect);
         assertCurrent();
+        retainChannelTimeouts(inspected);
         // Bracket the final native observation with health/hello probes so a same-PID
         // or PID-less reboot during that observation cannot inherit the old boot.
         health = inspected.healthy
           ? await deadline.read("final Gateway health", inspect)
           : inspected;
         assertCurrent();
+        retainChannelTimeouts(health);
         health.startupPhase = settled.startupPhase;
         const sameGeneration =
           isSameGatewayRestartGeneration(settled, inspected) &&
@@ -414,6 +425,10 @@ export async function observeUpdateGatewayReadiness(params: UpdateGatewayReadine
       }
       return { health, readyz, http, launchAgentRecovery };
     });
+    if (channelProbeTimeouts.size) {
+      readiness.health.channelProbeTimeouts = Array.from(channelProbeTimeouts.values());
+    }
+    return readiness;
   } catch (error) {
     const cleanup = await deadline.cleanup;
     if (hasCommandProcessCleanupError(error)) {
@@ -435,6 +450,9 @@ export async function observeUpdateGatewayReadiness(params: UpdateGatewayReadine
     return {
       health: {
         ...health,
+        ...(channelProbeTimeouts.size
+          ? { channelProbeTimeouts: Array.from(channelProbeTimeouts.values()) }
+          : {}),
         healthy: false,
         waitOutcome,
         // Only the wait owner's interval may retain startup progress. A hung
