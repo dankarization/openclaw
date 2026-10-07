@@ -6,6 +6,7 @@ import { isFailedUpdateStep } from "../../infra/update-run-step.js";
 import { recordUpdateRunStepAsync } from "../../infra/update-run-write.async.js";
 import { reportUpdateStepCompletion } from "../../infra/update-runner-command.js";
 import type { UpdateRunResult, UpdateStepProgress } from "../../infra/update-runner-types.js";
+import { resolveBundledPluginsDir } from "../../plugins/bundled-dir.js";
 import { defaultRuntime } from "../../runtime.js";
 import { prepareOpenClawStateReadSource } from "../../state/openclaw-state-worker-context.js";
 import { runOpenClawStateWorkerOperation } from "../../state/openclaw-state-worker-store.js";
@@ -54,6 +55,7 @@ export async function validateUpdateCandidateWithProgress(
     Parameters<typeof validateUpdateCandidateCanary>[0],
     "root" | "config" | "snapshotTempDir"
   > & {
+    sourcePackageRoot?: string;
     env: NodeJS.ProcessEnv;
     assertCurrent: () => void;
     writeOptions: ReturnType<
@@ -92,6 +94,9 @@ export async function validateUpdateCandidateWithProgress(
   const validate = () =>
     validateUpdateCandidateCanary({
       ...params,
+      sourceBundledPlugins: params.sourcePackageRoot
+        ? { packageRoot: params.sourcePackageRoot, directory: resolveBundledPluginsDir(params.env) }
+        : undefined,
       assertCurrent,
       stateDir: resolveStateDir(params.env),
       nodeRunner: execution.packageUpdateNodeRunner,
