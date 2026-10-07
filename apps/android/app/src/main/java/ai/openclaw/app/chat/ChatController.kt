@@ -5346,8 +5346,12 @@ class ChatController internal constructor(
   ): Boolean =
     sessionRosterLoadMutex.withLock {
       val requestArchived = archived ?: sessionsListArchived
-      val requestedLimit = limit?.takeIf { it > 0 } ?: sessionsListLimit ?: SIDEBAR_SESSION_ROSTER_LIMIT.takeUnless { requestArchived }
-      val loadedLimit = sessionRosterLoadedLimit.takeIf { !requestArchived && !sessionsListArchived }
+      val requestedPageSize = limit?.takeIf { it > 0 }
+      val requestedLimit = requestedPageSize ?: sessionsListLimit ?: SIDEBAR_SESSION_ROSTER_LIMIT.takeUnless { requestArchived }
+      val loadedLimit =
+        sessionRosterLoadedLimit.takeIf {
+          !requestArchived && !sessionsListArchived && (requestedPageSize == null || requestedPageSize == sessionsListLimit)
+        }
       fetchSessions(
         limit = loadedLimit?.let { maxOf(it, requestedLimit ?: it) } ?: requestedLimit,
         archived = requestArchived,
