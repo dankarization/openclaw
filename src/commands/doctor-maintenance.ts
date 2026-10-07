@@ -515,6 +515,11 @@ export async function beginDoctorMaintenance(params: DoctorMaintenanceParams) {
                             params.serviceInspectionDeadlineAtMs,
                           ),
                           assertCurrent: () => assertServiceCurrent?.(),
+                          assertDeadline: () => {
+                            resolveRemainingDoctorServiceInspectionTimeoutMs(
+                              params.serviceInspectionDeadlineAtMs,
+                            );
+                          },
                           warn,
                           onStopped: (before) => {
                             stopped = before;
