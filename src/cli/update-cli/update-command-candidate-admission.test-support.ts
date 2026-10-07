@@ -662,10 +662,10 @@ export function registerCandidateAdmissionTests(f: CandidateAdmissionFixture) {
     ]) {
       expect(defaultRuntime.log).toHaveBeenCalledWith(expect.stringContaining(detail));
     }
-    for (const line of runtimeRecovery
-      .expectedPlainRecovery("2026.3.23-2", "24.16.0", "absent", undefined, root)
-      .split("\n")) {
-      expect(defaultRuntime.log).toHaveBeenCalledWith(expect.stringContaining(line));
-    }
+    expect(defaultRuntime.log).toHaveBeenCalledWith(
+      expect.stringContaining(
+        runtimeRecovery.expectedPlainRecovery("2026.3.23-2", "24.16.0", "absent", undefined, root),
+      ),
+    );
   });
 }
