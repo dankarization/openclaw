@@ -654,8 +654,18 @@ export function registerCandidateAdmissionTests(f: CandidateAdmissionFixture) {
     expectNoSideEffects(updateGitCheckout, defaultRuntime.exit);
     expect(packageInstallCommandCall()?.[0]).toBeUndefined();
     expect(listUpdateRuns({ limit: 1 })[0]?.reason).toBe("node-runtime-preflight");
-    expect(defaultRuntime.log).toHaveBeenCalledWith(
-      `openclaw@2026.3.23-2 requires Node >=22.19.0; selected runtime is Node ${process.versions.node}.\n${runtimeRecovery.expectedPlainRecovery("2026.3.23-2", "24.16.0", "absent", undefined, root)}`,
-    );
+    for (const detail of [
+      "Failing check node-runtime (node-runtime-preflight); key engines.node",
+      "openclaw@2026.3.23-2",
+      "22.19.0",
+      process.versions.node,
+    ]) {
+      expect(defaultRuntime.log).toHaveBeenCalledWith(expect.stringContaining(detail));
+    }
+    for (const line of runtimeRecovery
+      .expectedPlainRecovery("2026.3.23-2", "24.16.0", "absent", undefined, root)
+      .split("\n")) {
+      expect(defaultRuntime.log).toHaveBeenCalledWith(expect.stringContaining(line));
+    }
   });
 }
