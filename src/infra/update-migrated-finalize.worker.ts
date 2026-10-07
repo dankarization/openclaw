@@ -22,6 +22,7 @@ import {
 import { createWindowsTaskAutoStartGuard } from "../cli/update-cli/update-command-service-maintenance.js";
 import { withUpdateCommandTerminalResult } from "../cli/update-cli/update-command-terminal.js";
 import { createWindowsTaskAutoStartRecovery } from "../cli/update-cli/update-command-windows-task.js";
+import { resolveRemainingDoctorServiceInspectionTimeoutMs } from "../commands/doctor-service-inspection-budget.js";
 import { routeLogsToStderr } from "../logging/console.js";
 import { hasCommandProcessCleanupError } from "../process/exec-result.js";
 import { finalizeActiveDebugProxyCaptures } from "../proxy-capture/runtime-cleanup.js";
@@ -333,8 +334,11 @@ async function runDelegatedDoctor(input: UpdateDoctorInput): Promise<void> {
       }
       const { runDoctorHealthFlow } = await import("../flows/doctor-health.js");
       assertCurrent();
+      resolveRemainingDoctorServiceInspectionTimeoutMs(input.serviceInspectionDeadlineAtMs);
       await stopSupervisedPredecessorGateway(input, {
         root: input.root,
+        ledgerBusyTimeoutMs: input.ledgerBusyTimeoutMs,
+        serviceInspectionDeadlineAtMs: input.serviceInspectionDeadlineAtMs,
         assertCurrent,
         warn: (message) => process.stderr.write(`${message}\n`),
       });

@@ -1,6 +1,7 @@
 import { needsCandidateManagedServiceStop } from "../cli/update-cli/update-command-legacy-service-stop.js";
 import type { PreManagedServiceStop } from "../cli/update-cli/update-command-service-context-types.js";
 import { maybeStopManagedServiceBeforeMutableUpdate } from "../cli/update-cli/update-command-service-maintenance.js";
+import { resolveRemainingDoctorServiceInspectionTimeoutMs } from "../commands/doctor-service-inspection-budget.js";
 import { openDoctorStateSchemaReadAdmission } from "../state/openclaw-state-db-doctor-schema.js";
 import { readGatewayOwnerLease } from "./gateway-owner-lease.js";
 import { GATEWAY_SERVICE_STOP_TIMEOUT_MS } from "./gateway-shutdown-budget.js";
@@ -95,6 +96,8 @@ export async function stopSupervisedPredecessorGateway(
   params: {
     root: string;
     timeoutMs?: number;
+    ledgerBusyTimeoutMs?: number;
+    serviceInspectionDeadlineAtMs?: number;
     assertCurrent: () => void;
     warn: (message: string) => void;
   },
@@ -123,25 +126,36 @@ export async function stopSupervisedPredecessorGateway(
     }
     recorded = true;
     const stoppedAtMs = state.stoppedAtMs ?? Date.now();
-    recordUpdateRunStep(input.runId, {
-      step: encodeReceipt(serviceIdentity(state, stoppedAtMs)),
-      status: "completed",
-      endedAtMs: stoppedAtMs,
-    });
+    recordUpdateRunStep(
+      input.runId,
+      {
+        step: encodeReceipt(serviceIdentity(state, stoppedAtMs)),
+        status: "completed",
+        endedAtMs: stoppedAtMs,
+      },
+      { env: process.env, busyTimeoutMs: params.ledgerBusyTimeoutMs },
+    );
   };
   try {
     // The native stop reports its mutation before later checks can still throw;
     // the ledger keeps that fact for finalization and recovery either way.
+    const doctorRemainingMs = resolveRemainingDoctorServiceInspectionTimeoutMs(
+      params.serviceInspectionDeadlineAtMs,
+    );
+    params.assertCurrent();
     const state = await maybeStopManagedServiceBeforeMutableUpdate({
       updateInstallKind: "package",
       root: params.root,
       shouldRestart: true,
       jsonMode: true,
       phase: "prepare",
-      // The delegated Doctor input carries no step budget; bound the drain and
-      // stop by the service stop budget so a stuck predecessor cannot outlive
-      // the parent's Doctor allowance.
-      timeoutMs: params.timeoutMs ?? GATEWAY_SERVICE_STOP_TIMEOUT_MS,
+      // Retain the caller/service cap while honoring the parent Doctor deadline.
+      timeoutMs:
+        doctorRemainingMs === undefined
+          ? (params.timeoutMs ?? GATEWAY_SERVICE_STOP_TIMEOUT_MS)
+          : Math.min(params.timeoutMs ?? GATEWAY_SERVICE_STOP_TIMEOUT_MS, doctorRemainingMs),
+      assertDeadline: () =>
+        resolveRemainingDoctorServiceInspectionTimeoutMs(params.serviceInspectionDeadlineAtMs),
       onStopped: record,
       assertCurrent: params.assertCurrent,
       warn: params.warn,

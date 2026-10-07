@@ -29,11 +29,25 @@ export async function execFileUtf8(
     timeout?: number;
     killSignal?: NodeJS.Signals | number;
     windowsHide?: boolean;
+    /** Effect-specific admission; never used for post-effect authority checks. */
+    beforeEffect?: () => void;
   } = {},
 ): Promise<ExecResult> {
   const scopedNative = getGatewayServiceUpdateNativeCommand();
   const scoped = scopedNative ? true : assertGatewayServiceUpdateCurrent();
+  let effectFailure: { error: unknown } | undefined;
+  const beforeEffect = options.beforeEffect
+    ? () => {
+        try {
+          options.beforeEffect?.();
+        } catch (error) {
+          effectFailure = { error };
+          throw error;
+        }
+      }
+    : undefined;
   try {
+    beforeEffect?.();
     // Scoped dispatch serializes before its parent-currentness check. Ordinary
     // calls retain the existing synchronous assertion and unbound runner.
     const runNative = scopedNative ?? runCommandWithTimeout;
@@ -46,6 +60,8 @@ export async function execFileUtf8(
         killSignal: options.killSignal,
         maxOutputBytes: 1024 * 1024,
         timeoutMs: options.timeout,
+        // Recheck after queueing and child custody, before native effects are released.
+        ...(scopedNative && beforeEffect ? { beforeInput: beforeEffect } : {}),
       },
     );
     // Compensation cannot run while an earlier writer may still be active.
@@ -75,6 +91,9 @@ export async function execFileUtf8(
   } catch (error) {
     if (error instanceof GatewayServiceAuthorityError || hasCommandProcessCleanupError(error)) {
       throw error;
+    }
+    if (effectFailure) {
+      throw effectFailure.error;
     }
     const message = error instanceof Error ? error.message : String(error);
     const errorCode = extractErrorCode(error);

@@ -105,6 +105,28 @@ describe("transcribeFirstAudio", () => {
     expect(sendTranscriptEchoMock).not.toHaveBeenCalled();
   });
 
+  it("returns quoted STT for mention context without echoing it as current audio", async () => {
+    runAudioTranscriptionMock.mockResolvedValueOnce({
+      transcript: "quoted voice context",
+      attachments: [],
+    });
+    const ctx: MsgContext = {
+      Body: "follow-up",
+      media: [{ path: "/tmp/quoted.ogg", contentType: "audio/ogg", source: "quote" }],
+    };
+
+    await expect(
+      transcribeFirstAudio({
+        ctx,
+        cfg: { tools: { media: { audio: { echoTranscript: true } } } },
+      }),
+    ).resolves.toBe("quoted voice context");
+
+    expect(runAudioTranscriptionMock).toHaveBeenCalledOnce();
+    expect(sendTranscriptEchoMock).not.toHaveBeenCalled();
+    expect(ctx.media?.[0]).toMatchObject({ source: "quote", transcribed: true });
+  });
+
   it("echoes the preflight transcript when echoTranscript is enabled", async () => {
     runAudioTranscriptionMock.mockResolvedValueOnce({
       transcript: "hello from dm audio",

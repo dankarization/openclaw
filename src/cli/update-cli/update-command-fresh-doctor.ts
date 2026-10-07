@@ -235,6 +235,7 @@ export async function runUpdateFinalizationDoctorInFreshProcess(params: {
           },
           input: {
             configInputHash: snapshot.hash,
+            ledgerBusyTimeoutMs: run?.ledgerBusyTimeoutMs,
             repair: true,
             databaseGenerations:
               params.databaseBackup?.postMigrationGenerations ??

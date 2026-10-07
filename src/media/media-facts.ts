@@ -28,6 +28,8 @@ export type MediaFact = {
   height?: number;
   transcribed?: boolean;
   messageId?: string;
+  /** Supplemental quote provenance; absent on current-message media. */
+  source?: "quote";
   workspaceDir?: string;
   /** Internal proof that this exact fact was covered by a legacy staged projection. */
   staged?: boolean;
@@ -238,6 +240,7 @@ export function canonicalizePersistedUserMessageMedia<T extends object>(
       ...(fact.height ? { height: fact.height } : {}),
       ...(fact.transcribed ? { transcribed: true } : {}),
       ...(fact.messageId ? { messageId: fact.messageId } : {}),
+      ...(fact.source === "quote" ? { source: "quote" } : {}),
       ...(fact.workspaceDir ? { workspaceDir: fact.workspaceDir } : {}),
       ...(fact.staged || stagedMedia?.[index]?.staged ? { staged: true } : {}),
       ...(fact.hydrationSuppressed ? { hydrationSuppressed: true } : {}),
@@ -393,6 +396,7 @@ function normalizeMediaFact<TInput extends MediaFactInput>(
     ...(height ? { height } : {}),
     transcribed: input.transcribed === true || defaults.transcribed?.(input, index) === true,
     messageId: normalizeOptionalString(input.messageId) ?? defaults.messageId,
+    ...(input.source === "quote" ? { source: "quote" } : {}),
     ...(workspaceDir ? { workspaceDir } : {}),
     ...(input.staged === true ? { staged: true } : {}),
     ...(input.hydrationSuppressed === true ? { hydrationSuppressed: true } : {}),
@@ -482,6 +486,7 @@ function resolveMediaFactsWithPrecedence(
             : transcribed.has(index)
           : fact?.transcribed === true || transcribed.has(index),
         messageId: fact?.messageId,
+        source: fact?.source,
         workspaceDir:
           normalizeOptionalString(fact?.workspaceDir) ??
           normalizeOptionalString(source.MediaWorkspaceDir),

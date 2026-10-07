@@ -25,6 +25,7 @@ export type UpdateDoctorInput = {
   runId: string;
   root: string;
   configInputHash: string;
+  ledgerBusyTimeoutMs?: number;
   requester?: UpdateRequester;
   repair: boolean;
   yes?: boolean;

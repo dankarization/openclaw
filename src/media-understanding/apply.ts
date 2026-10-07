@@ -10,6 +10,7 @@ import {
 import { finalizeInboundContext } from "../auto-reply/reply/inbound-context.js";
 import type { MsgContext } from "../auto-reply/templating.js";
 import type { OpenClawConfig } from "../config/types.js";
+import { normalizeMediaFacts } from "../media/media-facts.js";
 import { runMediaCapability } from "./apply-capability.js";
 import { resolveAttachmentKind } from "./attachments.js";
 import { DEFAULT_ECHO_TRANSCRIPT_FORMAT, sendTranscriptEcho } from "./echo-transcript.js";
@@ -148,6 +149,7 @@ export async function applyMediaUnderstanding(params: {
     .map((value) => normalizeOptionalString(value))
     .find(Boolean);
 
+  const media = normalizeMediaFacts(ctx.media);
   const attachments = normalizeMediaAttachments(ctx);
   const providerRegistry = buildProviderRegistry(params.providers, cfg);
   const cache = createMediaAttachmentCache(attachments, {
@@ -241,11 +243,15 @@ export async function applyMediaUnderstanding(params: {
         }
         // Echo transcript back to chat before agent processing, if configured.
         const audioCfg = cfg.tools?.media?.audio;
-        if (audioCfg?.echoTranscript && transcript) {
+        // Quoted audio remains in model context, but only this message's audio is echoed.
+        const echoTranscript = formatAudioTranscripts(
+          audioOutputs.filter((output) => media[output.attachmentIndex]?.source !== "quote"),
+        );
+        if (audioCfg?.echoTranscript && echoTranscript) {
           await sendTranscriptEcho({
             ctx,
             cfg,
-            transcript,
+            transcript: echoTranscript,
             format: audioCfg.echoFormat ?? DEFAULT_ECHO_TRANSCRIPT_FORMAT,
           });
         }

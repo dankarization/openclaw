@@ -322,6 +322,8 @@ export async function beginDoctorMaintenance(
     await acquireStoppedMaintenanceResources();
     assertUpdateAdmissionCurrent?.();
     await assertDoctorAgentLeaseAdmission(env);
+    // Admission can wait on ownership longer than the parent Doctor phase allows.
+    resolveRemainingDoctorServiceInspectionTimeoutMs(params.serviceInspectionDeadlineAtMs);
     repairStoresMayBeOpen = true;
   };
   let admissionFailureHandled = false;
@@ -514,6 +516,11 @@ export async function beginDoctorMaintenance(
                             params.serviceInspectionDeadlineAtMs,
                           ),
                           assertCurrent: () => assertServiceCurrent?.(),
+                          assertDeadline: () => {
+                            resolveRemainingDoctorServiceInspectionTimeoutMs(
+                              params.serviceInspectionDeadlineAtMs,
+                            );
+                          },
                           warn,
                           onStopped: (before) => {
                             stopped = before;

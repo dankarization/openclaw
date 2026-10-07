@@ -249,6 +249,90 @@ describe("applyMediaUnderstanding – echo transcript", () => {
     );
   });
 
+  it.each([false, true])(
+    "retains quoted STT while echoing only current audio (mixed=%s)",
+    async (mixed) => {
+      const quotedPath = await createTempAudioFile();
+      const currentPath = mixed ? await createTempAudioFile() : undefined;
+      const { buildChannelInboundEventContext } =
+        await import("../channels/inbound-event/context.js");
+      const ctx = await buildChannelInboundEventContext({
+        channel: "voicechat",
+        accountId: "acc1",
+        messageId: "current-message",
+        from: "+10000000001",
+        sender: { id: "sender", isBot: true },
+        conversation: { kind: "direct", id: "chat" },
+        route: { agentId: "main", routeSessionKey: "agent:main:voicechat:direct:chat" },
+        reply: { to: "+10000000001" },
+        message: { rawBody: "follow-up" },
+        media: currentPath ? [{ path: currentPath, contentType: "audio/ogg" }] : [],
+        supplemental: {
+          quote: { media: async () => [{ path: quotedPath, contentType: "audio/ogg" }] },
+        },
+        resolveSupplementalMedia: true,
+      });
+      const { cfg, providers } = createAudioConfigWithEcho(true);
+      const transcribe = vi
+        .fn()
+        .mockResolvedValueOnce({ text: "quoted words" })
+        .mockResolvedValueOnce({ text: "current words" });
+      providers.groq.transcribeAudio = transcribe;
+      const audioCfg = cfg.tools?.media?.audio;
+      if (!audioCfg) {
+        throw new Error("Expected audio tool config");
+      }
+      audioCfg.attachments = { mode: "all", maxAttachments: 2, prefer: "last" };
+
+      await applyMediaUnderstanding({ ctx, cfg, providers });
+
+      expect(transcribe).toHaveBeenCalledTimes(mixed ? 2 : 1);
+      expect(ctx.Transcript).toContain("quoted words");
+      expect(ctx.BodyForAgent).toContain("quoted words");
+      expect(ctx.RawBody).toBe("follow-up");
+      expect(ctx.SenderIsBot).toBe(true);
+      if (mixed) {
+        expect(ctx.Transcript).toContain("current words");
+        expect(ctx.BodyForAgent).toContain("current words");
+        expect(mockDeliverOutboundPayloads).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({ payloads: [{ text: '📝 "current words"' }] }),
+        );
+      } else {
+        expect(mockDeliverOutboundPayloads).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it("keeps quote provenance at its original index after an invalid earlier attachment", async () => {
+    const mediaPath = await createTempAudioFile();
+    const ctx = createAudioCtxWithProvider(mediaPath);
+    ctx.media = [
+      { path: "   ", contentType: "audio/ogg" },
+      { path: mediaPath, contentType: "audio/ogg", source: "quote" },
+    ];
+    const { cfg, providers } = createAudioConfigWithEcho(true);
+
+    await applyMediaUnderstanding({ ctx, cfg, providers });
+
+    expect(ctx.MediaUnderstanding).toEqual([
+      expect.objectContaining({ attachmentIndex: 1, text: "hello world" }),
+    ]);
+    expect(ctx.Transcript).toBe("hello world");
+    expect(ctx.BodyForAgent).toContain("hello world");
+    expect(mockDeliverOutboundPayloads).not.toHaveBeenCalled();
+  });
+
+  it("echoes distinct current voice notes even when their transcript text matches", async () => {
+    const { cfg, providers } = createAudioConfigWithEcho(true);
+    for (const messageId of ["voice-1", "voice-2"]) {
+      const ctx = createAudioCtxWithProvider(await createTempAudioFile());
+      ctx.MessageSid = messageId;
+      await applyMediaUnderstanding({ ctx, cfg, providers });
+    }
+
+    expect(mockDeliverOutboundPayloads).toHaveBeenCalledTimes(2);
+  });
+
   it("does NOT echo when there are no audio attachments", async () => {
     // Image-only context — no audio attachment
     const dir = await fs.mkdtemp(path.join(suiteTempMediaRootDir, "img-"));
