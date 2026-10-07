@@ -2,7 +2,9 @@ import type { DatabaseSync } from "node:sqlite";
 import type { Selectable } from "kysely";
 import type {
   AcpSessionReadCommand,
+  AcpSessionReadInput,
   AcpSessionReadResult,
+  AcpSessionRow,
 } from "../acp/runtime/session-meta-read.types.js";
 import type { McpOAuthReadOnlyOperations } from "../agents/mcp-oauth-store.kernel.js";
 import type {
@@ -146,6 +148,7 @@ import type {
   UserChannelIdentityAuthorityFacts,
   UserChannelIdentityResult,
   CachedGitHubIdentity,
+  CachedGitHubIdentityBinding,
   UserProfileGitHubAttributionRead,
   ProfileDisplayRow,
   UserProfileEmailBinding,
@@ -227,7 +230,7 @@ export type OpenClawStateReadCommand =
   | { type: "userProfiles.channelIdentity.list"; profileId: string }
   | { type: "userProfiles.channelIdentity.resolve"; identity: UserChannelIdentitySelector }
   | { type: "userProfiles.authority.resolve"; profileId: string }
-  | { type: "userProfiles.githubIdentity.cached"; accountId: number; email: string }
+  | ({ type: "userProfiles.githubIdentity.cached" } & CachedGitHubIdentityBinding)
   | { type: "userProfiles.githubAttribution.resolve"; profileIds: readonly string[] }
   | { type: "userProfiles.email.resolve"; email: string }
   | { type: "userProfiles.catalog" }
@@ -265,6 +268,13 @@ export type OpenClawStateReadCommand =
   | {
       type: "sessionRepositoryWorkspaces.find";
       owners: readonly RepositoryWorkspaceOwner[];
+    }
+  | {
+      type: "sessionRows.sharedFacts";
+      entries: readonly {
+        acp?: AcpSessionReadInput;
+        repositoryWorkspace?: RepositoryWorkspaceOwner & { workspaceId: string };
+      }[];
     }
   | { type: "workspace.snapshot"; workspaceDir: string }
   | { type: "sandboxRegistry.list" }
@@ -533,6 +543,13 @@ export type OpenClawStateReadResult =
   | {
       type: "sessionRepositoryWorkspaces.find";
       workspaces: SessionRepositoryWorkspaceRecord[];
+    }
+  | {
+      type: "sessionRows.sharedFacts";
+      rows: {
+        acp?: AcpSessionRow | null;
+        repositoryWorkspace?: SessionRepositoryWorkspaceRecord | null;
+      }[];
     }
   | { type: "workspace.snapshot"; snapshot: WorkspaceStateSnapshot }
   | {
