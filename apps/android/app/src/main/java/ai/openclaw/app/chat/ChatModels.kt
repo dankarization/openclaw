@@ -1,6 +1,7 @@
 package ai.openclaw.app.chat
 
 import ai.openclaw.app.asJsonStringOrNull
+import ai.openclaw.app.gateway.GatewaySession
 import ai.openclaw.app.gateway.SessionObserverDigest
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
@@ -318,12 +319,13 @@ internal fun parseChatPlanSteps(element: JsonElement?): List<ChatPlanStep> {
 
 internal fun parseChatProgressCardGetResult(element: JsonElement): ChatProgressCardGetResult {
   val result = element as? JsonObject ?: error("Invalid progressCard.get response")
-  if (!result.containsKey("card")) error("Invalid progressCard.get response")
-  val rawCard = result["card"]
-  if (rawCard == null || rawCard is JsonNull) {
+  val rawCard = result["card"] ?: error("Invalid progressCard.get response")
+  if (rawCard is JsonNull) {
     return ChatProgressCardGetResult(sessionKey = null, card = null)
   }
   val card = rawCard as? JsonObject ?: error("Invalid progressCard.get response")
+
+  fun integer(key: String): Long? = (card[key] as? JsonPrimitive)?.takeUnless { it.isString }?.content?.toLongOrNull()
   val sessionKey =
     card["sessionKey"]
       .asJsonStringOrNull()
@@ -331,19 +333,11 @@ internal fun parseChatProgressCardGetResult(element: JsonElement): ChatProgressC
       ?.takeIf { it.isNotEmpty() }
       ?: error("Invalid progress card session key")
   val revision =
-    (card["revision"] as? JsonPrimitive)
-      ?.takeUnless { it.isString }
-      ?.content
-      ?.toLongOrNull()
+    integer("revision")
       ?.takeIf { it in 1..Int.MAX_VALUE }
       ?.toInt()
       ?: error("Invalid progress card revision")
-  val updatedAt =
-    (card["updatedAt"] as? JsonPrimitive)
-      ?.takeUnless { it.isString }
-      ?.content
-      ?.toLongOrNull()
-      ?: error("Invalid progress card update time")
+  val updatedAt = integer("updatedAt") ?: error("Invalid progress card update time")
   val markdown =
     if (card.containsKey("markdown")) {
       card["markdown"].asJsonStringOrNull()
@@ -353,16 +347,12 @@ internal fun parseChatProgressCardGetResult(element: JsonElement): ChatProgressC
     }?.takeIf { it.isNotBlank() }
   val steps = parseChatPlanSteps(card["steps"])
   val parsedCard =
-    if (markdown == null && steps.isEmpty()) {
-      null
-    } else {
-      ChatProgressCard(
-        revision = revision,
-        updatedAt = updatedAt,
-        markdown = markdown,
-        steps = steps,
-      )
-    }
+    ChatProgressCard(
+      revision = revision,
+      updatedAt = updatedAt,
+      markdown = markdown,
+      steps = steps,
+    ).takeUnless { markdown == null && steps.isEmpty() }
   return ChatProgressCardGetResult(sessionKey = sessionKey, card = parsedCard)
 }
 
@@ -547,6 +537,25 @@ internal fun isSessionRunActive(
     "queued", "running" -> hasActiveRun ?: true
     else -> false
   }
+
+internal data class ChatSessionPatch(
+  val key: String,
+  val ownerAgentId: String? = null,
+  val expectedSessionId: String? = null,
+  val label: String? = null,
+  val clearLabel: Boolean = false,
+  val category: String? = null,
+  val clearCategory: Boolean = false,
+  val snoozedUntil: Long? = null,
+  val clearSnooze: Boolean = false,
+  val color: String? = null,
+  val clearColor: Boolean = false,
+  val pinned: Boolean? = null,
+  val archived: Boolean? = null,
+  val unread: Boolean? = null,
+  val unreadExpectation: ChatSessionUnreadExpectation? = null,
+  val requestLease: GatewaySession.RequestLease? = null,
+)
 
 data class ChatSessionUnreadExpectation(
   val markedUnreadAt: Long?,

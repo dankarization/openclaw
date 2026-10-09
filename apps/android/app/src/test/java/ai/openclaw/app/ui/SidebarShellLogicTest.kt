@@ -49,7 +49,7 @@ class SidebarShellLogicTest {
       ),
       destinations.take(5),
     )
-    assertTrue(SidebarDestination.SkillWorkshop in destinations.drop(5))
+    assertTrue(SidebarDestination.Dreaming in destinations.drop(5))
     assertEquals(destinations.size, destinations.distinct().size)
   }
 

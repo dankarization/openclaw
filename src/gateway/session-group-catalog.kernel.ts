@@ -168,14 +168,12 @@ export function mutateSessionGroupCatalogInDatabase(
                 }),
           ),
         );
-        if (input.sectionOrder) {
+        const requestedOrder = input.sectionOrder;
+        if (requestedOrder) {
           updateSidebarOrder(db, (current) =>
             input.appendOnly
-              ? [
-                  ...input.sectionOrder!,
-                  ...(current ?? []).filter((id) => !input.sectionOrder!.includes(id)),
-                ]
-              : input.sectionOrder,
+              ? [...requestedOrder, ...(current ?? []).filter((id) => !requestedOrder.includes(id))]
+              : requestedOrder,
           );
         }
         changed = true;

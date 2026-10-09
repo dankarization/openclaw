@@ -149,6 +149,19 @@ internal fun SidebarSectionTitle(
 }
 
 @Composable
+internal fun SidebarDisclosureIcon(
+  expanded: Boolean,
+  palette: SidebarPalette,
+) {
+  Icon(
+    imageVector = if (expanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+    contentDescription = null,
+    tint = palette.muted,
+    modifier = Modifier.size(18.dp),
+  )
+}
+
+@Composable
 internal fun SidebarCollapsibleHeader(
   label: String,
   expanded: Boolean,
@@ -173,17 +186,7 @@ internal fun SidebarCollapsibleHeader(
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(8.dp),
   ) {
-    Icon(
-      imageVector =
-        if (expanded) {
-          Icons.Default.KeyboardArrowDown
-        } else {
-          Icons.AutoMirrored.Filled.KeyboardArrowRight
-        },
-      contentDescription = null,
-      tint = palette.muted,
-      modifier = Modifier.size(18.dp),
-    )
+    SidebarDisclosureIcon(expanded, palette)
     iconContent?.invoke()
     Text(
       text = label,
@@ -316,6 +319,8 @@ internal enum class SidebarSessionActivity {
   Failed,
 }
 
+private val sidebarFailureStatuses = setOf("failed", "timeout", "killed", "error")
+
 internal fun sidebarSessionActivity(
   status: String?,
   lastRunError: String?,
@@ -326,18 +331,10 @@ internal fun sidebarSessionActivity(
   val normalizedStatus = status?.trim()?.lowercase()
   val active = isSessionRunActive(hasActiveRun, normalizedStatus)
   return when {
-    !lastRunError.isNullOrBlank() ||
-      normalizedStatus == "failed" ||
-      normalizedStatus == "timeout" ||
-      normalizedStatus == "killed" ||
-      normalizedStatus == "error" -> SidebarSessionActivity.Failed
-
+    !lastRunError.isNullOrBlank() || normalizedStatus in sidebarFailureStatuses -> SidebarSessionActivity.Failed
     normalizedStatus == "queued" && active -> SidebarSessionActivity.Queued
-
     continuing || active -> SidebarSessionActivity.Running
-
     unread -> SidebarSessionActivity.Unread
-
     else -> null
   }
 }
@@ -348,12 +345,15 @@ internal fun SidebarSessionActivityIndicator(
   palette: SidebarPalette,
 ) {
   when (activity) {
-    SidebarSessionActivity.Queued -> {
+    SidebarSessionActivity.Queued,
+    SidebarSessionActivity.Failed,
+    -> {
+      val failed = activity == SidebarSessionActivity.Failed
       Icon(
-        imageVector = Icons.Default.HourglassEmpty,
-        contentDescription = nativeString("Queued"),
-        modifier = Modifier.size(15.dp),
-        tint = palette.muted,
+        imageVector = if (failed) Icons.Default.ErrorOutline else Icons.Default.HourglassEmpty,
+        contentDescription = if (failed) nativeString("Run failed") else nativeString("Queued"),
+        modifier = Modifier.size(if (failed) 16.dp else 15.dp),
+        tint = if (failed) ClawTheme.colors.danger else palette.muted,
       )
     }
 
@@ -373,15 +373,6 @@ internal fun SidebarSessionActivityIndicator(
             .clip(CircleShape)
             .background(ClawTheme.colors.primary)
             .clearAndSetSemantics { stateDescription = nativeString("Needs attention") },
-      )
-    }
-
-    SidebarSessionActivity.Failed -> {
-      Icon(
-        imageVector = Icons.Default.ErrorOutline,
-        contentDescription = nativeString("Run failed"),
-        modifier = Modifier.size(16.dp),
-        tint = ClawTheme.colors.danger,
       )
     }
   }

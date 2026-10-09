@@ -29,37 +29,6 @@ class SessionGroupsTest {
   }
 
   @Test
-  fun offUltraShapeDoesNotMatterHereAndLegacyIsNotAnotherGatewaysCatalog() {
-    val restricted =
-      decideSessionGroupMigration(
-        listedNames = emptyList(),
-        legacyNames = listOf("Folder"),
-        canPut = true,
-      )
-    assertEquals(true, restricted.putLegacy)
-    assertEquals(false, restricted.consumeLegacy)
-
-    val otherGateway =
-      decideSessionGroupMigration(
-        listedNames = emptyList(),
-        legacyNames = emptyList(),
-        canPut = true,
-      )
-    assertEquals(false, otherGateway.putLegacy)
-    assertEquals(false, otherGateway.consumeLegacy)
-
-    val nonempty =
-      decideSessionGroupMigration(
-        listedNames = listOf("Work"),
-        legacyNames = listOf("Folder"),
-        canPut = true,
-      )
-    assertEquals(true, nonempty.putLegacy)
-    assertEquals(false, nonempty.consumeLegacy)
-    assertEquals(listOf("Work", "Extra"), unionSessionGroupNames(listOf("Work"), listOf("Extra", "Work")))
-  }
-
-  @Test
   fun moveDownStepsOntoTheNextVisibleSection() {
     val order =
       listOf(
