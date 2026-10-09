@@ -114,6 +114,7 @@ describe("sessions.groups.put", () => {
       cfg,
       names,
       sectionOrder,
+      appendOnly: undefined,
       assertCurrent,
       assertTargetCurrent,
     });

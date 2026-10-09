@@ -1460,6 +1460,7 @@ class ChatController internal constructor(
       "sessions.groups.put",
       buildJsonObject {
         put("names", JsonArray(cleaned.map(::JsonPrimitive)))
+        put("appendOnly", true)
         if (sectionOrder != null) {
           put("sectionOrder", JsonArray(sectionOrder.map(::JsonPrimitive)))
         }
