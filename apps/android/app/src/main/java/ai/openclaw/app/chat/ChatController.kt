@@ -1358,7 +1358,8 @@ class ChatController internal constructor(
         if (requestLease == null || requestLease.isCurrent()) fetchSessionsForCurrentWindow()
         true
       } catch (err: Throwable) {
-        updateErrorText(err.message)
+        // A retired catalog lease is a silent ownership loss, not a user-facing error.
+        if (requestLease == null || requestLease.isCurrent()) updateErrorText(err.message)
         false
       }
     }
