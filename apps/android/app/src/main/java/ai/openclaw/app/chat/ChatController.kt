@@ -1251,7 +1251,6 @@ class ChatController internal constructor(
     scope.launch { fetchSessionsForCurrentWindow(limit = limit, archived = archived) }
   }
 
-
   /** Next sidebar roster page. Rows merge into the folders they already belong to. */
   suspend fun loadMoreSessions(): Boolean =
     sessionRosterLoadMutex.withLock {
@@ -1265,7 +1264,6 @@ class ChatController internal constructor(
         _sessionRosterLoadingMore.value = false
       }
     }
-
 
   internal suspend fun patchSession(request: ChatSessionPatch): Boolean =
     with(request) {
@@ -1329,7 +1327,6 @@ class ChatController internal constructor(
           val lease = requestLease ?: captureRequestLease(requestCacheScope) ?: throw GatewayRequestNotEnqueued("not connected")
           lease.request("sessions.patch", params.toString(), 10 * 60_000L)
           publishGatewayState(lease) {
-
             // ACK retirement belongs to the captured choice, even after an agent switch.
             // A newer explicit choice or a history-observed successor keeps its intent.
             if (
@@ -1364,7 +1361,6 @@ class ChatController internal constructor(
         updateErrorText(err.message)
         false
       }
-
     }
 
   /**
@@ -4824,7 +4820,6 @@ class ChatController internal constructor(
                 _sessions.value
                   .firstOrNull {
                     it.key == activeSessionKey && it.ownerAgentId == requestAgentId
-
                   }?.takeIf { result.sessions.none { row -> row.key == activeSessionKey } }
               val page = if (append) mergeSessionRosterPages(_sessions.value, result.sessions) else result.sessions
               val sessions =

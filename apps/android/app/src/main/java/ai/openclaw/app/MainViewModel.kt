@@ -27,12 +27,9 @@ import ai.openclaw.app.chat.decideSessionGroupMigration
 import ai.openclaw.app.chat.defaultChatThinkingLevelSelection
 import ai.openclaw.app.chat.moveSessionGroupCatalogSection
 import ai.openclaw.app.chat.resolveChatComposerOwner
-
+import ai.openclaw.app.chat.runCatchingCancellable
 import ai.openclaw.app.chat.sidebarCategoryNames
 import ai.openclaw.app.chat.unionSessionGroupNames
-
-import ai.openclaw.app.chat.runCatchingCancellable
-
 import ai.openclaw.app.gateway.GatewayEndpoint
 import ai.openclaw.app.gateway.GatewayMediaKind
 import ai.openclaw.app.gateway.GatewayRegistryEntry
@@ -1547,7 +1544,6 @@ class MainViewModel internal constructor(
     archived: Boolean = false,
   ): Unit = ensureRuntime().chat.refreshSessions(limit = limit, archived = archived)
 
-
   /** Fetches the next `sessions.list` page into the same sidebar roster. */
   suspend fun loadMoreChatSessions(): Boolean = ensureRuntime().chat.loadMoreSessions()
 
@@ -1616,23 +1612,25 @@ class MainViewModel internal constructor(
     requestLease: GatewaySession.RequestLease? = null,
   ) {
     if (requestLease != null && !ownsSessionGroupLease(requestLease, requestLease.endpointStableId)) return
-    ensureRuntime().chat.patchSession(ChatSessionPatch(
-      key = key,
-      ownerAgentId = ownerAgentId,
-      expectedSessionId = expectedSessionId,
-      label = label,
-      clearLabel = clearLabel,
-      category = category,
-      clearCategory = clearCategory,
-      snoozedUntil = snoozedUntil,
-      clearSnooze = clearSnooze,
-      color = color,
-      clearColor = clearColor,
-      pinned = pinned,
-      archived = archived,
-      unread = unread,
-      requestLease = requestLease,
-    ))
+    ensureRuntime().chat.patchSession(
+      ChatSessionPatch(
+        key = key,
+        ownerAgentId = ownerAgentId,
+        expectedSessionId = expectedSessionId,
+        label = label,
+        clearLabel = clearLabel,
+        category = category,
+        clearCategory = clearCategory,
+        snoozedUntil = snoozedUntil,
+        clearSnooze = clearSnooze,
+        color = color,
+        clearColor = clearColor,
+        pinned = pinned,
+        archived = archived,
+        unread = unread,
+        requestLease = requestLease,
+      ),
+    )
   }
 
   internal suspend fun patchChatSession(patch: ChatSessionPatch) {

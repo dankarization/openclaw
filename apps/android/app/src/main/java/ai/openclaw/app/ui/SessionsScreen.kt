@@ -453,14 +453,12 @@ internal fun SessionsScreen(
         groupSessionTarget = null
         if (!session.matchesGateway(activeGatewayStableId)) return@SessionTextDialog
         coroutineScope.launch {
-
           viewModel.addChatSessionGroup(
             value,
             expectedGatewayStableId = session.gatewayStableId,
             sessionKey = session.key,
             ownerAgentId = session.ownerAgentId,
           )
-
         }
       },
     )

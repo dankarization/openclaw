@@ -9,12 +9,9 @@ import ai.openclaw.app.SessionCatalogEntry
 import ai.openclaw.app.SessionCatalogHost
 import ai.openclaw.app.SessionCatalogState
 import ai.openclaw.app.chat.ChatSessionEntry
-
+import ai.openclaw.app.chat.ChatSessionPatch
 import ai.openclaw.app.chat.SIDEBAR_SESSION_PAGE_SIZE
 import ai.openclaw.app.chat.SIDEBAR_SESSION_SEE_LESS_THRESHOLD
-
-import ai.openclaw.app.chat.ChatSessionPatch
-
 import ai.openclaw.app.chat.SessionSnooze
 import ai.openclaw.app.chat.normalizeSidebarSectionOrder
 import ai.openclaw.app.defaultSidebarPageOrder
@@ -258,7 +255,6 @@ internal fun sidebarSessionPresentation(
   currentSessionKey: String = "",
   nowMs: Long = System.currentTimeMillis(),
 ): SidebarSessionPresentation {
-
   val activeSessions = sidebarRecentSessions(sessions, currentSessionKey, nowMs)
   val pinned = activeSessions.filter { it.pinned == true }
   val navigable =

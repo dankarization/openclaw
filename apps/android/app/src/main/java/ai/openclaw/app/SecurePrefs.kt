@@ -1150,7 +1150,6 @@ class SecurePrefs(
     return hadPlainPrefsBeforeInit
   }
 
-
   private fun loadSidebarPageOrder(): List<String> = sanitizeSidebarPageOrder(loadStringList(sidebarPageOrderKey))
 
   private fun loadSidebarVisiblePages(): List<String> =
@@ -1169,7 +1168,6 @@ class SecurePrefs(
     val raw = plainPrefs.getString(sessionGroupSectionOrderKey, null)?.takeIf { it.isNotEmpty() } ?: return emptyMap()
     return runCatching { json.decodeFromString<Map<String, List<String>>>(raw) }.getOrDefault(emptyMap())
   }
-
 
   private fun loadStringList(key: String): List<String> {
     val raw = plainPrefs.getString(key, null)?.trim()

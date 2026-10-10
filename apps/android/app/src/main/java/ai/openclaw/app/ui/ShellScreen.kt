@@ -477,7 +477,6 @@ private fun OverviewScreen(
       )
   }
 
-
   SettingsRefreshOnConnect(isConnected) {
     viewModel.refreshChatSessions(limit = SIDEBAR_SESSION_ROSTER_LIMIT)
     viewModel.refreshAgents()
