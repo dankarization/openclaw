@@ -594,4 +594,73 @@ describe("stageSandboxMedia", () => {
       );
     });
   });
+
+  it("stages Telegram-managed inbound media above 50 MiB with the channel limit", async () => {
+    await withSandboxMediaTempHome("openclaw-telegram-staging-", async (home) => {
+      sandboxMocks.ensureSandboxWorkspaceForSession.mockResolvedValue(null);
+      const cfg = createSandboxMediaStageConfig(home);
+      cfg.channels = { telegram: { mediaMaxMb: 64 } };
+      const workspaceDir = join(home, "telegram-agent");
+      const fileName = "large-video.mp4";
+      const mediaPath = await writeInboundMedia(home, fileName, "synthetic-video");
+      await fs.truncate(mediaPath, SANDBOX_MEDIA_MAX_BYTES + 1);
+      const mediaUri = `media://inbound/${fileName}`;
+      const { ctx, sessionCtx } = createSandboxMediaContexts(mediaUri);
+      ctx.Provider = "telegram";
+      ctx.AccountId = "default";
+      sessionCtx.Provider = "telegram";
+      sessionCtx.AccountId = "default";
+
+      const result = await stageSandboxMedia({
+        ctx,
+        sessionCtx,
+        cfg,
+        sessionKey: "agent:main:telegram:direct:synthetic",
+        workspaceDir,
+      });
+
+      const stagedPath = result.staged.get(0)!;
+      expect(stagedPath).toMatch(
+        /media\/inbound\/openclaw-staged-[0-9a-f-]+\/input-large-video\.mp4$/,
+      );
+      expect(ctx.media?.[0]).toMatchObject({
+        path: stagedPath,
+        url: mediaUri,
+        workspaceDir,
+        staged: true,
+      });
+      expect(sessionCtx.media?.[0]).toEqual(ctx.media?.[0]);
+      await expect(fs.stat(stagedPath)).resolves.toMatchObject({
+        size: SANDBOX_MEDIA_MAX_BYTES + 1,
+      });
+    });
+  });
+
+  it("does not grant Telegram staging access to arbitrary local paths", async () => {
+    await withSandboxMediaTempHome("openclaw-telegram-staging-deny-", async (home) => {
+      sandboxMocks.ensureSandboxWorkspaceForSession.mockResolvedValue(null);
+      const cfg = createSandboxMediaStageConfig(home);
+      cfg.channels = { telegram: { mediaMaxMb: 4096 } };
+      const workspaceDir = join(home, "telegram-agent");
+      const privatePath = join(home, "unrelated-file.mp4");
+      await fs.writeFile(privatePath, "synthetic-private-file");
+      const { ctx, sessionCtx } = createSandboxMediaContexts(privatePath);
+      ctx.Provider = "telegram";
+      sessionCtx.Provider = "telegram";
+
+      const result = await stageSandboxMedia({
+        ctx,
+        sessionCtx,
+        cfg,
+        sessionKey: "agent:main:telegram:direct:synthetic",
+        workspaceDir,
+      });
+
+      expect(result.staged.size).toBe(0);
+      expect(ctx.media?.[0]?.path).toBe(privatePath);
+      await expect(fs.stat(join(workspaceDir, "media", "inbound"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    });
+  });
 });
