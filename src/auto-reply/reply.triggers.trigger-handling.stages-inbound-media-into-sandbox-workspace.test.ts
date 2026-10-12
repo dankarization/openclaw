@@ -663,4 +663,37 @@ describe("stageSandboxMedia", () => {
       });
     });
   });
+
+  it("uses the Telegram account limit instead of a higher channel limit", async () => {
+    await withSandboxMediaTempHome("openclaw-telegram-account-limit-", async (home) => {
+      sandboxMocks.ensureSandboxWorkspaceForSession.mockResolvedValue(null);
+      const cfg = createSandboxMediaStageConfig(home);
+      cfg.channels = {
+        telegram: { mediaMaxMb: 512, accounts: { limited: { mediaMaxMb: 1 } } },
+      };
+      const workspaceDir = join(home, "telegram-agent");
+      const mediaPath = await writeInboundMedia(home, "account-oversized.mp4", "");
+      await fs.truncate(mediaPath, 1024 * 1024 + 1);
+      const { ctx, sessionCtx } = createSandboxMediaContexts(mediaPath);
+      ctx.Provider = "telegram";
+      ctx.AccountId = "limited";
+      sessionCtx.Provider = "telegram";
+      sessionCtx.AccountId = "limited";
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const result = await stageSandboxMedia({
+        ctx,
+        sessionCtx,
+        cfg,
+        sessionKey: "agent:main:telegram:direct:synthetic",
+        workspaceDir,
+      });
+
+      expect(result.staged.size).toBe(0);
+      expect(ctx.media?.[0]?.path).toBe(mediaPath);
+      expect(warn).toHaveBeenCalledWith(
+        `Inbound media staging skipped for input-account-oversized.mp4: file exceeds limit of ${1024 * 1024} bytes (got ${1024 * 1024 + 1})`,
+      );
+    });
+  });
 });
