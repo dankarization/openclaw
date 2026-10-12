@@ -56,7 +56,7 @@ export async function prepareAndAdmitChatSend(
   const withCurrent = sessionMutationAuthorization?.withCurrent;
   const assertCurrentAsync = async () =>
     withCurrent ? withCurrent(() => assertCurrent?.()) : assertCurrent?.();
-  const normalizedRequest = normalizeChatSendRequest({
+  const normalization = normalizeChatSendRequest({
     params,
     client,
     ...(options?.trustedSystemInput ? { trustedSystemInput: true } : {}),
@@ -65,6 +65,7 @@ export async function prepareAndAdmitChatSend(
       ? { providerReviewAcknowledgment: options.providerReviewAcknowledgment }
       : {}),
   });
+  const normalizedRequest = normalization instanceof Promise ? await normalization : normalization;
   if (!normalizedRequest.ok) {
     respond(
       false,
@@ -77,11 +78,20 @@ export async function prepareAndAdmitChatSend(
     );
     return undefined;
   }
+  if (normalizedRequest.value.goalOperation) {
+    try {
+      assertCurrent?.();
+    } catch (error) {
+      respondChatSendAdmissionError(error, respond);
+      return undefined;
+    }
+  }
   const loadedSession = await prepareChatSendSession({
     request: normalizedRequest.value,
     context,
     client,
     isDirectExternalUser: options?.isDirectExternalUser,
+    assertCurrent,
   });
   if (!loadedSession.ok) {
     respond(
@@ -94,7 +104,7 @@ export async function prepareAndAdmitChatSend(
     return undefined;
   }
   if (normalizedRequest.value.mentions) {
-    const mentions = context.mentionInbox?.validateRecipients(
+    const mentions = await context.mentionInbox?.validateRecipientsAsync(
       client,
       loadedSession.value.entry
         ? { sessionKey: loadedSession.value.sessionKey, agentId: loadedSession.value.agentId }
@@ -115,7 +125,7 @@ export async function prepareAndAdmitChatSend(
     }
   }
   phase?.mark("authority");
-  const shouldAdmit = await runChatSendPreAdmission({
+  const preparation = {
     request: normalizedRequest.value,
     session: loadedSession.value,
     respond,
@@ -124,7 +134,8 @@ export async function prepareAndAdmitChatSend(
     assertCurrent,
     assertCurrentAsync,
     withCurrent,
-  });
+  };
+  const shouldAdmit = await runChatSendPreAdmission(preparation);
   if (!shouldAdmit) {
     return undefined;
   }
@@ -138,12 +149,8 @@ export async function prepareAndAdmitChatSend(
   let admitted: Awaited<ReturnType<typeof admitChatSend>> | undefined;
   try {
     const nativeRestriction = await prepareChatSendNativeRuntimeRestriction({
-      request: normalizedRequest.value,
+      ...preparation,
       session,
-      client,
-      context,
-      assertCurrent,
-      assertCurrentAsync,
     });
     if (nativeRestriction) {
       respond(false, undefined, nativeRestriction);
@@ -151,17 +158,12 @@ export async function prepareAndAdmitChatSend(
     }
     phase?.mark("runAdmission");
     admitted = await admitChatSend({
-      request: normalizedRequest.value,
+      ...preparation,
       session,
-      respond,
-      context,
-      client,
       onAdmissionOwned,
       hasCurrentClientAuthority,
-      assertCurrent,
-      assertCurrentAsync,
-      withCurrent,
       withPreparedCurrent: sessionMutationAuthorization?.withPreparedCurrent,
+      followRegistration: sessionMutationAuthorization?.followRegistration,
     });
     if (!admitted.ok) {
       return undefined;

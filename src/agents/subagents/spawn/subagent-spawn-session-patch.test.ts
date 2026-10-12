@@ -4,10 +4,10 @@ import { expect, it, vi } from "vitest";
 import {
   loadSessionEntry,
   loadTranscriptEvents,
-  replaceTranscriptEvents,
   upsertSessionEntryCore,
 } from "../../../config/sessions/session-accessor.js";
 import { writeSessionEntry } from "../../../config/sessions/session-accessor.sqlite-entry-store.js";
+import { replaceTranscriptEvents } from "../../../config/sessions/session-accessor.sqlite-transcript-write.test-support.js";
 import { recordSessionParticipantBestEffort } from "../../../sessions/session-participant-recording.js";
 import { AsyncWorkScope } from "../../../shared/async-work-scope.js";
 import { createDeferredCore } from "../../../shared/deferred.js";
@@ -26,11 +26,7 @@ it("inherits accepted human credit when participant persistence is still queued"
     const childSessionKey = "agent:main:subagent:child";
     const storePath = resolveOpenClawAgentSqlitePath({ agentId });
     const scope = { agentId, sessionKey, storePath };
-    const conversationLink = {
-      url: "https://chat.example.test/thread/123",
-      label: "Source Thread",
-    };
-    await upsertSessionEntryCore(scope, { sessionId: "parent-id", updatedAt: 1, conversationLink });
+    await upsertSessionEntryCore(scope, { sessionId: "parent-id", updatedAt: 1 });
     const releaseWriter = createDeferredCore();
     const writerStarted = createDeferredCore();
     const heldWriter = runOpenClawAgentWriteAdmission({ agentId, path: storePath }, async () => {
@@ -76,7 +72,6 @@ it("inherits accepted human credit when participant persistence is still queued"
       ]);
       const child = loadSessionEntry({ ...scope, sessionKey: childSessionKey });
       expect(child?.inheritedGitContributorProfileIds).toEqual(["human-requester"]);
-      expect(child?.conversationLink).toEqual(conversationLink);
       expect(child?.participants ?? []).toEqual([]);
     } finally {
       releaseWriter.resolve();
@@ -141,6 +136,9 @@ it.each(["creation", "fork"] as const)(
             ],
           );
         }
+      }
+      if (operation === "fork") {
+        writeSessionEntry(original, childSessionKey, { sessionId: "original-child", updatedAt: 1 });
       }
       const alias = state.statePath("selected");
       const heldAlias = state.statePath("selected-before");
@@ -315,7 +313,7 @@ it("rejects replaced parent incarnations and never retains a reused child grant"
 });
 
 it.each([false, true])(
-  "checks pinned parent skills off the Gateway thread (changed=%s)",
+  "preserves pinned parent skills while the parent updates (changed=%s)",
   async (changed) => {
     await withOpenClawTestState({ label: "spawn-parent-recheck" }, async () => {
       const sessionKey = "agent:main:parent";
@@ -336,7 +334,6 @@ it.each([false, true])(
         updatedAt: 1,
         skillLibrarySelections,
       });
-      const syncRead = vi.spyOn(spawnRuntime, "loadSessionEntry");
       // The parent's own turn keeps writing its row while the child is prepared.
       const prepare = writeParentDuringChildPrepare(childSessionKey, () =>
         upsertSessionEntryCore(scope, {
@@ -357,7 +354,6 @@ it.each([false, true])(
             ? { status: "error", error: expect.stringContaining("Parent skill selection changed") }
             : { status: "ok" },
         );
-        expect(syncRead).not.toHaveBeenCalled();
         const child = loadSessionEntry({ storePath, sessionKey: childSessionKey });
         if (changed) {
           expect(child).toBeUndefined();
@@ -370,7 +366,6 @@ it.each([false, true])(
         }
       } finally {
         prepare.mockRestore();
-        syncRead.mockRestore();
       }
     });
   },

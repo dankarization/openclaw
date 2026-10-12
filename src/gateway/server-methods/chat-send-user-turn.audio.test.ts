@@ -1,17 +1,21 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import {
   GATEWAY_CLIENT_IDS,
   GATEWAY_CLIENT_MODES,
 } from "../../../packages/gateway-protocol/src/client-info.js";
-import { useAutoCleanupTempDirTracker } from "../../../test/helpers/temp-dir.js";
 import { maybeHandleResetCommand } from "../../auto-reply/reply/commands-reset.js";
 import { buildCommandTestParams } from "../../auto-reply/reply/commands.test-harness.js";
+import {
+  clearRuntimeConfigSnapshot,
+  setRuntimeConfigSnapshot,
+} from "../../config/runtime-snapshot.js";
 import { buildPersistedUserTurnMessage } from "../../sessions/user-turn-transcript.js";
 import {
   createSqliteTranscriptTarget,
   persistUserTurnTranscript,
   readTranscriptMessages,
 } from "../../sessions/user-turn-transcript.test-support.js";
+import { useSessionStoreTempDirs } from "../../test-utils/session-state-cleanup.js";
 import * as chatAttachments from "../chat-attachments.js";
 import { prepareChatSendUserTurn } from "./chat-send-user-turn.js";
 import {
@@ -34,7 +38,14 @@ function requireInputText(input: { text?: string | null }): string {
 }
 
 describe("prepareChatSendUserTurn audio", () => {
-  const tempDirs = useAutoCleanupTempDirTracker(afterEach);
+  const tempDirs = useSessionStoreTempDirs(
+    (cleanup) =>
+      afterAll(async () => {
+        await cleanup();
+        clearRuntimeConfigSnapshot();
+      }),
+    "chat-audio-history-",
+  );
   it.each([
     {
       name: "WebChat",
@@ -84,6 +95,7 @@ describe("prepareChatSendUserTurn audio", () => {
         return "transcribed voice";
       });
       try {
+        setRuntimeConfigSnapshot({});
         const { controller, readInput } = createUserTurnInputController();
         const scope = {
           default: "allow" as const,
@@ -146,7 +158,7 @@ describe("prepareChatSendUserTurn audio", () => {
         expect(input.text).toBe("raw message\nHeard: transcribed voice");
         const persisted = buildPersistedUserTurnMessage(input);
         expect(persisted.content).toBe("raw message\nHeard: transcribed voice");
-        const target = createSqliteTranscriptTarget({ dir: tempDirs.make("chat-audio-history-") });
+        const target = createSqliteTranscriptTarget({ dir: tempDirs.make() });
         await persistUserTurnTranscript({ ...target, input, updateMode: "none" });
         const [reloaded] = await readTranscriptMessages(target);
         expect(reloaded?.content).toBe("raw message\nHeard: transcribed voice");
