@@ -108,6 +108,32 @@ describe("stageSandboxMedia", () => {
     });
   });
 
+  it("leaves no staged input directory when an owned source cannot be opened as a file", async () => {
+    await withSandboxMediaTempHome("openclaw-staging-unopenable-", async (home) => {
+      sandboxMocks.ensureSandboxWorkspaceForSession.mockResolvedValue(null);
+      const cfg = createSandboxMediaStageConfig(home);
+      const workspaceDir = join(home, "openclaw");
+      const sourcePath = join(home, ".openclaw", "media", "inbound", "directory.png");
+      await fs.mkdir(sourcePath, { recursive: true });
+      const { ctx, sessionCtx } = createSandboxMediaContexts(sourcePath);
+
+      const result = await stageSandboxMedia({
+        ctx,
+        sessionCtx,
+        cfg,
+        sessionKey: "agent:main:main",
+        workspaceDir,
+      });
+
+      expect(result.staged.size).toBe(0);
+      expect(ctx.media?.[0]?.path).toBe(sourcePath);
+      expect(sessionCtx.media?.[0]?.path).toBe(sourcePath);
+      await expect(fs.stat(join(workspaceDir, "media", "inbound"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    });
+  });
+
   it("stages global-session media with the prepared agent owner", async () => {
     await withSandboxMediaTempHome("openclaw-staging-global-", async (home) => {
       const { ensureSandboxWorkspaceForSession } = await vi.importActual<
@@ -272,6 +298,9 @@ describe("stageSandboxMedia", () => {
         const sensitiveFile = join(home, "secrets.txt");
         await fs.writeFile(sensitiveFile, "SENSITIVE DATA");
         const { ctx, sessionCtx } = createSandboxMediaContexts(sensitiveFile);
+        cfg.channels = { telegram: { mediaMaxMb: 4096 } };
+        ctx.Provider = "telegram";
+        sessionCtx.Provider = "telegram";
 
         await stageSandboxMedia({
           ctx,
@@ -632,34 +661,6 @@ describe("stageSandboxMedia", () => {
       expect(sessionCtx.media?.[0]).toEqual(ctx.media?.[0]);
       await expect(fs.stat(stagedPath)).resolves.toMatchObject({
         size: SANDBOX_MEDIA_MAX_BYTES + 1,
-      });
-    });
-  });
-
-  it("does not grant Telegram staging access to arbitrary local paths", async () => {
-    await withSandboxMediaTempHome("openclaw-telegram-staging-deny-", async (home) => {
-      sandboxMocks.ensureSandboxWorkspaceForSession.mockResolvedValue(null);
-      const cfg = createSandboxMediaStageConfig(home);
-      cfg.channels = { telegram: { mediaMaxMb: 4096 } };
-      const workspaceDir = join(home, "telegram-agent");
-      const privatePath = join(home, "unrelated-file.mp4");
-      await fs.writeFile(privatePath, "synthetic-private-file");
-      const { ctx, sessionCtx } = createSandboxMediaContexts(privatePath);
-      ctx.Provider = "telegram";
-      sessionCtx.Provider = "telegram";
-
-      const result = await stageSandboxMedia({
-        ctx,
-        sessionCtx,
-        cfg,
-        sessionKey: "agent:main:telegram:direct:synthetic",
-        workspaceDir,
-      });
-
-      expect(result.staged.size).toBe(0);
-      expect(ctx.media?.[0]?.path).toBe(privatePath);
-      await expect(fs.stat(join(workspaceDir, "media", "inbound"))).rejects.toMatchObject({
-        code: "ENOENT",
       });
     });
   });

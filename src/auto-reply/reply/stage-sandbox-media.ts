@@ -13,7 +13,12 @@ import { slugifySessionKey } from "../../agents/sandbox/shared.js";
 import { getAgentWorkspaceAccess } from "../../agents/workspace-access.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { logVerbose } from "../../globals.js";
-import { root as fsRoot, FsSafeError, readLocalFileSafely } from "../../infra/fs-safe.js";
+import {
+  root as fsRoot,
+  FsSafeError,
+  openLocalFileSafely,
+  readLocalFileSafely,
+} from "../../infra/fs-safe.js";
 import { retryAsync } from "../../infra/retry.js";
 import { normalizeScpRemoteHost, normalizeScpRemotePath } from "../../infra/scp-host.js";
 import { resolvePreferredOpenClawTmpDir } from "../../infra/tmp-openclaw-dir.js";
@@ -376,15 +381,21 @@ async function stageLocalFileIntoRoot(params: {
   abortSignal?: AbortSignal;
   prepareDestination: () => Promise<void>;
 }): Promise<void> {
-  const root = await fsRoot(params.rootDir);
-  const sourceStat = await fs.stat(params.sourcePath);
-  if (sourceStat.size > params.maxBytes) {
+  params.abortSignal?.throwIfAborted();
+  let sourceSize: number;
+  {
+    // Reject an unreadable or non-file source before creating the private marker.
+    // copyIn opens and verifies it again while streaming the bytes.
+    await using opened = await openLocalFileSafely({ filePath: params.sourcePath });
+    sourceSize = opened.stat.size;
+  }
+  if (sourceSize > params.maxBytes) {
     throw new FsSafeError(
       "too-large",
-      `file exceeds limit of ${params.maxBytes} bytes (got ${sourceStat.size})`,
+      `file exceeds limit of ${params.maxBytes} bytes (got ${sourceSize})`,
     );
   }
-  // copyIn rechecks the opened source and enforces the bound while copying.
+  const root = await fsRoot(params.rootDir);
   params.abortSignal?.throwIfAborted();
   await params.prepareDestination();
   params.abortSignal?.throwIfAborted();
