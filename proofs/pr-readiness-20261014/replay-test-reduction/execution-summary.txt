@@ -1,0 +1,14 @@
+ ✓  infra  src/media-understanding/echo-transcript.integration.test.ts > Telegram transcript echo durable ownership > sends once for concurrent processing and a replay after completion 9005ms
+ ✓  infra  src/media-understanding/echo-transcript.integration.test.ts > Telegram transcript echo durable ownership > preserves separate source messages, accounts, and chats with identical transcripts 4031ms
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Duration  27.06s (tests 50%, transform 31%, import 13%, setup 5%)
+ ✓  media-understanding  src/media-understanding/echo-transcript.test.ts > sendTranscriptEcho > keeps dollar sequences in the transcript literal 14ms
+ ✓  media-understanding  src/media-understanding/echo-transcript.test.ts > sendTranscriptEcho > skips non-deliverable channels 1ms
+ ✓  media-understanding  src/media-understanding/echo-transcript.test.ts > sendTranscriptEcho > skips when ctx has no resolved destination 1ms
+ ✓  media-understanding  src/media-understanding/echo-transcript.test.ts > sendTranscriptEcho > uses required durable delivery for a keyed Telegram echo and keeps failures non-fatal 5ms
+ ✓  media-understanding  src/media-understanding/echo-transcript.test.ts > sendTranscriptEcho > swallows delivery failures 1ms
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Duration  2.36s (worker 81%, transform 10%, setup 6%, tests 2%, import 1%)
+[test] passed 2 Vitest shards in 112.41s

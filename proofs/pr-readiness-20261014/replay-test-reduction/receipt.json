@@ -1,0 +1,30 @@
+{
+  "args": [
+    "node",
+    "scripts/test-projects.mts",
+    "src/media-understanding/echo-transcript.test.ts",
+    "src/media-understanding/echo-transcript.integration.test.ts",
+    "--",
+    "--maxWorkers=1"
+  ],
+  "exitCode": 0,
+  "wallSeconds": 113.9,
+  "candidateTree": "3dae2559923d401b444e7b6c9b9bf250a0318ab6",
+  "parent": "d1cc22726002daf2a4ebd816126a48db6c0f7542",
+  "testsPassed": 7,
+  "shardPassedCounts": [
+    2,
+    5
+  ],
+  "productionUnchangedFromParent": true,
+  "ordinaryLint": "passed 2 files,258 rules,zero warnings/errors",
+  "format": "passed",
+  "review": {
+    "status": "scoped-clean P0-P2",
+    "findings": [],
+    "confidence": 0.78
+  },
+  "liveTelegramProof": false,
+  "logSha256": "ea5b7f949e785467e0c5f8331d42f15eecd6e69bc1b53a3f1155b965fc4bbd06",
+  "sourceHead": "45bcbf83237d358441fe700a02daed239015b641"
+}
