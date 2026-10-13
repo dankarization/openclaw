@@ -27,8 +27,8 @@ it("publishes private Telegram topic renames when conversation label is the send
     displayName: "New Chat",
   });
   let expectedTitle = "Test 4";
-  const onCommittedRow = vi.fn((change: { sessionKey?: string }) => {
-    if (change.sessionKey === sessionKey) {
+  const onCommittedRow = vi.fn<Parameters<typeof sessionChanges.subscribe>[0]>((change) => {
+    if ("sessionKey" in change && change.sessionKey === sessionKey) {
       expect(loadSessionEntry(scope)).toMatchObject({
         updatedAt: 123,
         topicName: expectedTitle,
