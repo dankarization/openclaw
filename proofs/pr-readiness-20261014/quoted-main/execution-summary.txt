@@ -1,0 +1,83 @@
+ ✓  unit-fast  src/sessions/user-turn-transcript.media.test.ts > buildPersistedUserTurnMediaInputsFromFields > preserves quote provenance through transcript write, reload and reconstruction 9ms
+ ✓  unit-fast  src/sessions/user-turn-transcript.media.test.ts > buildPersistedUserTurnMediaInputsFromFields > builds media inputs from canonical persisted facts 1ms
+ ✓  unit-fast  src/sessions/user-turn-transcript.media.test.ts > buildPersistedUserTurnMediaInputsFromFields > does not consult legacy top-level fields after the versioned cutover 0ms
+ ✓  unit-fast  src/sessions/user-turn-transcript.media.test.ts > buildLateMediaAttachedProjection canonical persistence > reconstructs legacy-only rows from canonical facts first 1ms
+ ✓  unit-fast  src/sessions/user-turn-transcript.media.test.ts > buildLateMediaAttachedProjection canonical persistence > reconstructs sparse rows from canonical facts first 1ms
+ ✓  unit-fast  src/sessions/user-turn-transcript.media.test.ts > buildPersistedUserTurnMessage media projection > persists zero attachments as canonical facts without legacy fields 2ms
+ ✓  unit-fast  src/sessions/user-turn-transcript.media.test.ts > buildPersistedUserTurnMessage media projection > persists bare kind as canonical facts without legacy fields 1ms
+ ✓  unit-fast  src/sessions/user-turn-transcript.media.test.ts > buildPersistedUserTurnMessage media projection > persists provider MIME-like kind as canonical facts without legacy fields 2ms
+ ✓  unit-fast  src/sessions/user-turn-transcript.media.test.ts > buildPersistedUserTurnMessage media projection > persists transcribed attachment as canonical facts without legacy fields 2ms
+ ✓  unit-fast  src/sessions/user-turn-transcript.media.test.ts > buildPersistedUserTurnMessage media projection > persists probed video metadata as canonical facts without legacy fields 1ms
+ ✓  unit-fast  src/sessions/user-turn-transcript.media.test.ts > buildPersistedUserTurnMessage media projection > persists workspace-relative attachment as canonical facts without legacy fields 1ms
+ ✓  unit-fast  src/sessions/user-turn-transcript.media.test.ts > buildPersistedUserTurnMessage media projection > persists hydration-suppressed attachment as canonical facts without legacy fields 1ms
+ Test Files  1 passed (1)
+      Tests  12 passed (12)
+   Duration  107.82s (transform 94%, import 6%)
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > echoes an enabled audio transcript to the originating account 1710ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > retains quoted STT while echoing only current audio (mixed=false) 121ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > retains quoted STT while echoing only current audio (mixed=true) 11ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > keeps quote provenance at its original index after an invalid earlier attachment 7ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > echoes distinct current voice notes even when their transcript text matches 11ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > keeps tiny audio-MIME text files eligible for extraction 12ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > keeps a successful transcript instead of an earlier tooSmall placeholder 45ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > keeps caption for command parsing when audio has user text 7ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > handles URL-only attachments for audio transcription 6ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > marks audio exceeding maxBytes in audio-only mode 5ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > falls back to a CLI transcript after provider failure 22ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > auto-detects sherpa for audio when binary and model files are available 12ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > transcodes non-wav audio before auto-detected whisper-cli runs 42ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > does not probe Gemini CLI during media auto-detect 4ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > describes ACP-delivered images and preserves their captions for commands 6ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > uses the agent workspace as a fallback for relative media paths 16255ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > normalizes HEIC sequence images before tools.media.image provider execution 337ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > renders recorded outcomes for every image candidate when no model is configured 3ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > uses the active audio provider when models are missing 6ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > skips audio STT for attachments marked transcribed by channel preflight 3ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > orders real and too-small audio transcripts with last preference 9ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > honors audio scope while leaving native image, video and file inputs untouched 3ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > orders synthetic too-small audio output between image and video 74ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > does not coerce ZIP central-directory headers into text/plain 9ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > extracts inbound files above the 5MB OpenResponses default 75ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > does not reclassify PDF attachments as text/plain 5ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > preserves earlier provider bytes when a completed PDF extractor mutates its input 33ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > preserves earlier provider bytes when a timed-out PDF extractor mutates its input 30ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > escapes extracted file content within its untrusted prompt boundary 26ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > finalizes empty file context 6ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > delivers pasted text without image interpretation in files-only mode 7ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > uses classified MIME for allowedMimes when declared metadata disagrees 6ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > defers the self-serve path until the final runtime capability 5ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > never renders hostile declared MIME metadata into model context 5ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > shares one reason-neutral overflow budget across document and media markers 11ms
+ ✓  media-understanding  src/media-understanding/apply.test.ts > applyMediaUnderstanding > renderInboundDocumentContext > returns rendered PDF page images for a scanned document 5ms
+ ✓  media-understanding  src/media-understanding/audio-preflight.test.ts > transcribeFirstAudio > runs audio preflight in auto mode when audio config is absent 4ms
+ ✓  media-understanding  src/media-understanding/audio-preflight.test.ts > transcribeFirstAudio > transcribes AIFF voice notes without an explicit content type 3ms
+ ✓  media-understanding  src/media-understanding/audio-preflight.test.ts > transcribeFirstAudio > transcribes an opaque audio source identified by separate filename metadata 3ms
+ ✓  media-understanding  src/media-understanding/audio-preflight.test.ts > transcribeFirstAudio > skips audio preflight when audio config is explicitly disabled 0ms
+ ✓  media-understanding  src/media-understanding/audio-preflight.test.ts > transcribeFirstAudio > returns quoted STT for mention context without echoing it as current audio 2ms
+ ✓  media-understanding  src/media-understanding/audio-preflight.test.ts > transcribeFirstAudio > echoes the preflight transcript when echoTranscript is enabled 3ms
+ Test Files  2 passed (2)
+      Tests  42 passed (42)
+   Duration  53.83s (tests 77%, transform 14%, worker 5%, import 4%)
+ ✓  channels  src/channels/inbound-event/context.test.ts > resolveInboundSupplementalSenderAllowed > allows direct context without consultin… 119ms
+ ✓  channels  src/channels/inbound-event/context.test.ts > resolveInboundSupplementalSenderAllowed > allows open group context without consu… 8ms
+ ✓  channels  src/channels/inbound-event/context.test.ts > resolveInboundSupplementalSenderAllowed > allows an allowlisted supplemental send… 10ms
+ ✓  channels  src/channels/inbound-event/context.test.ts > resolveInboundSupplementalSenderAllowed > blocks a non-allowlisted supplemental s… 8ms
+ ✓  channels  src/channels/inbound-event/context.test.ts > buildChannelInboundEventContext > does not claim authoritative route facts when the producer omits the route peer 13ms
+ ✓  channels  src/channels/inbound-event/context.test.ts > buildChannelInboundEventContext > maps normalized inbound facts into a finalized message context 14ms
+ ✓  channels  src/channels/inbound-event/context.test.ts > buildChannelInboundEventContext > projects the ingress from-me sender fact as SenderIsSelf 9ms
+ ✓  channels  src/channels/inbound-event/context.test.ts > buildChannelInboundEventContext > routes untrusted supplemental group prompt context outside GroupSystemPrompt 17ms
+ ✓  channels  src/channels/inbound-event/context.test.ts > buildChannelInboundEventContext > preserves deprecated-only structured context sources 9ms
+ ✓  channels  src/channels/inbound-event/context.test.ts > buildChannelInboundEventContext > derives command turns from normalized command facts 7ms
+ ✓  channels  src/channels/inbound-event/context.test.ts > buildChannelInboundEventContext > keeps explicit command turns ahead of normalized command facts 6ms
+ ✓  channels  src/channels/inbound-event/context.test.ts > buildChannelInboundEventContext > filters supplemental context with channel visibility policy 7ms
+ ✓  channels  src/channels/inbound-event/context.test.ts > buildChannelInboundEventContext > keeps quoted context in allowlist_quote mode 6ms
+ ✓  channels  src/channels/inbound-event/context.test.ts > buildChannelInboundEventContext > drops supplemental context with unknown sender allow state in restrictive modes 5ms
+ ✓  channels  src/channels/inbound-event/context.test.ts > finalizeChannelInboundContext supplemental media resolution > retains quote media provenance with lazy resolution=false 15ms
+ ✓  channels  src/channels/inbound-event/context.test.ts > finalizeChannelInboundContext supplemental media resolution > retains quote media provenance with lazy resolution=true 5ms
+ ✓  channels  src/channels/inbound-event/context.test.ts > finalizeChannelInboundContext supplemental media resolution > preserves self-authored quote text without loading its media by default 7ms
+ ✓  channels  src/channels/inbound-event/context.test.ts > finalizeChannelInboundContext supplemental media resolution > preserves self-authored quote media when only the body is suppressed 6ms
+ ✓  channels  src/channels/inbound-event/context.test.ts > finalizeChannelInboundContext supplemental media resolution > does not resolve media for hidden quotes 5ms
+ Test Files  1 passed (1)
+      Tests  19 passed (19)
+   Duration  18.82s (transform 67%, import 14%, worker 14%, setup 4%, tests 2%)
+[test] passed 3 Vitest shards in 195.50s

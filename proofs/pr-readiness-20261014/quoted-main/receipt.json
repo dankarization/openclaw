@@ -1,0 +1,85 @@
+{
+  "args": [
+    "node",
+    "scripts/run-vitest.mjs",
+    "src/channels/inbound-event/context.test.ts",
+    "src/media-understanding/apply.test.ts",
+    "src/media-understanding/audio-preflight.test.ts",
+    "src/sessions/user-turn-transcript.media.test.ts",
+    "--maxWorkers=1"
+  ],
+  "exitCode": 0,
+  "wallSeconds": 197.1,
+  "candidateTree": "4b62f4e2a644bb0c60bbd411d97c28b20b629680",
+  "main": "04f2e80e9a172c4decdc4c2c37fb261c78ea53fa",
+  "publicParent": "50d631dd248586d3e4e5fdf1a84a92a1d99d2f4d",
+  "nativeContainedDependencies": true,
+  "testsPassed": 73,
+  "shardPassedCounts": [
+    12,
+    42,
+    19
+  ],
+  "logSha256": "0fdfcb9705778f1b4b6ede35a705f1764aa667a8b3ffeaf122be3d495cf51bbf",
+  "files": [
+    {
+      "path": "src/channels/inbound-event/context.test.ts",
+      "blob": "34f97b02044aaf2b23f14f0c8d0eaa6148512f69"
+    },
+    {
+      "path": "src/channels/inbound-event/context.ts",
+      "blob": "d2683397836eeae71276808780b60d0e41eb8e82"
+    },
+    {
+      "path": "src/media-understanding/apply.test.ts",
+      "blob": "42846188d5d6a8c0cf9668adbae0d4d128982f20"
+    },
+    {
+      "path": "src/media-understanding/apply.ts",
+      "blob": "32473e36f4ca725025cc90aeac50d1132e0f3d40"
+    },
+    {
+      "path": "src/media-understanding/audio-preflight.test.ts",
+      "blob": "d7435a870ca7d2ba112a703a6e8847cd2522b870"
+    },
+    {
+      "path": "src/media-understanding/audio-preflight.ts",
+      "blob": "fc7025b1bca9d937536508a8831e39a014e2489f"
+    },
+    {
+      "path": "src/media/media-facts.ts",
+      "blob": "b69444ee490dc57f64cc955fd136be408cdfefc2"
+    },
+    {
+      "path": "src/sessions/user-turn-transcript.media.test.ts",
+      "blob": "808ac35f3d318be99221b50f5f337671692adc1b"
+    },
+    {
+      "path": "src/sessions/user-turn-transcript.message.ts",
+      "blob": "e3a9c60898917ebee428ae9be14c4cbb529c261b"
+    },
+    {
+      "path": "src/sessions/user-turn-transcript.types.ts",
+      "blob": "7d286d09254df80078acee6275a8b0f2d806cbc5"
+    }
+  ],
+  "realTelegramProof": false,
+  "productionChanged": false,
+  "sourceHead": "0d33d13c5206512f8e712a53b7362c402c454317",
+  "ordinaryLint": {
+    "passed": true,
+    "warnings": 0,
+    "errors": 0,
+    "rules": 258,
+    "files": 10,
+    "wallSeconds": 3
+  },
+  "review": {
+    "status": "scoped-clean P0-P2",
+    "confidence": 0.84,
+    "sourceUnchangedAfterReview": true
+  },
+  "typeAwareLint": "original symlinked worktree blocked by native containment guard; not rerun/not claimed",
+  "format": "passed",
+  "initialEnvironmentFailure": "no assertions in external-symlink worktree: extension-local quickjs-wasi missing; native containment guard rejected declaration inputs. Solved by using an already fully installed checkout, requiring exact full-tree equality; guards/config/assertions unchanged."
+}
