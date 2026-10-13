@@ -1,0 +1,55 @@
+{
+  "pr": 164857,
+  "head": "5c470bab52f3ec5f9cfb9cf9c260227e76989864",
+  "tree": "bbf628378d96eaf51fc4c035be4a398a78226afb",
+  "parent": "ef8510cc6301442999ff2c99528f1280fa4aaced",
+  "findingsAddressed": [
+    "Append-mode reorder normalized against complete live catalog inside transaction",
+    "Optional Boolean appendOnly declared in closed list-result schema"
+  ],
+  "schema": {
+    "causalRed": {
+      "failed": 1,
+      "passed": 1
+    },
+    "green": {
+      "passed": 2,
+      "failed": 0
+    }
+  },
+  "protocolCheck": "passed",
+  "generatedClients": [
+    "Kotlin",
+    "Swift"
+  ],
+  "android": {
+    "compiled": "PlayDebug passed",
+    "sidebarTestsPassed": 25,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "ktlint": "passed",
+    "wallSeconds": 130.04
+  },
+  "review": {
+    "status": "scoped-clean P0-P2",
+    "confidence": 0.82
+  },
+  "ordinaryFormatAndDiff": "passed",
+  "catalogWorker": {
+    "status": "unconfirmed",
+    "exitCode": 124,
+    "wallSeconds": 181.67,
+    "reason": "stopped during cold worker preparation before assertions"
+  },
+  "liveProof": false,
+  "productionChanged": false,
+  "apkBuilt": false,
+  "publicTreeVerified": true,
+  "remaining": [
+    "current-head CI",
+    "main conflicts",
+    "connected authority/revocation/pagination/migration",
+    "maintainer product/security decisions"
+  ]
+}
