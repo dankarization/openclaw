@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "release": "2026.10.2",
+  "stableCommit": "b8952d477f0c932d8ddc6da5c89cab5a169b6ff1",
+  "installedCommit": "6c3111c1101ccd99a5167436364fd6e591a1c640",
+  "publicEquivalentCommit": "7c7f50cfc6576b623208bb244b2e452f3d4490d9",
+  "publicEquivalentTree": "74d9fa821d46f02bb98c54b5032a6de926d87346",
+  "prHead": "53bfd434bfe35bd7e00c240df9c01b77c505db49",
+  "owner": "src/media-understanding/echo-transcript.ts",
+  "ownerGitBlob": "1e55cc1ec49ca35a2063be470ba6b64b921c70e9",
+  "ownerByteIdentical": true,
+  "test": "src/media-understanding/echo-transcript.integration.test.ts",
+  "testGitBlob": "1cfa9eeeefb0795e9c28b8ff6f04fa6a8d5fa34b",
+  "exitCode": 0,
+  "passed": 3,
+  "wallSeconds": 72.3,
+  "realSQLite": true,
+  "adapter": "fake Telegram channel adapter",
+  "realTelegramProof": false,
+  "rawLogSha256": "773ed230252bfe64b93e443535f2e7882e8175baa9facb496bd9c7deb97cc389"
+}

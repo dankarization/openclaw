@@ -1,0 +1,10 @@
+RUN v5.0.1 [isolated-release-checkout]
+PASS infra src/media-understanding/echo-transcript.integration.test.ts
+  sends once for concurrent processing and a replay after completion (19983 ms)
+  retains source identity through deferred account-admitted echo and suppresses replay (11755 ms)
+  preserves separate source messages, accounts, and chats with identical transcripts (10959 ms)
+Test Files: 1 passed
+Tests: 3 passed
+Duration: 70.87 s
+Command wall: 72.3 s
+Exit: 0
