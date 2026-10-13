@@ -1,0 +1,95 @@
+{
+  "args": [
+    "node",
+    "scripts/test-projects.mts",
+    "extensions/telegram/src/bot-message-context.dm-session.test.ts",
+    "extensions/telegram/src/topic-name-cache.test.ts",
+    "src/auto-reply/reply/session.telegram-topic-title.test.ts",
+    "src/config/sessions/session-accessor.topic-title.test.ts",
+    "--",
+    "--maxWorkers=1"
+  ],
+  "exitCode": 0,
+  "wallSeconds": 447,
+  "candidateTree": "db992de73fcf97b4fe08c3f770d62263e5d7d981",
+  "parent": "9dc17035535d9256689425164f806e169f1e4621",
+  "main": "04f2e80e9a172c4decdc4c2c37fb261c78ea53fa",
+  "dependenciesContained": true,
+  "testsPassed": 16,
+  "shardPassedCounts": [
+    1,
+    2,
+    13
+  ],
+  "files": [
+    {
+      "path": "extensions/telegram/src/bot-message-context.body.ts",
+      "blob": "89c3c1cc8d701d14ae93ba9df159e73d0ac4629d"
+    },
+    {
+      "path": "extensions/telegram/src/bot-message-context.dm-session.test.ts",
+      "blob": "7a4eeed4260b4df7e7009db34d95574de2355675"
+    },
+    {
+      "path": "extensions/telegram/src/bot-message-context.session.ts",
+      "blob": "6855c84d375588da73ae65c865b8330ee06fef0b"
+    },
+    {
+      "path": "extensions/telegram/src/bot-message-context.ts",
+      "blob": "1b52b9c81e17ca4762f15fa78a6df9848b9294a5"
+    },
+    {
+      "path": "extensions/telegram/src/bot-message.ts",
+      "blob": "ba55e655391fe800649e474c723200773777a97d"
+    },
+    {
+      "path": "extensions/telegram/src/forum-service-message.ts",
+      "blob": "01d06fca698753bcb7b3d66bd8406e4495f4a848"
+    },
+    {
+      "path": "extensions/telegram/src/topic-name-cache.test.ts",
+      "blob": "507292390043dfcb6009e8a628802a5434622abd"
+    },
+    {
+      "path": "extensions/telegram/src/topic-name-cache.ts",
+      "blob": "7e41ae3a22b72961fb58a8d5e6bbc8446be03c1d"
+    },
+    {
+      "path": "src/auto-reply/reply/session.telegram-topic-title.test.ts",
+      "blob": "e9cbef4913427599df158c4ba96db440a5c1fc92"
+    },
+    {
+      "path": "src/config/sessions/metadata-projection.ts",
+      "blob": "cf8b15173e2e99ce5193d5b70a9ef7ee32bacb0f"
+    },
+    {
+      "path": "src/config/sessions/metadata.ts",
+      "blob": "d70ae2dfb20a04ec26dab556405e1d9584b7ebd5"
+    },
+    {
+      "path": "src/config/sessions/session-accessor.topic-title.test.ts",
+      "blob": "5f917aa9e2979e3244fd033059e256d69ee62a07"
+    },
+    {
+      "path": "src/gateway/session-utils-display.ts",
+      "blob": "c0d542cb1e8fadf00531aba8e22a3537ea5a9309"
+    },
+    {
+      "path": "test/vitest/vitest.extension-database-workers-paths.mjs",
+      "blob": "3a93f9a57f6e93267cc5af73e31ca41264d4be62"
+    }
+  ],
+  "ordinaryLint": "passed14files,258rules,0warnings/errors,26.6s",
+  "formatAndDiff": "passed",
+  "review": {
+    "status": "scoped-clean P0-P2",
+    "confidence": 0.72,
+    "limitations": "bundle only; unchanged files unavailable, reviewer did not execute tests"
+  },
+  "ownerContract": "PreparedSessionMetaPatch -> pure metadata-projection -> existing closed inbound-metadata writer -> canonical postcommit row publication",
+  "sourceUnchangedAfterReview": true,
+  "logSha256": "c195184880f19f6efbc5b686242054391d22199334b91c685813dd07f9a5f5ef",
+  "realTelegramConnectedGUIProof": false,
+  "productionChanged": false,
+  "sourceHead": "71df13365048a379c36ab1a5f2dee5bef99c8443"
+}

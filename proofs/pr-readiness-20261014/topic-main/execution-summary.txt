@@ -1,0 +1,26 @@
+ ✓  runtime-config  src/config/sessions/session-accessor.topic-title.test.ts > publishes private Telegram topic renames when conversation label is the sender 4811ms
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Duration  129.29s (transform 90%, tests 4%, import 4%, worker 2%)
+ ✓  auto-reply  src/auto-reply/reply/session.telegram-topic-title.test.ts > keeps private Telegram topic titles visible across first reply initialization (cached: undefined) 5897ms
+ ✓  auto-reply  src/auto-reply/reply/session.telegram-topic-title.test.ts > keeps private Telegram topic titles visible across first reply initialization (cached: New Chat) 3962ms
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Duration  68.72s (transform 64%, import 16%, tests 15%, worker 4%, setup 1%)
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.dm-session.test.ts > Telegram recorded session destinations > persists the deliverable destination for deleted direct session 21310ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.dm-session.test.ts > Telegram recorded session destinations > persists the deliverable destination for bot-private topic 9059ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.dm-session.test.ts > Telegram recorded session destinations > keeps the Telegram-selected topic session through real /help initialization 19644ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.dm-session.test.ts > Telegram recorded session destinations > isolates identity-linked senders and recorded destinations across named accounts 11745ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.dm-session.test.ts > Telegram recorded session destinations > admits plugin-bound ambient topics without replacing their channel session 8546ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.dm-session.test.ts > Telegram recorded session destinations > keeps ordinary bindings mention-gated and preserves their recorded destination 8437ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.dm-session.test.ts > Telegram recorded session destinations > renames an existing private bot topic session from a title service update without a turn 5714ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.dm-session.test.ts > Telegram recorded session destinations > does not create a private topic session from a title-only service update 7013ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.dm-session.test.ts > Telegram recorded session destinations > learns reply topic names and restores them after plugin-state reopen 18555ms
+ ✓  extension-database-workers  extensions/telegram/src/topic-name-cache.test.ts > topic-name-cache > preserves a renamed topic through status-only events without inventing unnamed topics 2671ms
+ ✓  extension-database-workers  extensions/telegram/src/topic-name-cache.test.ts > topic-name-cache > retains active topics and evicts the inactive oldest topic across database reopen 10554ms
+ ✓  extension-database-workers  extensions/telegram/src/topic-name-cache.test.ts > topic-name-cache > isolates identical private bot topic coordinates by Telegram account 2640ms
+ ✓  extension-database-workers  extensions/telegram/src/topic-name-cache.test.ts > topic-name-cache > isolates identical topic coordinates in separate persisted scopes 2271ms
+ Test Files  2 passed (2)
+      Tests  13 passed (13)
+   Duration  226.98s (tests 57%, transform 33%, import 9%, setup 1%)
+[test] passed 3 Vitest shards in 441.31s
