@@ -1,0 +1,41 @@
+{
+  "head": "ef8510cc6301442999ff2c99528f1280fa4aaced",
+  "tree": "9d7b5a6f104e52e1284560d4cf83bcfce6ebfbe8",
+  "findingsAddressed": [
+    "Negotiate append support on originating physical connection; released gateways keep replace contract",
+    "Append after maximum surviving persisted position",
+    "Submit only intended new/legacy names; reorder submits no additions"
+  ],
+  "kotlinCompile": "passed",
+  "unitTests": {
+    "passed": 65,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "wallTime": "8m36s",
+    "groups": {
+      "SessionGroups": 6,
+      "ChatControllerCommandControls": 41,
+      "MainViewModel": 18
+    },
+    "sourceAttribution": "before formatter-only layout cleanup in two test blocks; assertions unchanged"
+  },
+  "finalKtlint": "passed 1m01s",
+  "oxfmt": "passed 248ms",
+  "review": {
+    "status": "scoped-clean P0-P2",
+    "confidence": 0.72,
+    "tree": "357120ceea08cc972a0d02bd3a4e8a27df5b4c78",
+    "attribution": "before formatter-only cleanup; full sparse and execution trees matched"
+  },
+  "publicSourceTreeVerified": true,
+  "gatewayTests": "unconfirmed: stopped during cold worker compilation before assertions",
+  "remaining": [
+    "current-head CI",
+    "main conflicts",
+    "current-head connected authority/concurrency/pagination/migration proof",
+    "maintainer product/security decision"
+  ],
+  "productionChanged": false,
+  "newQaServer": false
+}
