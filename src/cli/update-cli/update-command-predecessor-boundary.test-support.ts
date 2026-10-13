@@ -207,6 +207,8 @@ export function registerPredecessorBoundaryControls(makeTempDir: (prefix: string
         "run-finished",
         "not-stopped",
         "native-unsafe",
+        "expired-before-stop",
+        "expired-after-preparation",
       ].includes(scenario)
         ? []
         : [
