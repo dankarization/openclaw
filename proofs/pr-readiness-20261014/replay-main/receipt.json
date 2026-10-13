@@ -1,0 +1,68 @@
+{
+  "command": [
+    "node",
+    "scripts/test-projects.mts",
+    "src/media-understanding/echo-transcript.test.ts",
+    "src/media-understanding/echo-transcript.integration.test.ts",
+    "extensions/telegram/src/bot-message-context.body.test.ts",
+    "--",
+    "--maxWorkers=1"
+  ],
+  "exitCode": 0,
+  "wallSeconds": 512.8,
+  "candidateTree": "86f1fcfc824c3a1a7443771db87adc8c77252fa1",
+  "sourceHead": "d1cc22726002daf2a4ebd816126a48db6c0f7542",
+  "main": "04f2e80e9a172c4decdc4c2c37fb261c78ea53fa",
+  "previousFailure": "missing TMPDIR before tests; corrected directory only; assertions unchanged",
+  "testsPassed": 43,
+  "testsByShard": {
+    "infra": 2,
+    "media-understanding": 7,
+    "extension-database-workers": 34
+  },
+  "logSha256": "f486bfe22a9684dc3a568f39071a10e554799be11fe90f677877450498e909c3",
+  "files": [
+    {
+      "path": "extensions/telegram/src/bot-message-context.body.test.ts",
+      "blob": "d95603411ea0de1229865a0d8f218f5d23adacc7",
+      "matches": true
+    },
+    {
+      "path": "extensions/telegram/src/bot-message-context.body.ts",
+      "blob": "149aef2df74dfd996994f89de7d3cdd7a4f3b224",
+      "matches": true
+    },
+    {
+      "path": "src/media-understanding/echo-transcript.integration.test.ts",
+      "blob": "a8d3da4e271073187475afcf66d47a9108b8d1c2",
+      "matches": true
+    },
+    {
+      "path": "src/media-understanding/echo-transcript.test.ts",
+      "blob": "48428fb0fe8be69a39ae881eed8af0924b6595fb",
+      "matches": true
+    },
+    {
+      "path": "src/media-understanding/echo-transcript.ts",
+      "blob": "1e55cc1ec49ca35a2063be470ba6b64b921c70e9",
+      "matches": true
+    },
+    {
+      "path": "test/vitest/vitest.database-worker-core-paths.mjs",
+      "blob": "6015845ad5b4d76a3fd6306d471419b51f8082cb",
+      "matches": true
+    }
+  ],
+  "format": "passed 6 files",
+  "ordinaryLint": "passed 6 files, 258 rules, 0 warnings/errors, 40.7 seconds",
+  "typeAwareLint": "unconfirmed: preparation timeout 240 seconds",
+  "gatePlanner": "unconfirmed: dry-run timeout 120 seconds",
+  "review": {
+    "status": "scoped-clean",
+    "findings": [],
+    "confidence": 0.76,
+    "repositoryToolsAvailable": false
+  },
+  "realTelegramProof": false,
+  "productionChanged": false
+}

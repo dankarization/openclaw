@@ -1,0 +1,53 @@
+ ✓  infra  src/media-understanding/echo-transcript.integration.test.ts > Telegram transcript echo durable ownership > sends once for concurrent processing and a replay after completion 22967ms
+ ✓  infra  src/media-understanding/echo-transcript.integration.test.ts > Telegram transcript echo durable ownership > preserves separate source messages, accounts, and chats with identical transcripts 3883ms
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Duration  54.94s (tests 50%, transform 40%, import 7%, setup 3%)
+ ✓  media-understanding  src/media-understanding/echo-transcript.test.ts > sendTranscriptEcho > keeps dollar sequences in the transcript literal 13ms
+ ✓  media-understanding  src/media-understanding/echo-transcript.test.ts > sendTranscriptEcho > skips non-deliverable channels 1ms
+ ✓  media-understanding  src/media-understanding/echo-transcript.test.ts > sendTranscriptEcho > skips when ctx has no resolved destination 1ms
+ ✓  media-understanding  src/media-understanding/echo-transcript.test.ts > sendTranscriptEcho > forwards Telegram account and thread metadata to outbound delivery 2ms
+ ✓  media-understanding  src/media-understanding/echo-transcript.test.ts > sendTranscriptEcho > deduplicates only complete Telegram source-message identities 2ms
+ ✓  media-understanding  src/media-understanding/echo-transcript.test.ts > sendTranscriptEcho > uses required durable delivery for a keyed Telegram echo and keeps failures non-fatal 4ms
+ ✓  media-understanding  src/media-understanding/echo-transcript.test.ts > sendTranscriptEcho > swallows delivery failures 1ms
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Duration  4.36s (worker 89%, transform 7%, setup 3%, tests 1%, import 1%)
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > resolves configured bindings only after admission: allowed named account 18430ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > resolves configured bindings only after admission: disabled topic 3002ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > resolves configured bindings only after admission: unauthorized control 4334ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > resolves configured bindings only after admission: failed preparation 2358ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > gives topic mention policy precedence over stored mention activation (false) 9793ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > gives topic mention policy precedence over stored always activation (undefined) 6982ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > rejects named-account group fallback until a topic selects its own agent 8174ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > uses topic agents for ordinary DMs while capability controls thread isolation 11305ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > routes ordinary reply thread with native thread evidence and configured topic agents 9003ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > classifies @openclaw_bot answer and suppresses room-event feedback 9213ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > classifies stop and suppresses room-event feedback 9942ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > admits display-name mentions only for the current bot ID (9876543210) 9420ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > does not mistake forum_topic_created for a bot conversation reply 4138ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > does not mistake captionless bot media for a bot conversation reply 10057ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > admits explicitly addressed participants but not ambient names or ACP targets (@Analyst please review, true) 2514ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > delivers a dice-only 🎲 update 9659ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > delivers a dice-only 🎰 update 9346ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > keeps a mention-skipped dice roll in ambient group history 3615ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > renders nested rich-only messages in order and retains sender attribution 8930ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > activates rich mention patterns without activating non-text rich placeholders 7719ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > applies .* to captionless photo admission 9185ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > applies \bassistant\b to captionless photo admission 4122ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > drops a leading foreign command but keeps an own command before a later foreign one 9656ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > preserves all lines of the text command /think high
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > transcribes only an authorized voice sender with forum echo routing and untrusted framing 8389ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > honors topic audio-preflight precedence (true, undefined) 2473ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > preserves named-account DM topic voice echo routing without a group mention 9075ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > silently ingests skipped topics through wildcard policy and the real hook mapper 3500ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > requests typing before model work for admitted direct/forum input (false) 9287ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > requests typing before model work for admitted direct/forum input (true) 9538ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > does not type for denied DM input 2483ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > does not type for empty DM input 2905ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > canonicalizes all-scope room-event heart acknowledgements at the API boundary 6983ms
+ ✓  extension-database-workers  extensions/telegram/src/bot-message-context.body.test.ts > Telegram admitted model input > falls back to a permitted reaction through the actual status controller 9367ms
+ Test Files  1 passed (1)
+      Tests  34 passed (34)
+   Duration  359.49s (tests 71%, transform 22%, import 7%)
+[test] passed 3 Vitest shards in 510.34s
