@@ -1,12 +1,11 @@
 // Host hook contract tests cover plugin host hook registration and runtime behavior.
-import fs from "node:fs/promises";
 import path from "node:path";
 import { expectDefined } from "@openclaw/normalization-core";
 import {
   createPluginRegistryFixture,
   registerTestPlugin,
 } from "openclaw/plugin-sdk/plugin-test-contracts";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import {
   PROTOCOL_VERSION,
   validatePluginsUiDescriptorsResult,
@@ -31,12 +30,12 @@ import {
 } from "../../gateway/operator-scopes.js";
 import { pluginHostHookHandlers } from "../../gateway/server-methods/plugin-host-hooks.js";
 import type { GatewayRequestContext } from "../../gateway/server-methods/types.js";
-import { buildGatewaySessionRow } from "../../gateway/session-utils.js";
+import { buildGatewaySessionRow } from "../../gateway/session-utils-row.js";
 import { withTempConfig } from "../../gateway/test-temp-config.js";
 import { emitAgentEvent, resetAgentEventsForTest } from "../../infra/agent-events.js";
-import { resolvePreferredOpenClawTmpDir } from "../../infra/tmp-openclaw-dir.js";
 import { createDeferredCore } from "../../shared/deferred.js";
 import { withEnvAsync } from "../../test-utils/env.js";
+import { useSessionStoreTempDirs } from "../../test-utils/session-state-cleanup.js";
 import type {
   AgentToolResultMiddlewareContext,
   AgentToolResultMiddlewareEvent,
@@ -51,7 +50,7 @@ import { listPluginSessionSchedulerJobs } from "../host-hook-runtime.test-fixtur
 import {
   drainPluginNextTurnInjectionContext,
   enqueuePluginNextTurnInjection,
-  getPluginSessionExtensionStateSync,
+  getPluginSessionExtensionState,
   patchPluginSessionExtension,
   projectPluginSessionExtensionsSync,
 } from "../host-hook-state.js";
@@ -76,6 +75,7 @@ import {
   getTrustedToolPolicyMatcherScope,
   runTrustedToolPolicies,
 } from "../trusted-tool-policy.js";
+import type { OpenClawPluginApi } from "../types.js";
 import { registerHostHookFixture } from "./host-hook-fixture.js";
 import { hostHookUiProjection } from "./test-helpers/host-hook-ui-projection.js";
 
@@ -185,27 +185,24 @@ type HostHookStateFixture = {
   tempConfig: { session: { store: string } } & Record<string, unknown>;
 };
 
+const sessionDirs = useSessionStoreTempDirs(afterAll, "openclaw-host-hooks-scope-");
+
 async function withHostHookState(
-  prefix: string,
   run: (fixture: HostHookStateFixture) => Promise<void>,
   createTempConfig: (storePath: string) => HostHookStateFixture["tempConfig"] = (storePath) => ({
-    agents: { entries: { main: { default: true } } },
+    agents: { entries: { main: {} } },
     session: { store: storePath },
   }),
 ): Promise<void> {
-  const stateDir = await fs.mkdtemp(path.join(resolvePreferredOpenClawTmpDir(), prefix));
+  const stateDir = sessionDirs.make();
   const storePath = path.join(stateDir, "sessions.json");
   const tempConfig = createTempConfig(storePath);
-  try {
-    await withEnvAsync({ OPENCLAW_STATE_DIR: stateDir }, async () => {
-      await withTempConfig({
-        cfg: tempConfig,
-        run: async () => await run({ stateDir, storePath, tempConfig }),
-      });
+  await withEnvAsync({ OPENCLAW_STATE_DIR: stateDir }, async () => {
+    await withTempConfig({
+      cfg: tempConfig,
+      run: async () => await run({ stateDir, storePath, tempConfig }),
     });
-  } finally {
-    await fs.rm(stateDir, { recursive: true, force: true });
-  }
+  });
 }
 
 describe("host-hook fixture plugin contract", () => {
@@ -1161,7 +1158,7 @@ describe("host-hook fixture plugin contract", () => {
       const scoped = createRegistry("scoped");
       setActivePluginRegistry(scoped.registry.registry);
       try {
-        await withHostHookState("openclaw-host-hooks-scope-", async ({ storePath, tempConfig }) => {
+        await withHostHookState(async ({ storePath, tempConfig }) => {
           const sessionKey = "agent:main:main";
           const access = { sessionKey, storePath };
           await replaceSessionEntry(access, {
@@ -1401,7 +1398,7 @@ describe("host-hook fixture plugin contract", () => {
     );
     setActivePluginRegistry(registry.registry);
 
-    await withHostHookState("openclaw-host-hooks-patch-", async ({ storePath, tempConfig }) => {
+    await withHostHookState(async ({ storePath, tempConfig }) => {
       await updateSessionStore(storePath, (store) => {
         store["agent:main:main"] = {
           sessionId: "session-1",
@@ -1499,7 +1496,6 @@ describe("host-hook fixture plugin contract", () => {
     });
     setActivePluginRegistry(registry);
     await withHostHookState(
-      "openclaw-host-hooks-owner-",
       async ({ tempConfig }) => {
         const scope = (agentId: string) => ({
           agentId,
@@ -1536,7 +1532,7 @@ describe("host-hook fixture plugin contract", () => {
           }),
         ).resolves.toMatchObject({ ok: true });
         expect(
-          getPluginSessionExtensionStateSync({
+          await getPluginSessionExtensionState({
             cfg: tempConfig,
             agentId: "qa",
             sessionKey: "global",
@@ -1677,7 +1673,7 @@ describe("host-hook fixture plugin contract", () => {
   });
 
   it("reports duplicate next-turn injections as not newly enqueued", async () => {
-    await withHostHookState("openclaw-host-hooks-injection-", async ({ storePath, tempConfig }) => {
+    await withHostHookState(async ({ storePath, tempConfig }) => {
       await updateSessionStore(storePath, (store) => {
         store["agent:main:main"] = {
           sessionId: "session-1",
@@ -1744,7 +1740,6 @@ describe("host-hook fixture plugin contract", () => {
     );
     setActivePluginRegistry(registry);
     await withHostHookState(
-      "openclaw-host-hooks-stale-",
       async ({ storePath, tempConfig }) => {
         await updateSessionStore(storePath, (store) => {
           store["agent:main:main"] = {
@@ -1825,7 +1820,7 @@ describe("host-hook fixture plugin contract", () => {
       }),
     );
     setActivePluginRegistry(registry);
-    await withHostHookState("openclaw-host-hooks-order-", async ({ storePath, tempConfig }) => {
+    await withHostHookState(async ({ storePath, tempConfig }) => {
       await updateSessionStore(storePath, (store) => {
         store["agent:main:main"] = {
           sessionId: "session-1",
@@ -2171,7 +2166,7 @@ describe("host-hook fixture plugin contract", () => {
       ],
     });
 
-    await withHostHookState("openclaw-host-hooks-state-", async ({ tempConfig }) => {
+    await withHostHookState(async ({ tempConfig }) => {
       await runPluginHostCleanup({
         cfg: tempConfig,
         registry: registry.registry,
@@ -2383,6 +2378,105 @@ describe("host-hook fixture plugin contract", () => {
       await cleanupPromise;
     }
   });
+  it("shares run context from admitted scoped hooks with the global service only", async () => {
+    const id = "run-context-bridge";
+    const config = { plugins: { entries: { [id]: { hooks: { allowConversationAccess: true } } } } };
+    const root = createPluginRegistryFixture(config);
+    const scoped = createPluginRegistry({
+      logger: { info() {}, warn() {}, error() {}, debug() {} },
+      runtime: {} as PluginRuntime,
+      activateGlobalSideEffects: false,
+    });
+    let rootApi!: OpenClawPluginApi;
+    let scopedApi!: OpenClawPluginApi;
+    let observing = false;
+    const observations: unknown[] = [];
+    const writes: boolean[] = [];
+    const reads: unknown[] = [];
+    const service = {
+      id: "observer",
+      start: () => {
+        observing = true;
+      },
+      stop: () => {
+        observing = false;
+      },
+    };
+    const runId = "scoped-run-context";
+    const params = { runId, namespace: "admission" };
+    registerTestPlugin({
+      ...root,
+      record: createPluginRecord({ id }),
+      register(api) {
+        rootApi = api;
+        api.registerService(service);
+        api.agent.events.registerAgentEventSubscription({
+          id: "observer",
+          streams: ["tool"],
+          handle(_event, ctx) {
+            if (observing) {
+              observations.push(ctx.getRunContext("admission"));
+            }
+          },
+        });
+      },
+    });
+    registerTestPlugin({
+      registry: scoped,
+      config,
+      record: createPluginRecord({ id }),
+      register(api) {
+        scopedApi = api;
+        api.on("llm_input", () => {
+          writes.push(api.runContext.setRunContext({ ...params, value: { admitted: true } }));
+          reads.push(api.runContext.getRunContext(params));
+          api.runContext.clearRunContext(params);
+          reads.push(api.runContext.getRunContext(params));
+          api.runContext.setRunContext({ ...params, value: { admitted: true } });
+        });
+      },
+    });
+    setActivePluginRegistry(root.registry.registry);
+    service.start();
+    try {
+      expect(rootApi.runContext.setRunContext({ ...params, value: "root" })).toBe(true);
+      expect(scopedApi.runContext.setRunContext({ ...params, value: "inspection" })).toBe(false);
+      expect(scopedApi.runContext.getRunContext(params)).toBeUndefined();
+      scopedApi.runContext.clearRunContext(params);
+      expect(rootApi.runContext.getRunContext(params)).toBe("root");
+      await createHookRunner(scoped.registry).runLlmInput(
+        {
+          runId,
+          sessionId: "session",
+          provider: "openai",
+          model: "model",
+          prompt: "work",
+          historyMessages: [],
+          imagesCount: 0,
+        },
+        { runId, sessionKey: "agent:main:main", agentId: "main", trigger: "user" },
+      );
+      expect(writes).toEqual([true]);
+      expect(reads).toEqual([{ admitted: true }, undefined]);
+      emitAgentEvent({
+        runId,
+        sessionKey: "agent:main:main",
+        stream: "tool",
+        data: { phase: "start", name: "exec" },
+      });
+      await waitForPluginEventHandlers();
+      expect(observations).toEqual([{ admitted: true }]);
+      await disposePluginRegistryInstances(scoped.registry);
+      expect(scopedApi.runContext.setRunContext({ ...params, value: "retired" })).toBe(false);
+      expect(scopedApi.runContext.getRunContext(params)).toBeUndefined();
+      scopedApi.runContext.clearRunContext(params);
+      expect(rootApi.runContext.getRunContext(params)).toEqual({ admitted: true });
+    } finally {
+      service.stop();
+      await disposePluginRegistryInstances(scoped.registry);
+    }
+  });
+
   it("does not register scheduler jobs globally during non-activating registry loads", () => {
     const registry = createPluginRegistry({
       logger: {
