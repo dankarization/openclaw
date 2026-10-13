@@ -93,10 +93,15 @@ export function mutateSessionGroupCatalogInDatabase(
   const result = runOpenClawStateWriteTransaction(
     ({ db }) => {
       const kysely = kyselyFor(db);
-      const names = executeSqliteQuerySync(
+      const catalogRows = executeSqliteQuerySync(
         db,
-        kysely.selectFrom("session_groups").select("name").orderBy("position").orderBy("name"),
-      ).rows.map((row) => row.name);
+        kysely
+          .selectFrom("session_groups")
+          .select(["name", "position"])
+          .orderBy("position")
+          .orderBy("name"),
+      ).rows;
+      const names = catalogRows.map((row) => row.name);
       const selected =
         input.kind === "put"
           ? input.appendOnly
@@ -150,6 +155,7 @@ export function mutateSessionGroupCatalogInDatabase(
               : kysely.deleteFrom("session_groups").where("name", "not in", input.names),
           );
         }
+        const nextPosition = (catalogRows.at(-1)?.position ?? -1) + 1;
         const additions = input.appendOnly
           ? input.names.filter((name) => !existing.has(name))
           : input.names;
@@ -163,7 +169,7 @@ export function mutateSessionGroupCatalogInDatabase(
                   .where("name", "=", name)
               : kysely.insertInto("session_groups").values({
                   name,
-                  position: input.appendOnly ? names.length + index : index,
+                  position: input.appendOnly ? nextPosition + index : index,
                   created_at: now,
                 }),
           ),

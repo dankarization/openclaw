@@ -1574,7 +1574,7 @@ class MainViewModel internal constructor(
           source = sourceToken,
           direction = direction,
         ) ?: return@withLock
-      val updated = chat.putSessionGroups(sidebarCategoryNames(next), lease, sectionOrder = next) ?: return@withLock
+      val updated = chat.putSessionGroups(emptyList(), lease, sectionOrder = next) ?: return@withLock
       if (!ownsSessionGroupLease(lease, gatewayId)) return@withLock
       publishSessionGroupCatalog(
         lease,
@@ -1691,9 +1691,7 @@ class MainViewModel internal constructor(
         }
         return@withLock
       }
-      val base = unionSessionGroupNames(authoritative, prefs.legacySessionCustomGroups())
-      val next = unionSessionGroupNames(base, listOf(trimmed))
-      val updated = chat.putSessionGroups(next, lease)
+      val updated = chat.putSessionGroups(listOf(trimmed), lease)
       if (updated == null) {
         val retry = chat.listSessionGroups(lease) ?: return@withLock
         if (!ownsSessionGroupLease(lease, gatewayId)) return@withLock
@@ -1774,7 +1772,7 @@ class MainViewModel internal constructor(
         canPut = lease.canPutSessionGroups(),
       )
     if (decision.putLegacy) {
-      val migrated = chat.putSessionGroups(unionSessionGroupNames(listedNames, legacy), lease) ?: return
+      val migrated = chat.putSessionGroups(legacy.filter { it !in listedNames }, lease) ?: return
       if (!ownsSessionGroupLease(lease, gatewayId)) return
       publishSessionGroupCatalog(
         lease,

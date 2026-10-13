@@ -127,13 +127,16 @@ class MainViewModelTest {
             when (method) {
               "sessions.groups.put" -> {
                 names =
-                  Json
-                    .parseToJsonElement(requireNotNull(params))
-                    .jsonObject
-                    .getValue("names")
-                    .jsonArray
-                    .map { it.jsonPrimitive.content }
-                    .filter { acceptsLegacy || it != "Legacy" }
+                  (
+                    names +
+                      Json
+                        .parseToJsonElement(requireNotNull(params))
+                        .jsonObject
+                        .getValue("names")
+                        .jsonArray
+                        .map { it.jsonPrimitive.content }
+                        .filter { acceptsLegacy || it != "Legacy" }
+                  ).distinct()
               }
 
               "sessions.groups.rename" -> {
@@ -144,7 +147,7 @@ class MainViewModelTest {
                 names = emptyList()
               }
             }
-            if (method.startsWith("sessions.groups.")) names.joinToString(prefix = "{\"groups\":[", postfix = "]}") { "{\"name\":\"$it\"}" } else emptyChatGatewayResponse(method)
+            if (method.startsWith("sessions.groups.")) names.joinToString(prefix = "{\"appendOnly\":true,\"groups\":[", postfix = "]}") { "{\"name\":\"$it\"}" } else emptyChatGatewayResponse(method)
           },
         )
       val runtime = NodeRuntime(app, prefs, NodeRuntimeMode.ScreenshotFixture)

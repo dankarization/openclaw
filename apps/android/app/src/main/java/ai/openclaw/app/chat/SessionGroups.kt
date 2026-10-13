@@ -23,11 +23,17 @@ private val sessionGroupsJson = Json { ignoreUnknownKeys = true }
 internal data class SessionGroupCatalogSnapshot(
   val groups: List<GatewaySessionGroup>,
   val sectionOrder: List<String>,
+  val supportsAppendOnly: Boolean = false,
 )
 
 internal fun parseSessionGroupCatalog(payload: String): SessionGroupCatalogSnapshot? {
   val groups = parseSessionGroupsPayload(payload) ?: return null
-  return SessionGroupCatalogSnapshot(groups = groups, sectionOrder = parseSessionSectionOrder(payload))
+  val root = sessionGroupsJson.parseToJsonElement(payload).asObjectOrNull()
+  return SessionGroupCatalogSnapshot(
+    groups = groups,
+    sectionOrder = parseSessionSectionOrder(payload),
+    supportsAppendOnly = (root?.get("appendOnly") as? JsonPrimitive)?.contentOrNull == "true",
+  )
 }
 
 internal fun parseSessionGroupsPayload(payload: String): List<GatewaySessionGroup>? {

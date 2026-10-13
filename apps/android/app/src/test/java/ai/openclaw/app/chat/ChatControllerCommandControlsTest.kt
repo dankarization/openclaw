@@ -535,6 +535,41 @@ class ChatControllerCommandControlsTest {
     }
 
   @Test
+  fun catalogPutNegotiatesAppendWithoutResubmittingDeletedNames() =
+    runTest {
+      for (appendOnly in listOf(false, true)) {
+        var sent: kotlinx.serialization.json.JsonObject? = null
+        val controller =
+          createChatController(
+            requestGateway = { method, params ->
+              when (method) {
+                "sessions.groups.list" -> {
+                  """{"groups":[{"name":"Keep"}],"appendOnly":$appendOnly}"""
+                }
+
+                "sessions.groups.put" -> {
+                  sent = json.parseToJsonElement(requireNotNull(params)).jsonObject
+                  """{"groups":[{"name":"Keep"},{"name":"New"}]}"""
+                }
+
+                else -> {
+                  emptyChatGatewayResponse(method)
+                }
+              }
+            },
+          )
+        val lease = requireNotNull(controller.captureSessionCatalogLease("gateway-test"))
+        assertTrue(controller.putSessionGroups(listOf("New"), lease) != null)
+        val params = requireNotNull(sent)
+        assertEquals(
+          if (appendOnly) "[\"New\"]" else "[\"Keep\",\"New\"]",
+          params.getValue("names").toString(),
+        )
+        assertEquals(appendOnly, params.containsKey("appendOnly"))
+      }
+    }
+
+  @Test
   fun membershipUsesTheCatalogConnectionLeaseAndRejectsPhysicalReconnectBeforeEnqueue() =
     runTest {
       var connection = 1
@@ -578,7 +613,7 @@ class ChatControllerCommandControlsTest {
           ?.name,
       )
       assertTrue(controller.patchSession(ChatSessionPatch(key = "agent:main:side", category = "Folder", requestLease = lease)))
-      assertEquals(listOf("sessions.groups.list", "sessions.groups.put", "sessions.patch"), enqueued)
+      assertEquals(listOf("sessions.groups.list", "sessions.groups.list", "sessions.groups.put", "sessions.patch"), enqueued)
 
       retireBeforeEnqueue = true
       assertFalse(controller.patchSession(ChatSessionPatch(key = "agent:main:side", category = "Folder", requestLease = lease)))

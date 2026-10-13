@@ -107,6 +107,16 @@ describe("session groups catalog", () => {
     );
   });
 
+  it("appends after surviving persisted positions when deletions leave gaps", async () => {
+    await putSessionGroups({ cfg, names: ["X", "Y", "Z"], env });
+    await deleteSessionGroup({ cfg, name: "X", env });
+    await deleteSessionGroup({ cfg, name: "Y", env });
+    expect(await putSessionGroups({ cfg, names: ["A"], appendOnly: true, env })).toEqual([
+      { name: "Z", position: 2 },
+      { name: "A", position: 3 },
+    ]);
+  });
+
   it("preserves concurrently added sections when a stale client reorders", async () => {
     await putSessionGroups({
       cfg,

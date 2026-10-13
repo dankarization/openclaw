@@ -1408,12 +1408,16 @@ class ChatController internal constructor(
     sectionOrder: List<String>? = null,
   ): SessionGroupCatalogSnapshot? {
     val cleaned = names.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+    // Resolve the contract on this physical connection, not method-name advertisement.
+    val current = listSessionGroups(lease) ?: return null
+    val submitted =
+      if (current.supportsAppendOnly) cleaned else unionSessionGroupNames(current.groups.map { it.name }, cleaned)
     return requestSessionGroups(
       lease,
       "sessions.groups.put",
       buildJsonObject {
-        put("names", JsonArray(cleaned.map(::JsonPrimitive)))
-        put("appendOnly", JsonPrimitive(true))
+        put("names", JsonArray(submitted.map(::JsonPrimitive)))
+        if (current.supportsAppendOnly) put("appendOnly", JsonPrimitive(true))
         if (sectionOrder != null) {
           put("sectionOrder", JsonArray(sectionOrder.map(::JsonPrimitive)))
         }
