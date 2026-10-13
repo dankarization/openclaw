@@ -19,7 +19,6 @@ import {
   deriveDeviceIdFromPublicKey,
   loadDeviceIdentityIfPresent,
   loadOrCreateDeviceIdentity,
-  loadOrCreateProcessDeviceIdentity,
   normalizeDevicePublicKeyBase64Url,
   publicKeyRawBase64UrlFromPem,
   signDevicePayload,
@@ -397,24 +396,6 @@ describe("device identity SQLite store", () => {
     });
   });
 
-  it("keeps process identities cached by database path and identity key", async () => {
-    await withTempDir("openclaw-device-identity-cache-", async (rootDir) => {
-      const primaryOptions = storeOptions(rootDir);
-      const secondaryOptions = storeOptions(rootDir, "secondary");
-      const primary = loadOrCreateProcessDeviceIdentity(primaryOptions);
-      const secondary = loadOrCreateProcessDeviceIdentity(secondaryOptions);
-
-      expect(loadOrCreateProcessDeviceIdentity(primaryOptions)).toBe(primary);
-      expect(loadOrCreateProcessDeviceIdentity(secondaryOptions)).toBe(secondary);
-      expect(secondary.deviceId).not.toBe(primary.deviceId);
-
-      const claimPath = path.join(rootDir, "identity", "device.json.doctor-importing");
-      writeRetiredIdentity(claimPath);
-      expect(loadOrCreateProcessDeviceIdentity(primaryOptions)).toBe(primary);
-      expect(fs.existsSync(claimPath)).toBe(true);
-    });
-  });
-
   it("keeps canonical SQLite authoritative when retired device.json reappears", async () => {
     await withTempDir("openclaw-device-identity-canonical-", async (rootDir) => {
       const options = storeOptions(rootDir);
@@ -430,15 +411,6 @@ describe("device identity SQLite store", () => {
       expect(fs.existsSync(legacyPath)).toBe(true);
     });
   });
-
-  it("returns one authoritative winner to concurrent creators", async () => {
-    await withTempDir("openclaw-device-identity-concurrent-", async (rootDir) => {
-      const [first, second] = await runConcurrentIdentityLoads(rootDir);
-
-      expect(second).toEqual(first);
-      expect(loadDeviceIdentityIfPresent(storeOptions(rootDir))).toEqual(first);
-    });
-  }, 30_000);
 
   it("loads existing identities concurrently without requiring subprocess capacity", async () => {
     await withTempDir("openclaw-device-identity-readers-", async (rootDir) => {

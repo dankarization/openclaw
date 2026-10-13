@@ -52,10 +52,9 @@ function buildCodexEffectiveMcpCatalog(
   statuses: readonly CodexMcpServerStatus[],
   toolOverrides?: AgentHarnessMcpCatalogParams["toolOverrides"],
 ): McpToolCatalog {
-  const statusByName = new Map(statuses.map((status) => [status.name, status] as const));
-  const orderedStatuses = [...statusByName.values()].toSorted((left, right) =>
-    left.name.localeCompare(right.name),
-  );
+  const orderedStatuses = [
+    ...new Map(statuses.map((status) => [status.name, status] as const)).values(),
+  ].toSorted((left, right) => left.name.localeCompare(right.name));
   const safeNames = assignMcpCatalogSafeServerNames(orderedStatuses.map((status) => status.name));
   const serverEntries: Array<[string, McpToolCatalog["servers"][string]]> = [];
   const tools: McpToolCatalog["tools"] = [];
@@ -137,7 +136,7 @@ export async function loadCodexEffectiveMcpCatalog(
   params: AgentHarnessMcpCatalogParams,
   options: { bindingStore: CodexAppServerBindingStore },
 ): Promise<McpToolCatalog | undefined> {
-  const binding = options.bindingStore.read(
+  const binding = await options.bindingStore.readAsync(
     sessionBindingIdentity({
       agentId: params.agentId,
       sessionId: params.sessionId,
@@ -169,7 +168,8 @@ export async function acquireCodexMcpAppRuntime(
   options: { bindingStore: CodexAppServerBindingStore; pluginConfig?: unknown },
 ) {
   const identity = sessionBindingIdentity(params);
-  let binding = options.bindingStore.read(identity);
+  let binding = await options.bindingStore.readAsync(identity);
+  params.assertCurrent();
   let retained = await retainSharedCodexAppServerClientByInstanceId(binding?.clientId);
   if (!retained && params.prepareSession) {
     const preparation = await params.prepareSession();
@@ -182,7 +182,8 @@ export async function acquireCodexMcpAppRuntime(
       assertCurrent: params.assertCurrent,
     });
     params.assertCurrent();
-    binding = options.bindingStore.read(identity);
+    binding = await options.bindingStore.readAsync(identity);
+    params.assertCurrent();
     retained = await retainSharedCodexAppServerClientByInstanceId(binding?.clientId);
   }
   if (!binding?.clientId || !retained) {

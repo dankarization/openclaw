@@ -70,10 +70,8 @@ export async function ensureCodexSandboxExecServerEnvironment(params: {
     );
   }
   const { server: execServer, nodeLease } = await acquireOpenClawExecServer({
+    ...params,
     sandbox: params.sandbox,
-    runtime: params.runtime,
-    signal: params.signal,
-    onExecutionDisconnect: params.onExecutionDisconnect,
   });
   // Codex retains a thread's environment instance when its id and cwd stay equal.
   // A single-use paired-node channel therefore needs a fresh selected identity.
@@ -84,8 +82,11 @@ export async function ensureCodexSandboxExecServerEnvironment(params: {
   if (processAuthority && !("node" in execServer)) {
     const authorities = (execServer.processAuthorities ??= new Map());
     if (!authorities.has(processAuthority.authPath)) {
-      authorities.set(processAuthority.authPath, processAuthority);
-      params.client.addCloseHandler(() => authorities.delete(processAuthority.authPath));
+      const unsubscribe = params.client.addCloseHandler(() => {
+        unsubscribe();
+        authorities.delete(processAuthority.authPath);
+      });
+      authorities.set(processAuthority.authPath, { authority: processAuthority, unsubscribe });
     }
   }
   const environmentId = nodeLease
@@ -331,7 +332,11 @@ async function startOpenClawExecServer(sandbox: SandboxContext): Promise<OpenCla
       handleNodeConnection(execServer, socket, requestUrl);
       return;
     }
-    handleConnection(execServer, socket, execServer.processAuthorities?.get(requestUrl.pathname));
+    handleConnection(
+      execServer,
+      socket,
+      execServer.processAuthorities?.get(requestUrl.pathname)?.authority,
+    );
   });
   embeddedAgentLog.info("codex sandbox exec-server started", {
     environmentId,
@@ -382,13 +387,9 @@ function readCodexPlacementWorkspaceIdentity(sandbox: SandboxContext): {
 } {
   if (
     !("placementEnvironmentId" in sandbox) ||
-    typeof sandbox.placementEnvironmentId !== "string" ||
-    !sandbox.placementEnvironmentId ||
-    sandbox.placementEnvironmentId.trim() !== sandbox.placementEnvironmentId ||
+    !isWorkspaceIdentityString(sandbox.placementEnvironmentId) ||
     !("placementSessionId" in sandbox) ||
-    typeof sandbox.placementSessionId !== "string" ||
-    !sandbox.placementSessionId ||
-    sandbox.placementSessionId.trim() !== sandbox.placementSessionId ||
+    !isWorkspaceIdentityString(sandbox.placementSessionId) ||
     !("placementOwnerEpoch" in sandbox) ||
     typeof sandbox.placementOwnerEpoch !== "number" ||
     !Number.isSafeInteger(sandbox.placementOwnerEpoch) ||
@@ -404,6 +405,10 @@ function readCodexPlacementWorkspaceIdentity(sandbox: SandboxContext): {
     ownerEpoch: sandbox.placementOwnerEpoch,
     sessionKey: sandbox.sessionKey,
   };
+}
+
+function isWorkspaceIdentityString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.trim() === value;
 }
 
 function handleNodeConnection(

@@ -8,6 +8,7 @@ import {
   unsubscribeCodexThreadBestEffort,
 } from "./attempt-client-cleanup.js";
 import { resolveCodexAppServerLocalHomeDir } from "./auth-start-options.js";
+import { recordCodexThreadForkSettings } from "./client-fork-settings.js";
 import { hasCodexAppServerSiblingThreadWork } from "./client-runtime.js";
 import { createCodexEphemeralThreadPolicy } from "./client-thread-owner.js";
 import {
@@ -15,7 +16,6 @@ import {
   isCodexAppServerOverloadError,
   resolveCodexAppServerClientInstanceId,
 } from "./client.js";
-import { assertCodexInferenceRouteConfig } from "./inference-routing.js";
 import { buildCodexAppServerConnectionFingerprint } from "./plugin-app-cache-key.js";
 import {
   attestCodexThreadToolSurface,
@@ -54,7 +54,7 @@ import type {
 } from "./thread-lifecycle-types.js";
 import { resolveCodexAppServerModelProvider } from "./thread-model-selection.js";
 import { CodexThreadPolicyHandoffError, refreshCodexThreadPolicy } from "./thread-policy.js";
-import { buildThreadResumeParams, buildThreadStartParams } from "./thread-requests.js";
+import { buildThreadStartParams } from "./thread-requests.js";
 import { resumeCodexAppServerThread } from "./thread-resume.js";
 import { hasCodexAppServerSiblingRouteWork } from "./turn-router.js";
 
@@ -109,15 +109,12 @@ export async function resumeExistingCodexThread(
   const {
     binding: resumeBinding,
     bindingIdentity,
-    startModelSelection,
     startModelProvider,
     dynamicToolsFingerprint,
     webSearchThreadConfigFingerprint,
     ringZeroConfigFingerprint,
     ringZeroClientInstanceId,
-    hostSystemAgentActive,
     restrictedToolSurface,
-    restrictedToolSurfaceInheritedMcpServerNames,
     lifecycleTiming,
     normalizeBindingModelProvider,
     throwIfAborted,
@@ -184,18 +181,8 @@ export async function resumeExistingCodexThread(
       pluginThreadConfig?.configPatch,
       finalConfigPatch.configPatch,
     );
-    const resumeParams = lifecycleTiming.measureSync("thread-resume-params", () =>
-      buildThreadResumeParams(params.params, {
-        ...params,
-        threadId: resumeBinding.threadId,
-        authProfileId,
-        model: startModelSelection.model,
-        modelProvider: startModelProvider,
-        preserveNativeModel: resumeBinding.preserveNativeModel === true,
-        config: resumeConfig,
-        hostSystemAgentActive,
-        restrictedToolSurfaceInheritedMcpServerNames,
-      }),
+    const resumeParams = await lifecycleTiming.measure("thread-resume-params", () =>
+      context.buildResumeParams(resumeBinding, authProfileId, resumeConfig),
     );
     const requestModelProvider =
       typeof resumeParams.modelProvider === "string" && resumeParams.modelProvider.trim()
@@ -216,20 +203,18 @@ export async function resumeExistingCodexThread(
         withCurrent: params.authority?.withCurrent,
         assertCurrent: () => {
           configuration.assertCurrent();
-          assertCodexInferenceRouteConfig(
-            params.client,
-            params.inferenceRoute,
+          context.assertInferenceConfig(
             resumeParams.config,
             requestModelProvider ??
               (resumeBinding.preserveNativeModel
                 ? (configuration.modelProvider ?? undefined)
                 : undefined),
-            params.inferenceProviderRoutes,
           );
         },
       }),
     );
     acceptedConfiguration = configuration;
+    recordCodexThreadForkSettings(params.client, resumeBinding.threadId, resumeParams);
     assertCodexThreadAcceptsDirectInput(response.thread);
     configuration.assertConfigured();
     if (requestModelProvider && response.modelProvider !== requestModelProvider) {
@@ -290,7 +275,7 @@ export async function resumeExistingCodexThread(
       // Loaded native threads can ignore resume overrides; keep the prepared model for turn/start.
       model: resumeParams.model ?? response.model ?? params.params.modelId,
       preserveNativeModel: resumeBinding.preserveNativeModel === true ? true : undefined,
-      modelProvider: normalizeBindingModelProvider(
+      modelProvider: await normalizeBindingModelProvider(
         authProfileId,
         response.modelProvider ?? requestModelProvider ?? startModelProvider,
       ),
@@ -473,15 +458,17 @@ export async function startFreshCodexThread(
       finalConfigPatch.configPatch,
     ),
   );
-  const startParams = lifecycleTiming.measureSync("thread-start-params", () =>
-    buildThreadStartParams(params.params, {
-      ...params,
-      config,
-      model: startModelSelection.model,
-      modelProvider: startModelProvider,
-      hostSystemAgentActive,
-      restrictedToolSurfaceInheritedMcpServerNames,
-    }),
+  const startParams = await lifecycleTiming.measure(
+    "thread-start-params",
+    async () =>
+      await buildThreadStartParams(params.params, {
+        ...params,
+        config,
+        model: startModelSelection.model,
+        modelProvider: startModelProvider,
+        hostSystemAgentActive,
+        restrictedToolSurfaceInheritedMcpServerNames,
+      }),
   );
   const requestModelProvider =
     typeof startParams.modelProvider === "string" && startParams.modelProvider.trim()
@@ -494,13 +481,7 @@ export async function startFreshCodexThread(
   };
   const assertInferenceCurrent = () => {
     assertCurrent();
-    assertCodexInferenceRouteConfig(
-      params.client,
-      params.inferenceRoute,
-      startParams.config,
-      requestModelProvider,
-      params.inferenceProviderRoutes,
-    );
+    context.assertInferenceConfig(startParams.config, requestModelProvider);
   };
   const threadStartResponse = await lifecycleTiming.measure("thread-start-request", async () => {
     try {
@@ -518,6 +499,7 @@ export async function startFreshCodexThread(
     }
   });
   const response = assertCodexThreadStartResponse(threadStartResponse);
+  recordCodexThreadForkSettings(params.client, response.thread.id, startParams);
   const provisionalAppIds = pluginThreadConfig?.provisionalAppIds;
   const rejectUncommittedThread = async (cause: unknown): Promise<never> => {
     const cleanupConfirmed = await discardUnattestedCodexPluginThread({
@@ -552,7 +534,7 @@ export async function startFreshCodexThread(
     return await rejectUncommittedThread(error);
   }
   const rolloutPath = resolveCodexThreadRolloutPath(response.thread);
-  const modelProvider = resolveCodexAppServerModelProvider({
+  const modelProvider = await resolveCodexAppServerModelProvider({
     homeScope: params.appServer.start.homeScope,
     provider: params.params.provider,
     authProfileId: params.params.authProfileId,
@@ -560,7 +542,7 @@ export async function startFreshCodexThread(
     agentDir: params.params.agentDir,
     config: params.params.config,
   });
-  const bindingModelProvider = normalizeBindingModelProvider(
+  const bindingModelProvider = await normalizeBindingModelProvider(
     params.params.authProfileId,
     response.modelProvider ?? requestModelProvider ?? startModelProvider ?? modelProvider,
   );
@@ -646,7 +628,10 @@ export async function startFreshCodexThread(
       response.modelProvider ?? requestModelProvider ?? startModelProvider ?? modelProvider,
     // Restricted ephemeral threads also need creation policy for fenced warm reuse.
     liveThreadEphemeralPolicy: startParams.ephemeral
-      ? createCodexEphemeralThreadPolicy(params)
+      ? createCodexEphemeralThreadPolicy(
+          { ...params, config: startParams.config },
+          context.effectiveConfig.config,
+        )
       : undefined,
     // Transient starts do not own the persisted binding, so their native
     // subscriptions must be released instead of entering the warm cache.

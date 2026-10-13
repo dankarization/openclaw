@@ -3,6 +3,7 @@ import { createApiRegistry } from "@openclaw/ai";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { Model } from "../llm/types.js";
 import { createPluginMetadataSnapshotFixture } from "../plugins/plugin-metadata.test-support.js";
+import { resolveSecretSentinel } from "../secrets/sentinel.js";
 import { AsyncWorkScope } from "../shared/async-work-scope.js";
 import { createDeferredCore } from "../shared/deferred.js";
 import type { PreparedModelRuntimeSnapshot } from "./prepared-model-runtime.js";
@@ -23,17 +24,24 @@ vi.mock("./prepared-model-runtime.js", () => ({
   acquireAgentRunPreparedModelRuntime: mocks.acquireRuntimeLease,
 }));
 
+// mock-isolation: generation ownership uses an empty auth store without host credential discovery.
+vi.mock("./auth-profiles/store-runtime.js", () => ({
+  ensureAuthProfileStoreAsync: async () => ({ version: 1, profiles: {} }),
+}));
+
 vi.mock("../plugins/plugin-metadata-snapshot.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../plugins/plugin-metadata-snapshot.js")>()),
   resolvePluginMetadataSnapshot: mocks.resolvePluginMetadataSnapshot,
 }));
 
+// mock-isolation: a private generation store records which generation each step reads.
 vi.mock("../plugins/runtime/generation-scope.js", async () => {
   const { AsyncLocalStorage } = await import("node:async_hooks");
   const generation = new AsyncLocalStorage<string>();
   mocks.readGeneration = () => generation.getStore() ?? mocks.publishedGeneration;
   return {
     getPluginRuntimeGenerationRegistry: () => undefined,
+    runOutsidePluginRuntimeGenerationScope: (run: () => unknown) => generation.exit(run),
     withPluginRuntimeGenerationScope: (snapshot: { testGeneration?: string }, run: () => unknown) =>
       generation.run(snapshot.testGeneration ?? "unknown", run),
   };
@@ -314,5 +322,63 @@ it.each(["/", "entry"])(
       }
     }
     expect(release).toHaveBeenCalledOnce();
+  },
+);
+
+it.each(["current", "credential lookup", "provider auth exchange"] as const)(
+  "keeps required-worker authority live through %s",
+  async (revokedDuring) => {
+    const setRuntimeApiKey = vi.spyOn(
+      preparedModelRuntime.createStores().authStorage,
+      "setRuntimeApiKey",
+    );
+    let current = true;
+    const revoked = new Error("worker claim revoked");
+    const required = { cloudWorkers: { requiredProfile: "required" } };
+    preparedModelRuntime = { ...preparedModelRuntime, config: required };
+    mocks.getApiKeyForModel.mockImplementation(async () => {
+      await Promise.resolve();
+      if (revokedDuring === "credential lookup") {
+        current = false;
+      }
+      return { apiKey: "worker-source-token", source: "worker fixture", mode: "token" };
+    });
+    mocks.prepareProviderRuntimeAuth.mockImplementation(async () => {
+      await Promise.resolve();
+      if (revokedDuring === "provider auth exchange") {
+        current = false;
+      }
+      return { apiKey: "worker-runtime-token" };
+    });
+    const preparing = prepareSimpleCompletionModel({
+      preparedModelRuntime,
+      cfg: required,
+      provider: "ollama",
+      modelId: "fixture-model",
+      modelResolver: createOllamaModelResolver(),
+      workerInferenceAuthority: {
+        assertCurrent: () => {
+          if (!current) {
+            throw revoked;
+          }
+        },
+      },
+    });
+    if (revokedDuring === "current") {
+      expect(await preparing).not.toHaveProperty("error");
+      expect(mocks.prepareProviderRuntimeAuth).toHaveBeenCalledOnce();
+      expect(setRuntimeApiKey).toHaveBeenCalledOnce();
+      const [provider, credential] = setRuntimeApiKey.mock.calls[0] as [string, string];
+      expect(provider).toBe("ollama");
+      expect(resolveSecretSentinel(credential)).toBe("worker-runtime-token");
+    } else {
+      await expect(preparing).rejects.toBe(revoked);
+      if (revokedDuring === "credential lookup") {
+        expect(mocks.prepareProviderRuntimeAuth).not.toHaveBeenCalled();
+      } else {
+        expect(mocks.prepareProviderRuntimeAuth).toHaveBeenCalledOnce();
+      }
+      expect(setRuntimeApiKey).not.toHaveBeenCalled();
+    }
   },
 );

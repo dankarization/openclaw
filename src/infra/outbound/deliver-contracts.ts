@@ -43,6 +43,8 @@ type ConversationDeliveryAttemptAuthority = Omit<
 
 export type { PlatformSendRoute } from "./deliver-types.js";
 
+export type OutboundHandoff = <T>(initiate: () => Promise<T>) => Promise<T>;
+
 export type OutboundDeliveryIntent = {
   id: string;
   channel: string;
@@ -163,6 +165,8 @@ type OutboundChannelContext = {
   requiredUnknownSendReconciliation?: boolean;
   /** @internal Revalidate caller authority before direct adapter code can run. */
   onDirectAdapterHandoff?: () => Promise<void>;
+  /** @internal Initiates the platform method inside the caller's final authority grant. */
+  withDirectAdapterHandoff?: OutboundHandoff;
   /** @internal Synchronously fence authority at the final adapter invocation. */
   assertDirectAdapterHandoff?: () => void;
   /** @internal Refresh durable timing before recipient-visible or finalizing platform I/O. */
@@ -174,6 +178,8 @@ type OutboundChannelContext = {
 export type ChannelHandlerParams = OutboundChannelContext & {
   /** Admitted run owner for agent-scoped channel runtime discovery. */
   agentId?: string;
+  /** Originating runtime session; never replaced by the delivery policy session. */
+  sessionKey?: string;
   replyToId?: string | null;
   replyToMode?: ReplyToMode;
   onPlatformSendStart?: (route: PlatformSendRoute) => Promise<void>;
@@ -205,6 +211,8 @@ export type DeliverOutboundPayloadsCoreParams = OutboundChannelContext & {
   completionRetention?: DeliveryQueueCompletionRetention;
   /** @internal Producer-specific durable recovery attempt budget. */
   maxRetries?: number;
+  /** @internal Only the ordinary inbound final dispatcher grants bounded text replay. */
+  retryAmbiguousFinalText?: true;
   /** @internal Retry this producer's pending intent only when no platform send began. */
   reusePendingDeliveryIntent?: boolean;
   /** @internal Serializable owner state finalized after live or recovered delivery. */

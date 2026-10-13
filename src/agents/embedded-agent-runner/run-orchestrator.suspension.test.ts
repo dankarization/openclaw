@@ -4,6 +4,10 @@ import { createAssistantMessageEventStream, type Context } from "openclaw/plugin
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTempDirTracker } from "../../../test/helpers/temp-dir.js";
 import { makeUserMessage } from "../../../test/helpers/user-message.js";
+import {
+  clearRuntimeConfigSnapshot,
+  setRuntimeConfigSnapshot,
+} from "../../config/runtime-snapshot.js";
 import { resolveSessionStorePathCore } from "../../config/sessions/paths.js";
 import {
   loadSessionEntryReadOnly as loadSessionEntry,
@@ -119,6 +123,7 @@ afterEach(async () => {
     );
   }
   closeOpenClawStateDatabaseForTest();
+  clearRuntimeConfigSnapshot();
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
   expect(
@@ -147,6 +152,7 @@ async function createRun(agentId: string, sessionPersistence?: "durable" | "deta
     entries: { main: {}, research: {} },
     defaults: { model: { primary: "openai/mock-1", fallbacks: ["openai/mock-2"] } },
   };
+  setRuntimeConfigSnapshot(config);
   const sessionId = "setup-inference-probe";
   const sessionKey = `agent:${agentId}:setup-inference:incognito-probe`;
   const params = {
@@ -205,6 +211,55 @@ function failAttempt(stage: "prompt" | "assistant", sessionId: string) {
 }
 
 describe("embedded run detached session metadata", () => {
+  it("preserves caller ownership and fills only missing failure-suspension agent ids", async () => {
+    const { params } = await createRun("research");
+    const requests: SessionSuspensionParams[] = [];
+    const runtime = await import("./run/prepared-runtime-context.js");
+    const bind = runtime.bindRunToPreparedModelRuntime;
+    let boundParams: ReturnType<typeof bind>["runParams"] | undefined;
+    vi.spyOn(runtime, "bindRunToPreparedModelRuntime").mockImplementation((input) => {
+      const bound = bind(input);
+      boundParams = bound.runParams;
+      return bound;
+    });
+    const loop = await import("./run-loop.js");
+    vi.spyOn(loop, "runPreparedEmbeddedLoop").mockImplementation(async (_refresh, input) => {
+      if (!boundParams) {
+        throw new Error("Expected the run's prepared identity");
+      }
+      const suspension: SessionSuspensionParams = {
+        cfg: undefined,
+        sessionId: params.sessionId,
+        reason: "quota_exhausted",
+        failedProvider: "openai",
+        failedModel: "mock-1",
+        agentDir: "/state/agents/work/agent",
+      };
+      input.suspendForFailure(suspension);
+      input.suspendForFailure({ ...suspension, agentId: "explicit" });
+      const agentId = boundParams.agentId;
+      try {
+        boundParams.agentId = undefined;
+        input.suspendForFailure(suspension);
+      } finally {
+        boundParams.agentId = agentId;
+      }
+      return { meta: { durationMs: 1 } };
+    });
+
+    await runWithDeferredSessionSuspension(
+      () => runEmbeddedAgent(params),
+      (request) => requests.push(request),
+    );
+
+    expect(requests).toHaveLength(3);
+    expect(requests[0]?.agentId).toBe("research");
+    expect(requests[0]?.agentDir).toBe("/state/agents/work/agent");
+    expect(requests[0]).not.toHaveProperty("laneId");
+    expect(requests[1]?.agentId).toBe("explicit");
+    expect(requests[2]?.agentId).toBeUndefined();
+  });
+
   it("suspends the canonical agent selected during prepared-runtime acquisition", async () => {
     const { params, scope } = await createRun("main");
     // Global keys have an explicit owner but no agent prefix to contradict a rebind.
@@ -413,6 +468,7 @@ describe("embedded run detached session metadata", () => {
     async (trigger, existing, owner) => {
       const { params, scope, stateDir, database } = await createRun("research", "detached");
       params.config.agents!.defaults!.compaction = { mode: "default", keepRecentTokens: 1 };
+      setRuntimeConfigSnapshot(params.config);
       const manager = params.sessionManager;
       manager.appendMessage(makeUserMessage("Remember the memory-only project.", 1));
       manager.appendMessage(

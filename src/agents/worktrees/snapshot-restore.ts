@@ -5,8 +5,9 @@ import { getRuntimeConfig, type OpenClawConfig } from "../../config/config.js";
 import type { OpenClawStateWorkerContext } from "../../state/openclaw-state-worker-context.types.js";
 import type { WorktreeAllocationGuard } from "./allocation.js";
 import { estimateWorktreeCheckoutTransitionBytes, requireAllocationSpace } from "./capacity.js";
+import { materializeManagedWorktree } from "./checkout-materialize.js";
 import { usesSourceOnlyWorktreeGit } from "./checkout-policy.js";
-import { addManagedWorktree, materializeManagedWorktree } from "./checkout.js";
+import { addManagedWorktree } from "./checkout.js";
 import {
   requireGit,
   worktreePathExists,
@@ -354,6 +355,17 @@ async function restoreSnapshot(
     beforeRun: params.commitGuard,
     killProcessTree: true,
   };
+  const registrationOptions = {
+    env,
+    now,
+    repoRoot: record.repoRoot,
+    commonDir: repository.commonDir,
+    worktreeRoot: path.dirname(path.dirname(record.path)),
+    destination: record.path,
+    deferGitCheckout: true,
+    signal: params.signal,
+    rollbackGuard: params.rollbackGuard,
+  };
   const snapshot = await requireGit(
     record.repoRoot,
     ["rev-parse", "--verify", `${record.snapshotRef}^{commit}`],
@@ -444,21 +456,13 @@ async function restoreSnapshot(
       finalize,
       add: async (assertCurrent) => {
         const added = await addManagedWorktree({
-          env,
+          ...registrationOptions,
           sourceOnly: true,
-          now,
           enabled: false,
-          repoRoot: restoreRecord.repoRoot,
-          commonDir: repository.commonDir,
-          worktreeRoot: path.dirname(path.dirname(restoreRecord.path)),
-          destination: restoreRecord.path,
           base: exact.head,
-          deferGitCheckout: true,
           requireSpace: () =>
             requireSpace(restoreRecord.path, repository, 2 * targetBytes + 2 * provisionedBytes),
-          signal: params.signal,
           commitGuard: assertCurrent,
-          rollbackGuard: params.rollbackGuard,
         });
         if (added.code !== 0) {
           throw commandError("git worktree add", added);
@@ -532,17 +536,11 @@ async function restoreSnapshot(
   await fs.mkdir(path.dirname(record.path), { recursive: true });
   params.commitGuard?.();
   const added = await addManagedWorktree({
-    env,
+    ...registrationOptions,
     sourceOnly,
-    now,
     enabled: getConfig?.().worktreeAcceleration !== false,
-    repoRoot: record.repoRoot,
-    commonDir: repository.commonDir,
-    worktreeRoot: path.dirname(path.dirname(record.path)),
-    destination: record.path,
     base: parent,
     branch,
-    deferGitCheckout: true,
     requireSpace: (cloneBytes) =>
       requireSpace(
         record.path,
@@ -550,9 +548,7 @@ async function restoreSnapshot(
         (cloneBytes === undefined ? 2 * targetBytes : cloneBytes + 2 * changedBytes) +
           2 * provisionedBytes,
       ),
-    signal: params.signal,
     commitGuard: () => params.commitGuard?.(),
-    rollbackGuard: params.rollbackGuard,
   });
   if (added.code !== 0) {
     throw commandError("git worktree add", added);

@@ -1,7 +1,7 @@
 import path from "node:path";
 import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import { useAutoCleanupTempDirTracker } from "../../../test/helpers/temp-dir.js";
-import { onSessionLifecycleEvent } from "../../sessions/session-lifecycle-events.js";
+import { sessionChanges } from "../../sessions/session-row-changes.js";
 import { closeOpenClawAgentDatabasesAsync } from "../../state/openclaw-agent-db.js";
 import { closeStateDatabaseForTest } from "../../test-utils/database-cleanup.js";
 import { sessionDeliveryOrigin } from "../../utils/delivery-context.read.js";
@@ -26,8 +26,16 @@ it("publishes private Telegram topic renames when conversation label is the send
     updatedAt: 123,
     displayName: "New Chat",
   });
-  const onLifecycle = vi.fn();
-  const unsubscribe = onSessionLifecycleEvent(onLifecycle);
+  let expectedTitle = "Test 4";
+  const onCommittedRow = vi.fn((change: { sessionKey?: string }) => {
+    if (change.sessionKey === sessionKey) {
+      expect(loadSessionEntry(scope)).toMatchObject({
+        updatedAt: 123,
+        topicName: expectedTitle,
+      });
+    }
+  });
+  const unsubscribe = sessionChanges.subscribe(onCommittedRow);
   onTestFinished(unsubscribe);
   const ctx = {
     Provider: "telegram",
@@ -45,14 +53,12 @@ it("publishes private Telegram topic renames when conversation label is the send
   const first = await rename("Test 4");
   expect(sessionDeliveryOrigin(first ?? undefined)?.label).toBe("Synthetic Sender");
   expect(first?.topicName).toBe("Test 4");
-  expect(onLifecycle).toHaveBeenCalledWith(
-    expect.objectContaining({ sessionKey, reason: "rename" }),
-  );
-  expect(onLifecycle).toHaveBeenCalledTimes(1);
+  expect(onCommittedRow).toHaveBeenCalledWith(expect.objectContaining({ sessionKey }));
   await rename("Test 4");
-  expect(onLifecycle).toHaveBeenCalledTimes(1);
+
+  expectedTitle = "Test 5";
   await rename("Test 5");
-  expect(onLifecycle).toHaveBeenCalledTimes(2);
+
   expect(loadSessionEntry(scope)).toMatchObject({
     sessionId: "private-topic-rename",
     displayName: "New Chat",

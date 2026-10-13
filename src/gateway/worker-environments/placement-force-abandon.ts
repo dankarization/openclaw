@@ -1,6 +1,6 @@
 import {
   FORCED_WORKER_ABANDONMENT_ERROR,
-  placementTurnOwner,
+  projectPlacementTurnClaim,
   type WorkerSessionPlacementIdentity,
   type WorkerSessionPlacementRecord,
 } from "./placement-record.js";
@@ -30,8 +30,9 @@ export async function forceAbandonWorkerEnvironment(
     environmentId: string;
     onCleanupError?: (error: unknown) => void;
   },
-): Promise<void> {
+): Promise<ReadonlyMap<string, WorkerSessionPlacementRecord>> {
   const { environmentId, placements } = params;
+  const failedPlacements = new Map<string, WorkerSessionPlacementRecord>();
   const recoveryError = FORCED_WORKER_ABANDONMENT_ERROR;
   const journalOwners = (await params.placements.listWorkspaceReconciliationOwners()).filter(
     (owner) => owner.environmentId === environmentId,
@@ -86,15 +87,9 @@ export async function forceAbandonWorkerEnvironment(
           refs: [finalRef, preparedWorkerWorkspaceResultRef(finalRef)],
           repositoryWorkspaceId: pending.repositoryWorkspaceId,
         });
-        const claim = placement.turnClaim;
+        const claim = projectPlacementTurnClaim(placement);
         if (claim && claim.claimId === pending.claimId && claim.runId === pending.runId) {
-          await placements.closeWorkerTurnToolState({
-            sessionId: placement.sessionId,
-            claimId: claim.claimId,
-            runId: claim.runId,
-            placementGeneration: claim.generation,
-            owner: placementTurnOwner(placement),
-          });
+          await placements.closeWorkerTurnToolState(claim);
         }
         await placements.failWorkspaceResultAndReleaseTurn(pending, recoveryError);
       } else {
@@ -116,14 +111,9 @@ export async function forceAbandonWorkerEnvironment(
       });
     }
     if (current?.state === "draining") {
-      if (current.turnClaim) {
-        await placements.closeWorkerTurnToolState({
-          sessionId: current.sessionId,
-          claimId: current.turnClaim.claimId,
-          runId: current.turnClaim.runId,
-          placementGeneration: current.turnClaim.generation,
-          owner: placementTurnOwner(current),
-        });
+      const claim = projectPlacementTurnClaim(current);
+      if (claim) {
+        await placements.closeWorkerTurnToolState(claim);
       }
       current = await placements.startReconcile({
         sessionId: current.sessionId,
@@ -134,12 +124,13 @@ export async function forceAbandonWorkerEnvironment(
       });
     }
     if (current && (current.state !== "failed" || current.recoveryError !== recoveryError)) {
-      await placements.fail({
+      current = await placements.fail({
         sessionId: current.sessionId,
         expectedGeneration: current.generation,
         recoveryError,
       });
     }
+    failedPlacements.set(current.sessionId, current);
   }
 
   // The durable fence is now closed. Filesystem rollback and ref cleanup are
@@ -191,4 +182,5 @@ export async function forceAbandonWorkerEnvironment(
       reportWorkerAbandonmentCleanupError(params.onCleanupError, error);
     }
   }
+  return failedPlacements;
 }

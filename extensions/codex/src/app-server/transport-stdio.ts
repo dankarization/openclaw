@@ -10,6 +10,7 @@ import {
   resolveWindowsSpawnProgram,
   type WindowsSpawnInvocation,
 } from "openclaw/plugin-sdk/windows-spawn";
+import { appendCodexGitConfigParameters } from "./config-utils.js";
 import type { CodexAppServerStartOptions } from "./config.js";
 import { normalizeCodexAppServerArgs } from "./launch-args.js";
 import { resolveManagedCodexNativeCommand } from "./managed-binary.js";
@@ -79,7 +80,10 @@ export function resolveCodexAppServerSpawnEnv(
     (options.clearEnv ?? []).map((key) => normalizeKey(key.trim())).filter(Boolean),
   );
   for (const key of Object.keys(env)) {
-    if (keysToClear.has(normalizeKey(key)) || isCodexRuntimeInjectionEnvironmentKey(key)) {
+    const upperKey = key.toUpperCase();
+    const runtimeInjection =
+      RUNTIME_INJECTION_ENVIRONMENT_KEYS.has(upperKey) || upperKey.startsWith("DYLD_");
+    if (keysToClear.has(normalizeKey(key)) || runtimeInjection) {
       // Package managers and agent hosts may inject loader paths into their children. Codex does
       // not need them, so strip them before attestation and spawn instead of self-failing setup.
       delete env[key];
@@ -88,16 +92,43 @@ export function resolveCodexAppServerSpawnEnv(
   return env;
 }
 
-function isCodexRuntimeInjectionEnvironmentKey(rawKey: string): boolean {
-  const key = rawKey.toUpperCase();
-  return RUNTIME_INJECTION_ENVIRONMENT_KEYS.has(key) || key.startsWith("DYLD_");
+/** Keep inherited Git settings in the private process environment, outside thread config. */
+export function withCodexAppServerGitConfig(
+  options: CodexAppServerStartOptions,
+  parameters: string,
+): CodexAppServerStartOptions {
+  const env = resolveCodexAppServerSpawnEnv(options);
+  // Node selects the first sorted casing when Windows receives duplicate environment keys.
+  const key =
+    process.platform === "win32"
+      ? Object.keys(env)
+          .toSorted()
+          .find((name) => name.toUpperCase() === "GIT_CONFIG_PARAMETERS")
+      : "GIT_CONFIG_PARAMETERS";
+  const inherited = key === undefined ? undefined : env[key];
+  return {
+    ...options,
+    env: {
+      ...options.env,
+      GIT_CONFIG_PARAMETERS: appendCodexGitConfigParameters(inherited, parameters),
+    },
+    ...(options.clearEnv
+      ? {
+          clearEnv: options.clearEnv.filter(
+            (name) =>
+              (process.platform === "win32" ? name.trim().toUpperCase() : name.trim()) !==
+              "GIT_CONFIG_PARAMETERS",
+          ),
+        }
+      : {}),
+  };
 }
 
 /** Spawns the Codex app-server process and returns the shared transport interface. */
 export async function createStdioTransport(
   options: CodexAppServerStartOptions,
   baseEnv: NodeJS.ProcessEnv = process.env,
-  assertCurrent?: () => void,
+  assertCurrent?: () => void | Promise<void>,
   onSpawn?: (child: ChildProcessWithoutNullStreams) => void,
 ): Promise<ChildProcessWithoutNullStreams> {
   const isHostedGateway = baseEnv.OPENCLAW_GATEWAY_HOST_LIFELINE?.trim() === "stdin";
@@ -120,7 +151,7 @@ export async function createStdioTransport(
     throw previousFailure;
   }
   const register = await prepareCodexAppServerProcessRegistration();
-  assertCurrent?.();
+  await assertCurrent?.();
   embeddedAgentLog.debug("Codex app-server spawn", {
     command: invocation.command,
     launcher: options.command,
@@ -152,11 +183,11 @@ export async function createStdioTransport(
     // Attach lifecycle observers before inspection can yield to an early exit.
     onSpawn?.(child);
     await register(child);
-    assertCurrent?.();
+    await assertCurrent?.();
     return child;
   } catch (error) {
     await closeCodexAppServerTransportAndWait(child, { drainStdio: true });
-    assertCurrent?.();
+    await assertCurrent?.();
     throw (
       child.startupFailure?.error ??
       recordCodexAppServerSpawnFailure(error, invocation.command, launchKey)

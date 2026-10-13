@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
+  onTestFinished,
   afterAll,
   afterEach,
   beforeAll,
@@ -15,6 +16,7 @@ import { buildEmbeddedRunPayloads } from "../../agents/embedded-agent-runner/run
 import { consumePendingToolMediaIntoReply } from "../../agents/embedded-agent-subscribe.handlers.messages.replies.js";
 import { parseReplyDirectives } from "../../auto-reply/reply/reply-directives.js";
 import { createReplyMediaPathNormalizer } from "../../auto-reply/reply/reply-media-paths.js";
+import { setRuntimeConfigSnapshot } from "../../config/runtime-snapshot.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { createStructuredOutboundPayloadPlan } from "../../infra/outbound/payloads.js";
 import { getAgentScopedMediaLocalRoots } from "../../media/local-roots.js";
@@ -29,7 +31,10 @@ import {
   buildAssistantReplyContent,
   buildAssistantReplyContentFromInputs,
 } from "./chat-assistant-content.js";
-import { normalizeWebchatReplyMediaPathsForDisplay } from "./chat-reply-media.js";
+import {
+  captureWebchatReplyMediaScope,
+  normalizeWebchatReplyMediaPathsForDisplay,
+} from "./chat-reply-media.js";
 import { buildWebchatAssistantMessageFromReplyPayloads } from "./chat-webchat-media.js";
 
 const PNG_BYTES = Buffer.from(
@@ -100,12 +105,9 @@ describe("normalizeWebchatReplyMediaPathsForDisplay", () => {
     const stateDir = testState.stateDir;
     const agentDir = path.join(stateDir, "agents", "main", "agent");
     const workspaceDir = path.join(stateDir, "workspace");
-    return {
-      stateDir,
-      agentDir,
-      workspaceDir,
-      cfg: createConfig({ agentDir, workspaceDir, allowRead: params.allowRead }),
-    };
+    const cfg = createConfig({ agentDir, workspaceDir, allowRead: params.allowRead });
+    setRuntimeConfigSnapshot(cfg);
+    return { stateDir, agentDir, workspaceDir, cfg };
   }
 
   async function createCodexHomeImage(params: { agentDir: string }): Promise<string> {
@@ -135,11 +137,15 @@ describe("normalizeWebchatReplyMediaPathsForDisplay", () => {
     cfg: OpenClawConfig;
     payloads: ReplyMediaPayloads;
   }) {
-    const [payload] = await normalizeWebchatReplyMediaPathsForDisplay({
+    const scope = await captureWebchatReplyMediaScope({
       cfg: params.cfg,
       sessionKey: TEST_SESSION_KEY,
       agentId: "main",
-      sessionEntry: undefined,
+      sessionLoadOptions: { agentId: "main" },
+    });
+    onTestFinished(scope.release);
+    const [payload] = await normalizeWebchatReplyMediaPathsForDisplay({
+      ...scope,
       payloads: params.payloads,
     });
     return payload;

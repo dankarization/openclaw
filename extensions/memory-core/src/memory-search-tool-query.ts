@@ -1,6 +1,6 @@
-import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import {
   resolveMemoryIndexIdentityDiagnostic,
+  readMemorySearchManagerStatus,
   resolveMemoryIndexSearchDiagnostic,
   MEMORY_SEARCH_DEADLINE_CONTROL,
   type MemoryIndexIdentityDiagnostic,
@@ -58,19 +58,8 @@ type MemorySearchToolVisibility = {
   sandboxed: boolean;
 };
 
-function isClosedMemoryStoreError(error: unknown): boolean {
-  const message = formatErrorMessage(error).toLowerCase();
-  return (
-    message.includes("database is not open") ||
-    message.includes("database connection is not open") ||
-    message.includes("database handle is closed") ||
-    message.includes("memory index manager is closed")
-  );
-}
-
 export async function executeMemorySearchToolQuery(params: {
   initialManager: ManagerState;
-  refreshManager: () => Promise<ManagerState | null>;
   query: MemorySearchToolQuery;
   visibility: MemorySearchToolVisibility;
   signal: AbortSignal;
@@ -82,8 +71,7 @@ export async function executeMemorySearchToolQuery(params: {
 }) {
   const startedAt = Date.now();
   const runtimeDebug: MemorySearchRuntimeDebug[] = [];
-  let active = params.initialManager;
-  let partialGeneration = 0;
+  const active = params.initialManager;
   const { query, signal, visibility } = params;
   // Product recall may index transcripts without adding them to ordinary model search.
   // Explicit corpus selection is authorized by the tool owner before this point.
@@ -104,11 +92,17 @@ export async function executeMemorySearchToolQuery(params: {
   };
 
   const searchOnce = async () => {
-    params.onRebuildNotice?.(captureMemoryRebuildNotice(active.manager.status()));
     const allowedSources = searchSources ? new Set(searchSources) : undefined;
     const searchesSessions = searchSources?.includes("sessions") === true;
+    const initialStatus =
+      params.onRebuildNotice || searchesSessions
+        ? await readMemorySearchManagerStatus(active.manager)
+        : undefined;
+    if (params.onRebuildNotice && initialStatus) {
+      params.onRebuildNotice(captureMemoryRebuildNotice(initialStatus));
+    }
     const indexedCandidateCount = searchesSessions
-      ? (active.manager.status().sourceCounts ?? [])
+      ? (initialStatus?.sourceCounts ?? [])
           .filter((entry) => allowedSources?.has(entry.source))
           .reduce((total, entry) => total + entry.chunks, 0)
       : query.resultLimit;
@@ -131,7 +125,6 @@ export async function executeMemorySearchToolQuery(params: {
       onDebug: (debug) => runtimeDebug.push(debug),
       onPartialResults: params.onPartialResults
         ? (partialCandidates) => {
-            const generation = ++partialGeneration;
             params.onPartialResults?.(null);
             // Session visibility can change while semantic retrieval waits. A deadline
             // cannot reuse earlier session authority, so retain only durable memory files.
@@ -141,7 +134,6 @@ export async function executeMemorySearchToolQuery(params: {
             if (!memoryCandidates?.length || signal.aborted) {
               return;
             }
-            // Finalization yields; only the latest permitted snapshot survives fallback.
             void finalizeMemorySearchToolQuery({
               active,
               searched: { candidates: memoryCandidates, searchWindow },
@@ -150,7 +142,7 @@ export async function executeMemorySearchToolQuery(params: {
               effectiveMode: "keyword-only",
             }).then(
               (result) => {
-                if (generation === partialGeneration && !signal.aborted) {
+                if (!signal.aborted) {
                   params.onPartialResults?.(result.pausedIndexIdentity ? null : result);
                 }
               },
@@ -160,27 +152,13 @@ export async function executeMemorySearchToolQuery(params: {
         : undefined,
       ...(searchSources ? { sources: searchSources } : {}),
     });
-    return { searched: { candidates, searchWindow }, status: active.manager.status() };
+    return {
+      searched: { candidates, searchWindow },
+      status: await readMemorySearchManagerStatus(active.manager),
+    };
   };
 
-  let searched: Awaited<ReturnType<typeof searchOnce>>;
-  try {
-    searched = await searchOnce();
-  } catch (error) {
-    if (!isClosedMemoryStoreError(error)) {
-      throw error;
-    }
-    partialGeneration += 1;
-    params.onPartialResults?.(null);
-    const refreshed = await params.refreshManager();
-    if (!refreshed) {
-      throw error;
-    }
-    active = refreshed;
-    searched = await searchOnce();
-  } finally {
-    partialGeneration += 1;
-  }
+  const searched = await searchOnce();
 
   return await finalizeMemorySearchToolQuery({
     active,
@@ -202,21 +180,21 @@ async function finalizeMemorySearchToolQuery(params: {
   effectiveMode?: string;
 }) {
   const { active, searched, query, visibility, searchSources, runtimeDebug, startedAt } = params;
-  const status = params.status ?? active.manager.status();
+  const status = params.status ?? (await readMemorySearchManagerStatus(active.manager));
   const pausedIndexIdentity = resolveMemoryIndexIdentityDiagnostic(status);
-  // A pending chunking upgrade on an otherwise matching index degrades to
+  // A pending format upgrade on an otherwise matching corpus degrades to
   // keyword-only results instead of pausing memory search; every other
   // mismatch still withholds all candidates. Keyword results still need a
   // usable FTS index — the manager's fallback requires the same, so without
   // it there is no retrieval path and the tool must keep the paused
   // diagnostic instead of reporting a successful empty search.
-  const chunkingUpgradeKeywordOnly =
+  const formatUpgradeKeywordOnly =
     pausedIndexIdentity?.status === "mismatched" &&
     pausedIndexIdentity.owner === "openclaw" &&
-    pausedIndexIdentity.code === "chunking_version" &&
-    pausedIndexIdentity.chunkingVersionOnly === true &&
+    (pausedIndexIdentity.chunkingVersionOnly === true ||
+      pausedIndexIdentity.lexicalCompatible === true) &&
     Boolean(status.fts?.enabled && status.fts?.available);
-  if (pausedIndexIdentity && !chunkingUpgradeKeywordOnly) {
+  if (pausedIndexIdentity && !formatUpgradeKeywordOnly) {
     return {
       searchStartedAt: startedAt,
       status,
