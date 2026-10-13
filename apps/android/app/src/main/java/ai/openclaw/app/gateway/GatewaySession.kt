@@ -922,7 +922,12 @@ class GatewaySession(
     val hasAudio =
       method == "chat.send" &&
         params.asObjectOrNull()?.get("attachments").asArrayOrNull()?.any { attachment ->
-          attachment.asObjectOrNull()?.get("mimeType").asStringOrNull()?.lowercase()?.startsWith("audio/") == true
+          attachment
+            .asObjectOrNull()
+            ?.get("mimeType")
+            .asStringOrNull()
+            ?.lowercase()
+            ?.startsWith("audio/") == true
         } == true
     // Audio transcription precedes durable admission. Disconnect and caller
     // cancellation still settle the request while it waits for that ACK.
