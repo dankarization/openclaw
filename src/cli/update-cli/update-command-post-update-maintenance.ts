@@ -12,6 +12,7 @@ import { hasCommandProcessCleanupError } from "../../process/exec-result.js";
 import { defaultRuntime } from "../../runtime.js";
 import type { FinishUpdateParams } from "./update-command-finish-types.js";
 import { retireStandaloneGitWrapper } from "./update-command-git.js";
+import { updateRunLedgerOptions } from "./update-command-ledger.js";
 import { UpdateCommandRecoveryPendingError } from "./update-command-recovery-error.js";
 import {
   markControlPlaneUpdateRestartSentinelFailureBestEffort,
@@ -44,7 +45,7 @@ export async function preparePostUpdateService(
             mode: params.result.mode,
             status: params.result.status,
             runId: run.runId,
-            ledger: { env: run.env },
+            ledger: updateRunLedgerOptions(run),
             root: params.result.root ?? params.root,
             timeoutMs: params.updateStepTimeoutMs,
             assertCurrent,
@@ -103,7 +104,7 @@ export async function preparePostUpdateService(
     recordUpdateRunStep(
       params.opts.run.runId,
       { step: "restart", status: "skipped", endedAtMs: Date.now(), detail: "skipped by operator" },
-      { env: params.opts.run.env },
+      updateRunLedgerOptions(params.opts.run),
     );
   }
   return shouldRestart;

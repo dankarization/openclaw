@@ -23,6 +23,7 @@ import { printResult } from "./progress.js";
 import { parseUpdateTimeoutMs, type UpdateCommandOptions } from "./shared.js";
 import { UpdateActivationTimeoutError } from "./update-command-activation.js";
 import type { FinishUpdateParams } from "./update-command-finish-types.js";
+import { updateRunLedgerOptions } from "./update-command-ledger.js";
 import { UpdateCommandRecoveryPendingError } from "./update-command-recovery-error.js";
 import {
   recordUpdateResultNextAction,
@@ -206,7 +207,7 @@ export async function withUpdateCommandTerminalResult<T>(
       ) {
         throw error;
       }
-      if (run && getUpdateRun(run.runId, { env: run.env })?.status === "succeeded") {
+      if (run && getUpdateRun(run.runId, updateRunLedgerOptions(run))?.status === "succeeded") {
         defaultRuntime.error(
           `Warning: Update succeeded, but result publication failed: ${createUpdateErrorFact("update", error, run.env).message}`,
         );
@@ -281,7 +282,7 @@ export async function withUpdateCommandTerminalResult<T>(
       }
       // Executor settlement and terminal publication can fail outside the inner unwind.
       // Re-admit diagnostic writes before triage can offer an empty report.
-      await assertUpdateRecoveryAdmission({ env: run.env });
+      await assertUpdateRecoveryAdmission(updateRunLedgerOptions(run));
       failure = await prepareUnexpectedUpdateCommandFailure(
         error,
         { ...opts, run },
@@ -377,9 +378,9 @@ export async function resolveSettledUpdateCommandResult(
     await assertUpdateRecoveryAdmission({ env, path: targetPath });
     if (params.opts.run) {
       if (resolveOpenClawStateSqlitePath(params.opts.run.env) !== targetPath) {
-        await assertUpdateRecoveryAdmission({ env: params.opts.run.env });
+        await assertUpdateRecoveryAdmission(updateRunLedgerOptions(params.opts.run));
       }
-      const prior = getUpdateRun(params.opts.run.runId, { env: params.opts.run.env });
+      const prior = getUpdateRun(params.opts.run.runId, updateRunLedgerOptions(params.opts.run));
       if (prior && prior.status !== "running" && settlementFailed) {
         throw new Error("Update history was already finalized by another owner.");
       }
@@ -607,7 +608,7 @@ async function publishPreMutationUpdateOutcome(
   prepareOutcome: () => Promise<Pick<UpdateRunResult, "status" | "recovery">>,
 ): Promise<UpdateRunResult> {
   const run = params.opts.run;
-  const active = run ? getUpdateRun(run.runId, { env: run.env }) : undefined;
+  const active = run ? getUpdateRun(run.runId, updateRunLedgerOptions(run)) : undefined;
   const nextAction = params.nextAction ?? params.message;
   if (run && active && nextAction) {
     recordUpdateRunPhase(
@@ -617,7 +618,7 @@ async function publishPreMutationUpdateOutcome(
         origin: { nextAction },
         ...(params.installKind !== "unknown" ? { target: { kind: params.installKind } } : {}),
       },
-      { env: run.env },
+      updateRunLedgerOptions(run),
     );
   }
   const outcome = await prepareOutcome();

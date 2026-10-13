@@ -118,6 +118,7 @@ describe("createChannelPreflightAudio", () => {
       accountId: "work",
       originatingTo: "channel:C1",
       messageThreadId: "thread-1",
+      messageSid: "source-42",
     });
 
     expect(sendTranscriptEcho).toHaveBeenCalledWith({
@@ -128,6 +129,7 @@ describe("createChannelPreflightAudio", () => {
         OriginatingTo: "channel:C1",
         AccountId: "work",
         MessageThreadId: "thread-1",
+        MessageSid: "source-42",
       },
       cfg: audioConfig,
       transcript: "cost is $& and $1",

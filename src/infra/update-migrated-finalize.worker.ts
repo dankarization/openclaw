@@ -7,6 +7,7 @@ import {
   withDelegatedUpdateCommandExecutor,
   withUpdateCommandExecutor,
 } from "../cli/update-cli/update-command-executor.js";
+import { updateRunLedgerOptions } from "../cli/update-cli/update-command-ledger.js";
 import type {
   UpdateDoctorInput,
   UpdatePostCoreInput,
@@ -264,6 +265,7 @@ async function runDelegatedPostCore(input: UpdatePostCoreInput): Promise<void> {
           ...input.opts,
           run: {
             runId: input.runId,
+            ledgerBusyTimeoutMs: input.ledgerBusyTimeoutMs,
             originalRecoveryCapture: input.originalRecoveryCapture,
             env: { ...process.env },
             executorFence: fence,
@@ -336,6 +338,8 @@ async function runDelegatedDoctor(input: UpdateDoctorInput): Promise<void> {
       assertCurrent();
       await stopSupervisedPredecessorGateway(input, {
         root: input.root,
+        ledgerBusyTimeoutMs: input.ledgerBusyTimeoutMs,
+        serviceInspectionDeadlineAtMs: input.serviceInspectionDeadlineAtMs,
         assertCurrent,
         warn: (message) => process.stderr.write(`${message}\n`),
       });
@@ -357,6 +361,7 @@ async function runDelegatedDoctor(input: UpdateDoctorInput): Promise<void> {
         },
         {
           inputHash: input.configInputHash,
+          serviceInspectionDeadlineAtMs: input.serviceInspectionDeadlineAtMs,
           assertCurrent,
           commandAuthority,
           originalRecoveryCapture: {
@@ -391,7 +396,7 @@ async function finalizeInput(
   }
   const { requesterAuthority: descriptor, ...runIdentity } = transferredRun;
   executorFence.assertCurrent();
-  adoptUpdateRun(runIdentity.runId, { env: runIdentity.env });
+  adoptUpdateRun(runIdentity.runId, updateRunLedgerOptions(runIdentity));
   // Parent closures cannot cross JSON. The fresh runtime retains identity checks
   // under its validated original native update lineage.
   const run: NonNullable<UpdateCommandOptions["run"]> = {
@@ -422,7 +427,12 @@ async function finalizeInput(
       }
     };
     for (const step of input.bufferedSteps) {
-      await recordUpdateRunStepAsync(run.runId, step, { env, context, assertCurrent });
+      await recordUpdateRunStepAsync(run.runId, step, {
+        env,
+        busyTimeoutMs: run.ledgerBusyTimeoutMs,
+        context,
+        assertCurrent,
+      });
     }
   }
   const stopped = input.params.preManagedServiceStop;

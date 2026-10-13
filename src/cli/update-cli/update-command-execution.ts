@@ -191,6 +191,7 @@ export async function executeMutableUpdate(
     return preparePackageDoctorContext({
       capable: doctorConfigWrites,
       runId: originalRun?.runId,
+      ledgerBusyTimeoutMs: originalRun?.ledgerBusyTimeoutMs,
       executorFence: originalRun?.executorFence,
       requester: requesterAuthority?.requester,
       inputHash: validatedConfigSnapshot?.hash,

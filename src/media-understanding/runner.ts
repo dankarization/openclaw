@@ -38,6 +38,7 @@ import { logWarn } from "../logger.js";
 import { classifyMediaReferenceSource } from "../media/media-reference.js";
 import { createLazyRuntimeModule, createLazyRuntimeNamedExport } from "../shared/lazy-runtime.js";
 import { MediaAttachmentCache, selectAttachments } from "./attachments.js";
+import { createAttachmentDispositions } from "./attachments.select.js";
 import {
   matchesMediaEntryCapability,
   resolveConfiguredMediaEntryCapabilities,
@@ -585,6 +586,7 @@ async function runAttachmentEntries(params: {
   cache: MediaAttachmentCache;
   entries: Iterable<ResolvedMediaModelEntry> | AsyncIterable<ResolvedMediaModelEntry>;
   automaticAudio: boolean;
+  assertCurrent?: () => void;
   config?: MediaUnderstandingConfig;
   request?: MediaRequestOverrides;
 }): Promise<{
@@ -686,13 +688,6 @@ function hasFailedMediaAttempt(attachments: MediaUnderstandingDecision["attachme
   );
 }
 
-function createAttachmentDispositions(
-  indexes: readonly number[],
-  disposition: MediaAttachmentDisposition,
-): Record<number, MediaAttachmentDisposition> {
-  return Object.fromEntries(indexes.map((index) => [index, disposition]));
-}
-
 export async function runCapability(params: {
   capability: MediaUnderstandingCapability;
   cfg: OpenClawConfig;
@@ -703,6 +698,7 @@ export async function runCapability(params: {
   agentDir?: string;
   workspaceDir?: string;
   providerRegistry: LazyProviderRegistry;
+  assertCurrent?: () => void;
   config?: MediaUnderstandingConfig;
   activeModel?: ActiveMediaModel;
   request?: MediaRequestOverrides;
@@ -712,6 +708,7 @@ export async function runCapability(params: {
   const selection = selectAttachments({
     capability,
     attachments: params.media,
+    previousDecisions: ctx.MediaUnderstandingDecisions,
     policy: config.attachments,
   });
   const selectedAttachmentIndexes = selection.selected.map((attachment) => attachment.index);
@@ -905,6 +902,7 @@ export async function runCapability(params: {
           })
         : resolvedEntries,
       automaticAudio,
+      assertCurrent: params.assertCurrent,
       config,
     });
     if (output) {

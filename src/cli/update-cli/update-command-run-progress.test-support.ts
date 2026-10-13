@@ -40,7 +40,11 @@ async function withProgressRun(
   const control = path.join(root, "control");
   fs.mkdirSync(control);
   vi.spyOn(tempRoot, "resolvePreferredOpenClawTmpDir").mockReturnValue(control);
-  const run = { runId: createUpdateRun({ trigger: "cli" }, { env }).runId, env };
+  const run = {
+    runId: createUpdateRun({ trigger: "cli" }, { env }).runId,
+    env,
+    ledgerBusyTimeoutMs: 47_000,
+  };
   const guards = createUpdateCommandExecutionGuards({ run }, root);
   try {
     await withUpdateCommandExecutor(run.runId, async (executor) => {
@@ -99,6 +103,7 @@ export function registerUpdateRunReceiptTests(dirs: ProgressDirectories) {
           const writer = vi
             .spyOn(stepWrites, "recordUpdateRunStepAsync")
             .mockImplementation(async (...args) => {
+              expect(args[2]?.busyTimeoutMs).toBe(47_000);
               const committed = await writeStep(...args);
               if (args[1].step === "fetch" && args[1].status === "in_progress") {
                 entered.resolve();

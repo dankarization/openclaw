@@ -92,6 +92,7 @@ export function createChannelPreflightAudio<TAudio>(params: {
       accountId: string;
       originatingTo: string;
       messageThreadId?: string;
+      messageSid?: string;
     }): Promise<void> {
       const audio = sendParams.cfg.tools?.media?.audio;
       if (!audio?.echoTranscript) {
@@ -105,6 +106,7 @@ export function createChannelPreflightAudio<TAudio>(params: {
           OriginatingTo: sendParams.originatingTo,
           AccountId: sendParams.accountId,
           MessageThreadId: sendParams.messageThreadId,
+          ...(sendParams.messageSid !== undefined ? { MessageSid: sendParams.messageSid } : {}),
         },
         cfg: sendParams.cfg,
         transcript: sendParams.transcript,

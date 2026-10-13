@@ -365,3 +365,19 @@ it("continues finalization after heartbeat errors and warns once for the run", a
   expect(warning).toHaveBeenCalledTimes(1);
   expect(warning).toHaveBeenCalledWith(expect.stringContaining("SQLITE_BUSY"));
 });
+
+it("keeps the original Doctor deadline after custody preparation", async () => {
+  const startedAt = Date.now();
+  const lifecycle = new UpdateFinalizationLifecycle(false, 5_000, () => {});
+  const body = vi.fn();
+  const running = withCliProcessScope(() =>
+    lifecycle.run("doctor", body, undefined, {
+      enter: async (deadlineAtMs) => {
+        expect(deadlineAtMs).toBe(startedAt + 5_000);
+        vi.setSystemTime(startedAt + 5_001);
+      },
+    }),
+  );
+  await expect(running).rejects.toThrow("Update finalization timed out in doctor after 5000ms");
+  expect(body).not.toHaveBeenCalled();
+});

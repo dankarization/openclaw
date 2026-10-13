@@ -364,7 +364,7 @@ async function updateFinalizeCommandInternal(
       await lifecycle.run("configSnapshot", () => createUpdateConfigSnapshot());
       await lifecycle.run(
         "doctor",
-        () =>
+        (phase) =>
           runUpdateFinalizationDoctorInFreshProcess({
             phase: "pre-plugin",
             root,
@@ -374,12 +374,13 @@ async function updateFinalizeCommandInternal(
             json: opts.json === true,
             workspaceSuggestions: true,
             timeoutMs: lifecycle.budget("doctor"),
+            serviceInspectionDeadlineAtMs: phase.deadlineAtMs,
             onWarnings: onDoctorWarnings,
             onDoctorStep: (step) => lifecycle.recordDoctorStep(step),
           }),
         undefined,
         {
-          enter: async () => {
+          enter: async (serviceInspectionDeadlineAtMs) => {
             if (!ownsMaintenance) {
               return;
             }
@@ -387,6 +388,7 @@ async function updateFinalizeCommandInternal(
             maintenance = await beginDoctorMaintenance({
               root,
               runId: invokingRunId,
+              serviceInspectionDeadlineAtMs,
               options: { repair: true, nonInteractive: true, json: opts.json },
               runtime: { ...defaultRuntime, log: defaultRuntime.error },
             });

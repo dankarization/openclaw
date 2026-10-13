@@ -8,15 +8,18 @@ import type { ServiceInspectionReason } from "./service-inspection-error.js";
 
 export type LaunchctlResult = ExecResult;
 
-export async function execLaunchctl(args: string[], timeoutMs?: number): Promise<LaunchctlResult> {
+export async function execLaunchctl(
+  args: string[],
+  timeoutMs?: number,
+  beforeEffect?: () => void,
+): Promise<LaunchctlResult> {
   const isWindows = process.platform === "win32";
   const file = isWindows ? getWindowsCmdExePath() : "launchctl";
   const fileArgs = isWindows ? ["/d", "/s", "/c", "launchctl", ...args] : args;
-  return await execFileUtf8(
-    file,
-    fileArgs,
-    timeoutMs && timeoutMs > 0 ? { timeout: timeoutMs, killSignal: "SIGKILL" } : {},
-  );
+  return await execFileUtf8(file, fileArgs, {
+    beforeEffect,
+    ...(timeoutMs && timeoutMs > 0 ? { timeout: timeoutMs, killSignal: "SIGKILL" as const } : {}),
+  });
 }
 
 export function launchctlInspectionReason(

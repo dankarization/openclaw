@@ -16,8 +16,9 @@ import {
   shouldWaitForRecovery,
   verifyUpdateFailureRecovery,
 } from "./update-command-failure-recovery.js";
-import type { FinishUpdateParams } from "./update-command-finish-types.js";
+import type { FinishUpdateOptions, FinishUpdateParams } from "./update-command-finish-types.js";
 import { parkForegroundUpdateForActivation } from "./update-command-handoff.js";
+import { updateRunLedgerOptions } from "./update-command-ledger.js";
 import { appendPluginUpdateWarnings } from "./update-command-plugins-internals.js";
 import {
   completePostUpdateMaintenance,
@@ -64,8 +65,6 @@ import {
   deferUpdateCommandTerminalResult,
   recordUpdatePackageCompletion,
 } from "./update-command-terminal.js";
-
-type FinishUpdateOptions = { candidateRuntime?: boolean; onGatewayStartAttempted?: () => void };
 
 export async function finishUpdate(
   params: FinishUpdateParams,
@@ -249,7 +248,7 @@ async function finishSettledUpdate(
           detail:
             "No retained previous package transaction is available; automatic package restoration was not attempted.",
         },
-        { env: params.opts.run.env },
+        updateRunLedgerOptions(params.opts.run),
       );
     }
     const recoveryParams = { ...params, preManagedServiceStop: currentServiceStop() };

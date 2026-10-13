@@ -311,6 +311,9 @@ export async function runPackageUpdateDoctor(params: PackageDoctorOptions) {
     }
     return doctorStep;
   };
+  const doctorTimeoutMs = resolveInstallWorkTimeoutMs(params.workTimeoutMs, params.timeoutMs);
+  const serviceInspectionDeadlineAtMs =
+    doctorTimeoutMs === undefined ? undefined : Date.now() + doctorTimeoutMs;
   const completedSteps: UpdateStepResult[] = [];
   let processSettlement: UpdateStepResult | undefined;
   const runDoctor = (runCommand?: Parameters<typeof runUpdateStep>[0]["runCommand"]) =>
@@ -349,6 +352,10 @@ export async function runPackageUpdateDoctor(params: PackageDoctorOptions) {
               },
               input: {
                 configInputHash: context.inputHash,
+                ledgerBusyTimeoutMs: context.ledgerBusyTimeoutMs,
+                ...(serviceInspectionDeadlineAtMs !== undefined
+                  ? { serviceInspectionDeadlineAtMs }
+                  : {}),
                 repair: doctorPolicy.fix,
                 databaseGenerations: context.databaseBackup?.sourceGenerations,
                 originalRecoveryCapture: context.originalRecoveryCapture,

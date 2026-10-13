@@ -12,8 +12,15 @@ import {
   getCanonicalSqliteTableNames,
   readSqliteSchemaCookie,
 } from "../infra/sqlite-schema-contract.js";
-import { admitSqliteSchema, getAdmittedSqliteSchemaFacts } from "../infra/sqlite-schema-facts.js";
-import { assertTransactionUsable } from "../infra/sqlite-transaction.js";
+import {
+  admitSqliteSchema,
+  getAdmittedSqliteSchemaFacts,
+  readSqliteDataVersion,
+} from "../infra/sqlite-schema-facts.js";
+import {
+  assertTransactionUsable,
+  runSqliteDeferredTransactionSync,
+} from "../infra/sqlite-transaction.js";
 import { readSqliteUserVersion } from "../infra/sqlite-user-version.js";
 import { withStateDatabaseSchemaMaintenance } from "../infra/state-database-maintenance.js";
 import { openClawStateDatabaseCache } from "./openclaw-state-db-cache.js";
@@ -184,6 +191,42 @@ function createExistingOpenClawStateWriter(
       const busyTimeoutMs =
         currentOptions.busyTimeoutMs ?? contract.busyTimeoutMs ?? OPENCLAW_SQLITE_BUSY_TIMEOUT_MS;
       setSqliteBusyTimeout(db, busyTimeoutMs);
+      let integrityReceipt:
+        | { dataVersion: number; schemaCookie: number; userVersion: number }
+        | undefined;
+      if (!admitted && !contract.initializeAdditiveSchema && !contract.recoverTaskDeliveryOrphans) {
+        const dataVersionBefore = readSqliteDataVersion(db);
+        try {
+          const checked = runSqliteDeferredTransactionSync(
+            db,
+            () => {
+              assertSameFile();
+              if (existingSchema) {
+                assertExistingOpenClawStateRuntimeSchema(db, pathname);
+              }
+              assertExistingOpenClawStateSchema(db, pathname, contract.schemaSql);
+              return {
+                schemaCookie: readSqliteSchemaCookie(db),
+                userVersion: readSqliteUserVersion(db),
+              };
+            },
+            {
+              databaseLabel: pathname,
+              operationLabel: contract.operationLabel + ".integrity-preflight",
+            },
+          );
+          const dataVersionAfter = readSqliteDataVersion(db);
+          if (dataVersionBefore === dataVersionAfter && typeof checked.schemaCookie === "number") {
+            integrityReceipt = {
+              dataVersion: dataVersionAfter,
+              ...checked,
+              schemaCookie: checked.schemaCookie,
+            };
+          }
+        } catch {
+          // Advisory read: the admitted writer revalidates after concurrent repair.
+        }
+      }
       let pendingAdmission: typeof admitted;
       const result = runManagedStateTransaction(
         db,
@@ -203,15 +246,26 @@ function createExistingOpenClawStateWriter(
             needsAdmission =
               facts.userVersion !== admitted.version || facts.schemaVersion !== admitted.cookie;
           }
-          if (needsAdmission && existingSchema) {
+          const receiptMatches =
+            integrityReceipt !== undefined &&
+            readSqliteDataVersion(db) === integrityReceipt.dataVersion &&
+            readSqliteSchemaCookie(db) === integrityReceipt.schemaCookie &&
+            readSqliteUserVersion(db) === integrityReceipt.userVersion;
+          if (needsAdmission && existingSchema && !receiptMatches) {
             assertExistingOpenClawStateRuntimeSchema(db, pathname);
           }
-          const validate = () =>
-            assertExistingOpenClawStateSchema(
+          const validate = () => {
+            if (receiptMatches) {
+              const version = assertSupportedStateSchemaVersion(db, pathname);
+              assertExistingOpenClawStateSchemaMetadata(db, pathname, version);
+              return version;
+            }
+            return assertExistingOpenClawStateSchema(
               db,
               pathname,
               !admitted && contract.initializeAdditiveSchema ? "" : contract.schemaSql,
             );
+          };
           let version: number;
           let recoveryChanges: string[] = [];
           if (admitted && !needsAdmission) {

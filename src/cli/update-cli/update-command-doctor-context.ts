@@ -7,6 +7,7 @@ import type { UpdateRecoveryFence } from "../../infra/update-run-recovery.js";
 
 export type PackageDoctorContext = {
   runId: string;
+  ledgerBusyTimeoutMs?: number;
   executorFence: UpdateRecoveryFence;
   requester?: Readonly<UpdateRequester>;
   inputHash: string;

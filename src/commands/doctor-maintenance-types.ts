@@ -18,6 +18,8 @@ export type DoctorMaintenanceParams = {
   runId?: string;
   assertCurrent?: () => void;
   databaseGenerations?: UpdateDatabaseGenerations;
+  /** Parent phase deadline for nested service preparation and repair admission. */
+  serviceInspectionDeadlineAtMs?: number;
   beforeStateMutation?: (context: { env: NodeJS.ProcessEnv; signal: AbortSignal }) => Promise<void>;
 };
 

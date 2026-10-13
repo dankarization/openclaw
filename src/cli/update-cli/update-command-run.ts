@@ -28,7 +28,6 @@ import {
   type FreeBsdPkgOwnershipInspection,
 } from "../../infra/update-freebsd-pkg-ownership.js";
 import { resolveUpdateInstallRoot } from "../../infra/update-install-root.js";
-import { cleanupStaleManagedServiceUpdateHandoffs } from "../../infra/update-managed-service-handoff-cleanup.js";
 import {
   POST_CORE_UPDATE_CHANNEL_ENV,
   POST_CORE_UPDATE_ENV,
@@ -54,11 +53,7 @@ import {
 import type { UpdateRunRecord, UpdateRunStep } from "../../infra/update-run-record.js";
 import { assertUpdateRecoveryAdmission } from "../../infra/update-run-recovery-admission.js";
 import { isUpdateRecoveryPending } from "../../infra/update-run-recovery-schema.js";
-import {
-  inspectUpdateRecoveries,
-  loadUpdateRecovery,
-  type UpdateRecoveryFence,
-} from "../../infra/update-run-recovery.js";
+import { inspectUpdateRecoveries, loadUpdateRecovery } from "../../infra/update-run-recovery.js";
 import { updateRunStepsFromResultStep } from "../../infra/update-run-step.js";
 import {
   AUTO_UPDATE_STEP_TIMEOUT_MS,
@@ -66,7 +61,6 @@ import {
   UPDATE_RUNNER_TIMEOUT_MS,
 } from "../../infra/update-run-timeouts.js";
 import type { UpdateRunResult, UpdateStepProgress } from "../../infra/update-runner-types.js";
-import { loadInstalledPluginIndexInstallRecords } from "../../plugins/installed-plugin-index-records.js";
 import { defaultRuntime } from "../../runtime.js";
 import { resolveOpenClawStateSqlitePath } from "../../state/openclaw-state-db.paths.js";
 import { assertOpenClawStateWriteAllowedAtPath } from "../../state/openclaw-state-ownership.js";
@@ -84,6 +78,7 @@ import { suppressDeprecations } from "./suppress-deprecations.js";
 import { resolveForegroundUpdateAdmission } from "./update-command-handoff.js";
 import type { UpdateInitializationAdmission } from "./update-command-initialization-types.js";
 import { resolveMutableUpdateInstallKind } from "./update-command-install-kind.js";
+import { updateRunLedgerOptions } from "./update-command-ledger.js";
 import { revalidateUpdateDatabaseContext } from "./update-command-managed-context.js";
 import {
   admitMutableUpdateSignalRun,
@@ -93,7 +88,6 @@ import {
 import { UpdateCommandPendingRecoveryFailure } from "./update-command-result.js";
 import {
   resolveOwnedManagedUpdateEnv,
-  withOwnedManagedUpdateEnv,
   resolveServiceRefreshEnv,
 } from "./update-command-service-env.js";
 import {
@@ -124,7 +118,7 @@ export function recordUpdateCommandTarget(
     run.runId,
     "requested",
     patch,
-    { env: run.env },
+    updateRunLedgerOptions(run),
     (record) => {
       before = record;
     },
@@ -299,7 +293,10 @@ export async function admitUpdateCommandRun(params: {
   const driver = readUpdateRunDriver();
   const ledgerOptions = {
     env,
-    busyTimeoutMs: parseUpdateTimeoutMs(params.opts.timeout) ?? DEFAULT_UPDATE_STEP_TIMEOUT_MS,
+    busyTimeoutMs:
+      params.opts.run?.ledgerBusyTimeoutMs ??
+      parseUpdateTimeoutMs(params.opts.timeout) ??
+      DEFAULT_UPDATE_STEP_TIMEOUT_MS,
   };
   params.assertCurrent?.();
   const created = createUpdateRun(
@@ -339,6 +336,7 @@ export async function admitUpdateCommandRun(params: {
     originalRecoveryCapture:
       params.initialization?.originalRecoveryCapture ?? params.opts.run?.originalRecoveryCapture,
     defaultStepTimeoutMs: record.trigger === "campaign" ? AUTO_UPDATE_STEP_TIMEOUT_MS : undefined,
+    ledgerBusyTimeoutMs: ledgerOptions.busyTimeoutMs,
     env,
     ...(record.trigger !== "cli" &&
     meta?.runId === record.runId &&
@@ -452,12 +450,12 @@ export function createUpdateRunProgress(
     pendingSteps,
     onRollbackOutcome: (rollbackOutcome) => {
       if (!deferred) {
-        recordUpdateRunVerification(run.runId, { rollbackOutcome }, { env: run.env });
+        recordUpdateRunVerification(run.runId, { rollbackOutcome }, updateRunLedgerOptions(run));
       }
     },
     onHeartbeat() {
       if (!deferred) {
-        heartbeatUpdateRun(run.runId, driver, { env: run.env });
+        heartbeatUpdateRun(run.runId, driver, updateRunLedgerOptions(run));
       }
     },
     deferLedgerWrites() {
@@ -517,17 +515,17 @@ export function completeUpdateCommandRun(
   }
   // A process-local result cannot complete an operationally pending update or
   // authorize package retirement. Only the durable finalizer may close it.
-  const recoveries = inspectUpdateRecoveries({ env: run.env });
+  const recoveries = inspectUpdateRecoveries(updateRunLedgerOptions(run));
   const inspected = recoveries.find((entry) => entry.record.runId === run.runId);
   // A matching historical record only projects its saved outcome. Execution
   // remains strict, while unrelated completed history grants no authority.
   const recovery =
     inspected?.format === "legacy-serving"
       ? inspected.record
-      : loadUpdateRecovery(run.runId, { env: run.env });
+      : loadUpdateRecovery(run.runId, updateRunLedgerOptions(run));
   if (
     recovery?.terminal &&
-    getUpdateRun(run.runId, { env: run.env })?.status === recovery.terminal.status
+    getUpdateRun(run.runId, updateRunLedgerOptions(run))?.status === recovery.terminal.status
   ) {
     // Read the atomic durable outcome; diagnostics never authorize retention cleanup.
     return normalizeUpdateFailureResult({
@@ -551,7 +549,10 @@ export function completeUpdateCommandRun(
   if (recoveries.some(({ record }) => isUpdateRecoveryPending(record))) {
     return { ...result, status: "error", reason: "update-recovery-pending", runId: run.runId };
   }
-  const recordOptions = { env: run.env, redactPaths: result.root ? [result.root] : [] };
+  const recordOptions = {
+    ...updateRunLedgerOptions(run),
+    redactPaths: result.root ? [result.root] : [],
+  };
   // Both finalization and outer CLI unwind come here. A verified restored generation
   // stays with its helper until native recovery finishes; neither caller may close it early.
   const helperRecoveryPending =
@@ -724,22 +725,4 @@ export async function prepareUpdateCommand(opts: UpdateCommandOptions) {
 }
 
 /** Prepare mutable runtime state only under the admitted installation owner. */
-export async function prepareMutableUpdateRuntime(
-  env: NodeJS.ProcessEnv | undefined,
-  fence: UpdateRecoveryFence,
-) {
-  return await withOwnedManagedUpdateEnv(env, async () => {
-    fence.assertCurrent();
-    await cleanupStaleManagedServiceUpdateHandoffs().catch(() => undefined);
-    fence.assertCurrent();
-    await assertOpenClawStateWriteAllowedAtPath({
-      databasePath: resolveOpenClawStateSqlitePath(process.env),
-    });
-    fence.assertCurrent();
-    await disableCurrentOpenClawUpdateLaunchdJob().catch(() => undefined);
-    fence.assertCurrent();
-    const records = await loadInstalledPluginIndexInstallRecords();
-    fence.assertCurrent();
-    return records;
-  });
-}
+export { prepareMutableUpdateRuntime } from "./update-command-mutable-runtime.js";

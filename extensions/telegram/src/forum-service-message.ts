@@ -23,3 +23,20 @@ export function isTelegramForumServiceMessage(msg: unknown): boolean {
     (field) => field in messageRecord && messageRecord[field] != null,
   );
 }
+
+/** Returns true only for title-bearing forum-topic service updates. */
+export function isTelegramForumTopicTitleUpdate(msg: unknown): boolean {
+  if (!msg || typeof msg !== "object") {
+    return false;
+  }
+  const message = msg as {
+    forum_topic_created?: { name?: unknown };
+    forum_topic_edited?: { name?: unknown };
+  };
+  return Boolean(
+    (typeof message.forum_topic_created?.name === "string" &&
+      message.forum_topic_created.name.trim()) ||
+    (typeof message.forum_topic_edited?.name === "string" &&
+      message.forum_topic_edited.name.trim()),
+  );
+}

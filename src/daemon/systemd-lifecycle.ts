@@ -79,7 +79,7 @@ async function runSystemdServiceAction(
     }
     runSystemctl = (args) => {
       params.assertCurrent?.();
-      return execSystemctl(args, env);
+      return execSystemctl(args, env, undefined, params.beforeEffect);
     };
   } else {
     await assertSystemdAvailable(env);
@@ -87,7 +87,8 @@ async function runSystemdServiceAction(
       const scopedEnv = { ...env, OPENCLAW_SYSTEMD_UNIT: unitName };
       await assertNoSystemGatewayOwnershipForActivation(scopedEnv);
     }
-    runSystemctl = (args) => execSystemctlUser(env, args, undefined, params.assertCurrent);
+    runSystemctl = (args) =>
+      execSystemctlUser(env, args, undefined, params.assertCurrent, params.beforeEffect);
   }
   if (action !== "stop") {
     // Clear crash-loop start-limit latches only after scope ownership is proven;
@@ -99,6 +100,8 @@ async function runSystemdServiceAction(
   if (action === "restart") {
     params.onRestartAttempted?.();
   }
+  await params.prepareEffect?.();
+  params.assertCurrent?.();
   const res = await runSystemctl([action, unitName]);
   if (res.code !== 0) {
     throw new Error(`systemctl ${action} failed: ${res.stderr || res.stdout}`.trim());

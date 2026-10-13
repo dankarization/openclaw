@@ -10,6 +10,7 @@ import {
 import { finalizeInboundContext } from "../auto-reply/reply/inbound-context.js";
 import type { MsgContext } from "../auto-reply/templating.js";
 import type { OpenClawConfig } from "../config/types.js";
+import { normalizeMediaFacts } from "../media/media-facts.js";
 import { runMediaCapability } from "./apply-capability.js";
 import { resolveAttachmentKind } from "./attachments.js";
 import { DEFAULT_ECHO_TRANSCRIPT_FORMAT, sendTranscriptEcho } from "./echo-transcript.js";
@@ -89,15 +90,18 @@ function enableLocalPathSelfServe(
 
 function renderMediaAttachmentMarkers(params: {
   attachments: MediaAttachment[];
+  capabilities: MediaUnderstandingCapability[];
   decisions: MediaUnderstandingDecision[];
   outputs: MediaUnderstandingOutput[];
   deliveredImageIndexes?: ReadonlySet<number>;
 }): AttachmentContextBlock[] {
   const handledIndexes = new Set(params.outputs.map((output) => output.attachmentIndex));
-  const decisions = new Map(params.decisions.map((decision) => [decision.capability, decision]));
   return params.attachments.flatMap((attachment) => {
     const capability = resolveAttachmentKind(attachment);
-    if (capability !== "image" && capability !== "audio" && capability !== "video") {
+    if (
+      (capability !== "image" && capability !== "audio" && capability !== "video") ||
+      !params.capabilities.includes(capability)
+    ) {
       return [];
     }
     // The ACP caller resolved these exact indexes into native turn attachments;
@@ -105,7 +109,12 @@ function renderMediaAttachmentMarkers(params: {
     if (capability === "image" && params.deliveredImageIndexes?.has(attachment.index)) {
       return [];
     }
-    const decision = decisions.get(capability);
+    // A later pass can consume preflight selection without recording new dispositions.
+    const decision = params.decisions.findLast(
+      (candidate) =>
+        candidate.capability === capability &&
+        candidate.attachmentDispositions?.[attachment.index] !== undefined,
+    );
     if (!decision || handledIndexes.has(attachment.index)) {
       return [];
     }
@@ -148,6 +157,7 @@ export async function applyMediaUnderstanding(params: {
     .map((value) => normalizeOptionalString(value))
     .find(Boolean);
 
+  const media = normalizeMediaFacts(ctx.media);
   const attachments = normalizeMediaAttachments(ctx);
   // Built on first read, at most once per turn: the native-vision skip never reads it.
   // A build failure is memoized and rethrown after the capabilities run, so it still
@@ -259,11 +269,15 @@ export async function applyMediaUnderstanding(params: {
         }
         // Echo transcript back to chat before agent processing, if configured.
         const audioCfg = cfg.tools?.media?.audio;
-        if (audioCfg?.echoTranscript && transcript) {
+        // Quoted audio remains in model context, but only this message's audio is echoed.
+        const echoTranscript = formatAudioTranscripts(
+          audioOutputs.filter((output) => media[output.attachmentIndex]?.source !== "quote"),
+        );
+        if (audioCfg?.echoTranscript && echoTranscript) {
           await sendTranscriptEcho({
             ctx,
             cfg,
-            transcript,
+            transcript: echoTranscript,
             format: audioCfg.echoFormat ?? DEFAULT_ECHO_TRANSCRIPT_FORMAT,
           });
         }
@@ -294,7 +308,8 @@ export async function applyMediaUnderstanding(params: {
     // add markers for image/video inputs still owned by the native harness.
     const mediaMarkers = renderMediaAttachmentMarkers({
       attachments,
-      decisions,
+      capabilities: decisions.map((decision) => decision.capability),
+      decisions: ctx.MediaUnderstandingDecisions ?? [],
       outputs,
       deliveredImageIndexes: params.deliveredImageIndexes,
     });

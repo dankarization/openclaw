@@ -41,8 +41,10 @@ async function execSystemdCommand(
   args: string[],
   env?: GatewayServiceEnv,
   timeoutMs?: number,
+  beforeEffect?: () => void,
 ): Promise<ExecResult> {
   return await execFileUtf8(command, args, {
+    beforeEffect,
     env: env ? { ...process.env, ...env } : process.env,
     // A wedged systemd socket can leave manager commands blocked forever; the timeout
     // kills the child so status reads fail soft instead of hanging the command.
@@ -54,8 +56,9 @@ export async function execSystemctl(
   args: string[],
   env?: GatewayServiceEnv,
   timeoutMs?: number,
+  beforeEffect?: () => void,
 ): Promise<ExecResult> {
-  return await execSystemdCommand("systemctl", args, env, timeoutMs);
+  return await execSystemdCommand("systemctl", args, env, timeoutMs, beforeEffect);
 }
 
 /** System-manager reads never inherit user-bus routing. */
@@ -172,6 +175,7 @@ async function execSystemdUserCommand(
   args: string[],
   timeoutMs?: number,
   assertCurrent?: () => void,
+  beforeEffect?: () => void,
 ): Promise<SystemdExecResult> {
   const now = getServiceInspectionClock();
   const deadline = timeoutMs && timeoutMs > 0 ? now() + timeoutMs : undefined;
@@ -204,7 +208,13 @@ async function execSystemdUserCommand(
     }
     const scope =
       transport?.kind === "machine" ? ["--machine", `${transport.user}@`, "--user"] : ["--user"];
-    return await execSystemdCommand(command, [...scope, ...args], childEnv, remaining);
+    return await execSystemdCommand(
+      command,
+      [...scope, ...args],
+      childEnv,
+      remaining,
+      beforeEffect,
+    );
   } catch (error) {
     runServiceInspectionGuard(assertCurrent);
     if (!(error instanceof ServiceInspectionError)) {
@@ -225,8 +235,16 @@ export async function execSystemctlUser(
   args: string[],
   timeoutMs?: number,
   assertCurrent?: () => void,
+  beforeEffect?: () => void,
 ): Promise<SystemdExecResult> {
-  return await execSystemdUserCommand("systemctl", env, args, timeoutMs, assertCurrent);
+  return await execSystemdUserCommand(
+    "systemctl",
+    env,
+    args,
+    timeoutMs,
+    assertCurrent,
+    beforeEffect,
+  );
 }
 
 export async function execBusctlUser(

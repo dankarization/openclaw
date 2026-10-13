@@ -10,6 +10,7 @@ import { resolveOpenClawStateSqlitePath } from "../../state/openclaw-state-db.pa
 import type { UpdateCommandOptions } from "./shared.js";
 import type { MutableUpdateExecutionParams } from "./update-command-execution.types.js";
 import type { FinishUpdateParams } from "./update-command-finish-types.js";
+import { updateRunLedgerOptions } from "./update-command-ledger.js";
 import { UpdateCommandRecoveryPendingError } from "./update-command-recovery-error.js";
 import { UpdateCommandPendingRecoveryFailure } from "./update-command-result.js";
 
@@ -35,7 +36,7 @@ export function assertUpdateCommandRecoveryState(opts: UpdateCommandOptions): vo
     );
   }
   if (opts.run) {
-    const current = loadUpdateRecovery(opts.run.runId, { env: opts.run.env });
+    const current = loadUpdateRecovery(opts.run.runId, updateRunLedgerOptions(opts.run));
     if (current) {
       throw new UpdateRecoveryRequiredError(current);
     }
@@ -69,7 +70,7 @@ export async function assertUpdateCommandPackageFinalization(
     await assertUpdateRecoveryAdmission({ env, path: targetPath });
     assertCurrent();
     if (run && resolveOpenClawStateSqlitePath(run.env) !== targetPath) {
-      await assertUpdateRecoveryAdmission({ env: run.env });
+      await assertUpdateRecoveryAdmission(updateRunLedgerOptions(run));
       assertCurrent();
     }
   } catch (cause) {

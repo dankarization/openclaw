@@ -31,7 +31,10 @@ import {
   triggerInternalHook,
 } from "openclaw/plugin-sdk/hook-runtime";
 import { createLazyRuntimeModule } from "openclaw/plugin-sdk/lazy-runtime";
-import { formatAudioTranscriptForAgent } from "openclaw/plugin-sdk/media-understanding-runtime";
+import {
+  createChannelPreflightAudio,
+  formatAudioTranscriptForAgent,
+} from "openclaw/plugin-sdk/media-understanding-runtime";
 import type { MsgContext } from "openclaw/plugin-sdk/reply-runtime";
 import { logVerbose } from "openclaw/plugin-sdk/runtime-env";
 import { normalizeOptionalLowercaseString } from "openclaw/plugin-sdk/string-coerce-runtime";
@@ -60,7 +63,10 @@ import {
 import { renderTelegramTextEntities } from "./bot/inbound-text-entities.js";
 import type { TelegramContext } from "./bot/types.js";
 import { resolveTelegramDirectPeerId } from "./dm-session-key.js";
-import { isTelegramForumServiceMessage } from "./forum-service-message.js";
+import {
+  isTelegramForumServiceMessage,
+  isTelegramForumTopicTitleUpdate,
+} from "./forum-service-message.js";
 import { resolveTelegramGroupIngestEnabled } from "./group-config-helpers.js";
 import {
   resolveTelegramCommandIngressAuthorization,
@@ -74,6 +80,15 @@ type TelegramMentionFacts = NonNullable<
 const loadMediaUnderstandingRuntime = createLazyRuntimeModule(
   () => import("openclaw/plugin-sdk/media-runtime"),
 );
+const telegramPreflightAudio = createChannelPreflightAudio({
+  channel: "telegram",
+  isAudio: (media: TelegramMediaRef) =>
+    media.kind === "audio" || media.contentType?.startsWith("audio/") === true,
+  transcribeFirstAudio: async (request) => {
+    const { transcribeFirstAudio } = await loadMediaUnderstandingRuntime();
+    return transcribeFirstAudio(request);
+  },
+});
 
 type TelegramInboundBodyResult = {
   bodyText: string;
@@ -264,7 +279,11 @@ export async function resolveTelegramInboundBody(params: {
   if (!rawBody && msg.sticker && !stickerHasMedia && !formattedStickerDescription) {
     rawBody = msg.sticker.emoji?.trim() || formatMediaPlaceholderText(nativeMediaFacts);
   }
-  if (!rawBody && nativeMediaFacts.length === 0) {
+  const privateTopicTitleUpdate =
+    msg.chat.type === "private" &&
+    msg.message_thread_id != null &&
+    isTelegramForumTopicTitleUpdate(msg);
+  if (!rawBody && nativeMediaFacts.length === 0 && !privateTopicTitleUpdate) {
     return null;
   }
 
@@ -272,8 +291,7 @@ export async function resolveTelegramInboundBody(params: {
   if (formattedStickerDescription) {
     bodyText = [formattedStickerDescription, rawBody].filter(Boolean).join("\n");
   }
-  const isAudioMedia = (media: TelegramMediaRef) =>
-    media.kind === "audio" || media.contentType?.startsWith("audio/") === true;
+  const isAudioMedia = telegramPreflightAudio.isAudio;
   const hasAudio = nativeMediaFacts.some(isAudioMedia);
   const materializedMedia = allMedia.filter((media) => Boolean(media.path));
   const materializedAudioIndex = allMedia.findIndex(
@@ -296,25 +314,24 @@ export async function resolveTelegramInboundBody(params: {
         senderAllowedForAudioPreflight));
 
   if (needsPreflightTranscription) {
-    try {
-      const { transcribeFirstAudio } = await loadMediaUnderstandingRuntime();
-      const tempCtx: MsgContext = {
-        Provider: "telegram",
-        Surface: "telegram",
-        OriginatingChannel: "telegram",
-        OriginatingTo: originatingTo,
-        AccountId: accountId,
-        MessageThreadId: replyThreadId,
-        media: materializedMedia,
-      };
-      preflightTranscript = await transcribeFirstAudio({
+    const tempCtx: MsgContext = {
+      Provider: "telegram",
+      Surface: "telegram",
+      OriginatingChannel: "telegram",
+      OriginatingTo: originatingTo,
+      AccountId: accountId,
+      MessageSid: String(msg.message_id),
+      MessageThreadId: replyThreadId,
+      media: materializedMedia,
+    };
+    preflightTranscript = await telegramPreflightAudio.resolve({
+      request: {
         ctx: tempCtx,
         cfg,
         agentDir: undefined,
-      });
-    } catch (err) {
-      logVerbose(`telegram: audio preflight transcription failed: ${String(err)}`);
-    }
+        telegramVoice: { chatId: String(chatId), messageId: String(msg.message_id) },
+      },
+    });
   }
   const audioTranscribedMediaIndex =
     preflightTranscript === undefined ? undefined : materializedAudioIndex;
@@ -454,13 +471,25 @@ export async function resolveTelegramInboundBody(params: {
     return null;
   }
 
+  // A transcript can address one account while the other accounts skip the message.
+  if (preflightTranscript) {
+    await telegramPreflightAudio.send({
+      transcript: preflightTranscript,
+      cfg,
+      accountId: accountId ?? "default",
+      messageSid: String(msg.message_id),
+      originatingTo,
+      messageThreadId: replyThreadId === undefined ? undefined : String(replyThreadId),
+    });
+  }
+
   return {
     bodyText,
     rawBody,
     historyKey,
     commandAuthorized,
     effectiveWasMentioned,
-    inboundEventKind,
+    inboundEventKind: privateTopicTitleUpdate ? "room_event" : inboundEventKind,
     groupThread,
     mentionFacts: resolveTelegramMentionFacts({
       canDetectMention,

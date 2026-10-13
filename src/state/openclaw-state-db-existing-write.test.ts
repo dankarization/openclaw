@@ -70,6 +70,135 @@ function readSchemaMarkers(database: DatabaseSync) {
 }
 
 describe("retained existing-state writer", () => {
+  it("checks first-admission integrity before BEGIN IMMEDIATE and retains the admission", () => {
+    const options = fixture();
+    const nativeExec = DatabaseSync.prototype.exec;
+    let writerLockHeld = false;
+    const exec = vi.spyOn(DatabaseSync.prototype, "exec").mockImplementation(function (
+      this: DatabaseSync,
+      sql: string,
+    ) {
+      const result = nativeExec.call(this, sql);
+      if (sql === "BEGIN IMMEDIATE") {
+        writerLockHeld = true;
+      } else if (sql === "COMMIT" || sql === "ROLLBACK") {
+        writerLockHeld = false;
+      }
+      return result;
+    });
+    const integrityLockStates: boolean[] = [];
+    const nativeAll = StatementSync.prototype.all;
+    const all = vi.spyOn(StatementSync.prototype, "all").mockImplementation(
+      new Proxy(nativeAll, {
+        apply(target, receiver: StatementSync, args) {
+          if (/^PRAGMA integrity_check\s*;?$/iu.test(receiver.sourceSQL)) {
+            integrityLockStates.push(writerLockHeld);
+          }
+          return Reflect.apply(target, receiver, args);
+        },
+      }),
+    );
+    const writer = openExistingOpenClawStateWriter(options, contract);
+    try {
+      writer.run(({ db }) => {
+        expect(writerLockHeld).toBe(true);
+        db.exec("INSERT INTO records VALUES (1, 'first')");
+      }, options);
+      writer.run(({ db }) => db.exec("INSERT INTO records VALUES (2, 'warm')"), options);
+      writer.assertSettled();
+      expect(integrityLockStates).toEqual([false]);
+      expect(readValues(options.path)).toEqual([{ value: "first" }, { value: "warm" }]);
+    } finally {
+      writer.close();
+      all.mockRestore();
+      exec.mockRestore();
+    }
+  });
+
+  it.each([
+    {
+      marker: "data version",
+      sql: "UPDATE schema_meta SET role = 'agent' WHERE meta_key = 'primary'",
+      error: /schema role agent/iu,
+    },
+    {
+      marker: "schema cookie",
+      sql: "ALTER TABLE records ADD COLUMN foreign_value TEXT",
+      error: /column definitions differ for records/iu,
+    },
+    {
+      marker: "user version",
+      sql: `PRAGMA user_version = ${OPENCLAW_STATE_SCHEMA_VERSION + 1}`,
+      error: /newer schema version/iu,
+    },
+  ])("invalidates the preflight receipt after a foreign $marker change", ({ sql, error }) => {
+    const options = fixture();
+    const nativeExec = DatabaseSync.prototype.exec;
+    let injected = false;
+    const exec = vi.spyOn(DatabaseSync.prototype, "exec").mockImplementation(function (
+      this: DatabaseSync,
+      text: string,
+    ) {
+      if (!injected && text === "BEGIN IMMEDIATE" && this.location() === options.path) {
+        injected = true;
+        const external = new DatabaseSync(options.path);
+        try {
+          external.exec(sql);
+        } finally {
+          external.close();
+        }
+      }
+      return nativeExec.call(this, text);
+    });
+    const writer = openExistingOpenClawStateWriter(options, contract);
+    const mutate = vi.fn(({ db }: { db: DatabaseSync }) => {
+      db.exec("INSERT INTO records (id, value) VALUES (1, 'refused')");
+    });
+    try {
+      expect(() => writer.run(mutate, options)).toThrow(error);
+      expect(injected).toBe(true);
+      expect(mutate).not.toHaveBeenCalled();
+      expect(readValues(options.path)).toEqual([]);
+    } finally {
+      writer.close();
+      exec.mockRestore();
+    }
+  });
+
+  it.each(["additive DDL", "orphan repair"] as const)(
+    "keeps %s validation inside the original writer transaction",
+    (kind) => {
+      const options = fixture();
+      const nativeExec = DatabaseSync.prototype.exec;
+      const begins: string[] = [];
+      const exec = vi.spyOn(DatabaseSync.prototype, "exec").mockImplementation(function (
+        this: DatabaseSync,
+        sql: string,
+      ) {
+        if (sql === "BEGIN" || sql === "BEGIN IMMEDIATE") {
+          begins.push(sql);
+        }
+        return nativeExec.call(this, sql);
+      });
+      try {
+        runExistingOpenClawStateWriteTransaction(
+          ({ db }) => db.exec("INSERT INTO records VALUES (1, 'committed')"),
+          options,
+          kind === "orphan repair"
+            ? { ...contract, recoverTaskDeliveryOrphans: true }
+            : {
+                ...contract,
+                schemaSql: "CREATE TABLE IF NOT EXISTS extras (id INTEGER PRIMARY KEY) STRICT;",
+                initializeAdditiveSchema: true,
+              },
+        );
+        expect(begins).toEqual(["BEGIN IMMEDIATE"]);
+        expect(readValues(options.path)).toEqual([{ value: "committed" }]);
+      } finally {
+        exec.mockRestore();
+      }
+    },
+  );
   it("refuses invalid and restricted repair admission before acquiring schema maintenance", () => {
     const options = fixture();
     const repairContract = { ...contract, recoverTaskDeliveryOrphans: true as const };

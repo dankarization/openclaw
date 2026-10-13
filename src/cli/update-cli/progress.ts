@@ -23,6 +23,7 @@ import type { UpdateRunResult, UpdateStepProgress } from "../../infra/update-run
 import type { UpdateStepResult } from "../../infra/update-step-result.js";
 import { defaultRuntime } from "../../runtime.js";
 import type { UpdateCommandOptions } from "./shared.js";
+import { updateRunLedgerOptions } from "./update-command-ledger.js";
 
 // One command owns each observer. The final report flushes it before printing so
 // a fast final transition cannot appear after the report or leave a spinner active.
@@ -152,7 +153,7 @@ export function createUpdateProgress(
     try {
       const record = await getUpdateRunForProgressAsync(
         run.runId,
-        { env: run.env },
+        updateRunLedgerOptions(run),
         controller.signal,
       );
       // Activation can retire this reader while its native query is settling.

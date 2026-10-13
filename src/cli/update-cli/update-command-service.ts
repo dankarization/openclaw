@@ -27,6 +27,7 @@ import {
 } from "../daemon-cli/restart-health.js";
 import { tryWriteCompletionCache, type UpdateCommandOptions } from "./shared.js";
 import { createUpdateConfigSnapshot } from "./update-command-config-snapshot.js";
+import { updateRunLedgerOptions } from "./update-command-ledger.js";
 import type { PluginUpdateWarning } from "./update-command-plugins-internals.js";
 import { observeUpdateGatewayReadiness } from "./update-command-readiness.js";
 import { UpdateCommandRecoveryPendingError } from "./update-command-recovery-error.js";
@@ -210,7 +211,12 @@ export async function maybeRestartService(params: {
   const recordPhase = (phase: "restarting" | "verifying") => {
     assertCurrent();
     if (params.opts.run) {
-      recordUpdateRunPhase(params.opts.run.runId, phase, undefined, { env: params.opts.run.env });
+      recordUpdateRunPhase(
+        params.opts.run.runId,
+        phase,
+        undefined,
+        updateRunLedgerOptions(params.opts.run),
+      );
     }
   };
   let verificationObserved = false;

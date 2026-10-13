@@ -448,6 +448,7 @@ export async function continuePostCoreUpdateInFreshProcess(params: {
           const input: UpdatePostCoreInput = {
             executor,
             runId,
+            ledgerBusyTimeoutMs: params.opts.run?.ledgerBusyTimeoutMs,
             originalRecoveryCapture: params.opts.run?.originalRecoveryCapture,
             root: params.root,
             requester: authority.requester?.requester,
