@@ -5,7 +5,12 @@ import { expectDefined } from "@openclaw/normalization-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { withinTest } from "../../../../test/helpers/promise.js";
 import { createExecutionIdentityAdmissionToken } from "../../../audit/execution-identity-admission.js";
-import { clearConfigCache, clearRuntimeConfigSnapshot } from "../../../config/config.js";
+import {
+  captureRuntimeConfigAsyncReader,
+  clearConfigCache,
+  clearRuntimeConfigSnapshot,
+} from "../../../config/config.js";
+import { captureSessionTranscriptTargetBinding } from "../../../config/sessions/transcript-target-binding.js";
 import { readAgentRuntimeExecutionLineage } from "../../../gateway/agent-runtime-execution-lineage.js";
 import type { AgentRuntimeIdentity } from "../../../gateway/agent-runtime-identity-token.js";
 import { readInProcessAgentRuntimeIdentity } from "../../../gateway/in-process-agent-runtime-identity.js";
@@ -125,6 +130,7 @@ describe("spawnSubagentDirect in-process Gateway collector launch", () => {
       })}\n`,
     );
     clearConfigCache();
+    await captureRuntimeConfigAsyncReader()();
   });
 
   afterEach(async () => {
@@ -495,12 +501,12 @@ describe("spawnSubagentDirect in-process Gateway collector launch", () => {
         }
       },
       sessionKey: "agent:main:main",
-      sessionTarget: {
+      sessionTarget: captureSessionTranscriptTargetBinding({
         agentId: "main",
         sessionId: turnClaim.sessionId,
         sessionKey: "agent:main:main",
         storePath: path.join(stateDir, "agents", "main", "sessions", "sessions.json"),
-      },
+      }),
       turnClaim,
     };
     let validations = 0;
