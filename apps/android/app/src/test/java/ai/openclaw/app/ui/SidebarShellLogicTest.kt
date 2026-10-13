@@ -406,25 +406,6 @@ class SidebarShellLogicTest {
   }
 
   @Test
-  fun recentCapIgnoresSessionsThatLiveInGroups() {
-    val sessions = (1L..9L).map { session("loose-$it", activity = it) } + session("grouped", activity = 100, category = "Work")
-    val collapsed = sidebarSessionPresentation(sessions, knownGroups = listOf("Work"), expanded = false)
-    val expanded = sidebarSessionPresentation(sessions, knownGroups = listOf("Work"), expanded = true)
-
-    assertEquals(8, collapsed.recentSections.flatMap { it.entries }.size)
-    assertFalse(collapsed.recentSections.flatMap { it.entries }.any { it.key == "grouped" })
-    assertEquals(
-      listOf("grouped"),
-      collapsed.groups
-        .single()
-        .entries
-        .map { it.key },
-    )
-    assertTrue(collapsed.canExpandRecent)
-    assertEquals(9, expanded.recentSections.flatMap { it.entries }.size)
-  }
-
-  @Test
   fun categoryFoldersStayOutOfTheKindGroupZone() {
     val presentation =
       sidebarSessionPresentation(

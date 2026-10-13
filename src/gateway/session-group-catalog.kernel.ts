@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import { isDeepStrictEqual } from "node:util";
+import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
 import { executeSqliteQuerySync, getNodeSqliteKysely } from "../infra/kysely-sync.js";
 import { requestSqliteWorkerOperationAdmission } from "../infra/sqlite-worker-operation-admission.js";
 import { readConfigMachineStateRowInDatabase } from "../state/config-machine-state.js";
@@ -21,6 +22,35 @@ const SIDEBAR_ORDER = "sidebar.sectionOrder";
 const defaultsDatabases = new WeakSet<DatabaseSync>();
 const kyselyFor = (db: DatabaseSync) =>
   getNodeSqliteKysely<Pick<DB, "session_groups" | "config_machine_state">>(db);
+
+function normalizeSidebarSectionOrder(
+  sectionOrder: readonly string[],
+  groupNames: readonly string[],
+): string[] {
+  const groups = new Set(groupNames);
+  const normalized = new Set<string>();
+  for (const raw of sectionOrder) {
+    const sectionId = raw.trim();
+    let canonical: string | null = null;
+    if (sectionId === "ungrouped" || sectionId === "groups" || sectionId === "work") {
+      canonical = sectionId;
+    } else if (sectionId.startsWith("category:")) {
+      const name = normalizeOptionalString(sectionId.slice("category:".length));
+      if (name && groups.has(name)) {
+        canonical = `category:${name}`;
+      }
+    } else if (sectionId.startsWith("catalog:")) {
+      const catalogId = normalizeOptionalString(sectionId.slice("catalog:".length));
+      if (catalogId) {
+        canonical = `catalog:${catalogId}`;
+      }
+    }
+    if (canonical) {
+      normalized.add(canonical);
+    }
+  }
+  return [...normalized];
+}
 
 function hasDefaults(db: DatabaseSync): boolean {
   return (
@@ -176,10 +206,12 @@ export function mutateSessionGroupCatalogInDatabase(
         );
         const requestedOrder = input.sectionOrder;
         if (requestedOrder) {
+          const liveNames = input.appendOnly ? [...names, ...additions] : input.names;
           updateSidebarOrder(db, (current) =>
-            input.appendOnly
-              ? [...requestedOrder, ...(current ?? []).filter((id) => !requestedOrder.includes(id))]
-              : requestedOrder,
+            normalizeSidebarSectionOrder(
+              input.appendOnly ? [...requestedOrder, ...(current ?? [])] : requestedOrder,
+              liveNames,
+            ),
           );
         }
         changed = true;

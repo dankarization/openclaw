@@ -553,6 +553,7 @@ const SidebarSectionIdString = Type.String({ minLength: 1, maxLength: 512 });
 export const SessionsGroupsListResultSchema = closedObject({
   groups: Type.Array(SessionGroupSchema),
   sectionOrder: Type.Optional(Type.Array(SidebarSectionIdString)),
+  appendOnly: Type.Optional(Type.Boolean()),
 });
 
 export const SessionsGroupsDefaultsParamsSchema = closedObject({});

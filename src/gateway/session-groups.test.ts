@@ -133,7 +133,7 @@ describe("session groups catalog", () => {
     });
     await putSessionGroups({
       cfg,
-      names: ["First"],
+      names: [],
       sectionOrder: ["ungrouped", "category:First"],
       appendOnly: true,
       env,
