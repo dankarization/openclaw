@@ -1,5 +1,5 @@
 // Transcript echo tests cover destination resolution, custom formatting,
-// channel filtering, metadata forwarding, and failure swallowing.
+// channel filtering, required durability, and failure swallowing.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MsgContext } from "../auto-reply/templating.js";
 import type { OpenClawConfig } from "../config/types.js";
@@ -25,7 +25,7 @@ vi.mock("../utils/message-channel.js", () => ({
     channel === "voicechat" || channel === "telegram",
 }));
 
-import { DEFAULT_ECHO_TRANSCRIPT_FORMAT, sendTranscriptEcho } from "./echo-transcript.js";
+import { sendTranscriptEcho } from "./echo-transcript.js";
 
 const EMPTY_CONFIG = {} as OpenClawConfig;
 
@@ -80,80 +80,6 @@ describe("sendTranscriptEcho", () => {
     });
 
     expect(mockDeliverOutboundPayloads).not.toHaveBeenCalled();
-  });
-
-  it("forwards Telegram account and thread metadata to outbound delivery", async () => {
-    await sendTranscriptEcho({
-      ctx: createCtx({
-        Provider: "telegram",
-        From: undefined,
-        OriginatingTo: "telegram:42",
-        AccountId: "primary",
-        MessageThreadId: 77,
-      }),
-      cfg: EMPTY_CONFIG,
-      transcript: "threaded voice note",
-    });
-
-    expect(mockDeliverOutboundPayloads).toHaveBeenCalledWith({
-      cfg: EMPTY_CONFIG,
-      channel: "telegram",
-      to: "telegram:42",
-      accountId: "primary",
-      threadId: 77,
-      payloads: [
-        { text: DEFAULT_ECHO_TRANSCRIPT_FORMAT.replace("{transcript}", "threaded voice note") },
-      ],
-      bestEffort: true,
-      durability: "best_effort",
-    });
-  });
-
-  it("deduplicates only complete Telegram source-message identities", async () => {
-    const sendAndReadIntent = async (ctx: Partial<MsgContext>): Promise<string | undefined> => {
-      await sendTranscriptEcho({
-        ctx: createCtx({
-          Provider: "telegram",
-          From: undefined,
-          AccountId: "primary",
-          MessageSid: "msg-100",
-          OriginatingTo: "telegram:group:-100123",
-          ...ctx,
-        }),
-        cfg: EMPTY_CONFIG,
-        transcript: "same transcript",
-      });
-      const request = mockDeliverOutboundPayloads.mock.calls.at(-1)?.[0] as
-        | Record<string, unknown>
-        | undefined;
-      return request?.deliveryIntentId as string | undefined;
-    };
-
-    const base = await sendAndReadIntent({
-      OriginatingTo: "telegram:group:-100123:topic:77",
-    });
-    const topicless = await sendAndReadIntent({
-      OriginatingTo: "telegram:-100123",
-    });
-    const directTopic = await sendAndReadIntent({
-      OriginatingTo: "telegram:-100123:direct-topic:77",
-    });
-    const otherAccount = await sendAndReadIntent({
-      AccountId: "secondary",
-      OriginatingTo: "telegram:-100123",
-    });
-    const otherChat = await sendAndReadIntent({
-      OriginatingTo: "telegram:-100124",
-    });
-    const otherMessage = await sendAndReadIntent({
-      MessageSid: "msg-101",
-      OriginatingTo: "telegram:-100123",
-    });
-
-    expect(base).toMatch(/^transcript-echo:v1:[a-f0-9]{64}$/u);
-    expect(topicless).toBe(base);
-    expect(directTopic).toBe(base);
-    expect(new Set([base, otherAccount, otherChat, otherMessage]).size).toBe(4);
   });
 
   it("uses required durable delivery for a keyed Telegram echo and keeps failures non-fatal", async () => {

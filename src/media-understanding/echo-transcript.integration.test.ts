@@ -64,7 +64,7 @@ describe("Telegram transcript echo durable ownership", () => {
       return await finish.promise;
     });
 
-    const first = echo();
+    const first = echo({ OriginatingTo: "telegram:group:-100123:topic:7" });
     // If delivery fails before reaching the adapter, fail promptly instead of hanging the suite.
     await Promise.race([
       started.promise,
