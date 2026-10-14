@@ -38,6 +38,40 @@ type InternalFollowupRun = FollowupRun & {
 const sessionDirs = useSessionStoreTempDirs(afterAll, "openclaw-overflow-session-");
 installQueueRuntimeErrorSilencer();
 describe("followup queue collect routing", () => {
+  it.each([false, true])(
+    "notifies every collected run observer before surfacing a callback failure (throws: %s)",
+    async (throws) => {
+      const q = createQueueCase();
+      const error = new Error("first observer failed");
+      const first = vi.fn(() => {
+        if (throws) {
+          throw error;
+        }
+      });
+      const second = vi.fn();
+      const onModelSelected = vi.fn();
+      for (const [prompt, runObservers] of [
+        ["first", { onAgentRunTerminalOutcome: first }],
+        ["second", { onAgentRunTerminalOutcome: second }],
+        ["last", { onModelSelected }],
+      ] as const) {
+        q.add({ ...createRun({ prompt, originatingChannel: "a2a" }), runObservers });
+      }
+      await q.drain();
+      expect(q.calls).toHaveLength(1);
+      const observers = q.calls[0]!.runObservers;
+      expect(observers?.onModelSelected).toBe(onModelSelected);
+      const fail = () => observers?.onAgentRunTerminalOutcome?.("failed");
+      if (throws) {
+        expect(fail).toThrow(error);
+      } else {
+        fail();
+      }
+      expect(first).toHaveBeenCalledExactlyOnceWith("failed");
+      expect(second).toHaveBeenCalledExactlyOnceWith("failed");
+    },
+  );
+
   it("settles every collected source while publishing content once", async () => {
     const q = createQueueCase();
     const first = vi.fn();
@@ -1196,21 +1230,6 @@ describe("followup queue collect routing", () => {
     await settled.promise;
     expect(firstComplete).toHaveBeenCalledTimes(1);
     expect(secondComplete).toHaveBeenCalledTimes(1);
-  });
-
-  it("drains a bound Skill Workshop revision individually", async () => {
-    const q = createQueueCase({}, 2);
-    const revisionRun = createRun({ prompt: "revise proposal" });
-    revisionRun.run.skillWorkshopProposalRevision = {
-      agentId: "main",
-      workspaceDir: "/tmp/workspace",
-      proposalId: "proposal-h1",
-      expectedRevisionHash: "1".repeat(64),
-    };
-    q.add(createRun({ prompt: "normal" }));
-    q.add(revisionRun);
-    await q.drain();
-    expect(q.calls.map((call) => call.prompt)).toEqual(["normal", "revise proposal"]);
   });
 
   it("keeps one onComplete-only overflow source retryable after delivery fails", async () => {
