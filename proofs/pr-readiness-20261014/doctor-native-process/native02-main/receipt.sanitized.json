@@ -1,0 +1,61 @@
+{
+  "kind": "main",
+  "run": "native02",
+  "localHead": "c05c277d04326b53858f85e2ea83c16b4756e83b",
+  "tree": "bdea78650b3dc0031d0043716191f0c82521ef00",
+  "publishedHead": "c05c277d04326b53858f85e2ea83c16b4756e83b",
+  "startedAt": "2026-10-14T17:44:54.997Z",
+  "scope": "Real clock/process/custody/native systemd adapter proof on a task-owned HTTP fixture service. Not Doctor CLI, managed Gateway readiness or published-driver upgrade acceptance.",
+  "unitName": "openclaw-qa-doctor-20261014-native02-main",
+  "unitDefinitionSha256": "0167c980d7abfd88244007e3c162a5fef5e476e23cc84658b3ef41d4176dfe06",
+  "serviceFixture": "HTTP /ready child; not OpenClaw Gateway",
+  "stopFixture": "Actual systemd ExecStop child /usr/bin/sleep 6",
+  "cases": [
+    {
+      "name": "expiry-after-real-custody",
+      "deadlineAtMs": 1791999901422,
+      "attemptAtMs": 1791999900922,
+      "finishedAtMs": 1791999908747,
+      "custodyHolderPid": 123198,
+      "guardCalls": 0,
+      "guardAtMs": null,
+      "mutationCount": 1,
+      "observed": "baseline incorrectly stopped service after expiry",
+      "samePid": false,
+      "expectedError": null,
+      "passed": true
+    }
+  ],
+  "usesFakeClock": false,
+  "usesMockDiscovery": false,
+  "usesMockCommand": false,
+  "passed": true,
+  "cleanup": {
+    "ownUnitRemoved": true,
+    "ownServiceStopped": true,
+    "otherUnitsModified": false
+  },
+  "finishedAt": "2026-10-14T17:45:15.052Z",
+  "realChildEvents": [
+    {
+      "event": "ready",
+      "pid": 123180,
+      "at": 1791999895389
+    },
+    {
+      "event": "SIGTERM",
+      "pid": 123180,
+      "at": 1791999908484
+    },
+    {
+      "event": "ready",
+      "pid": 123248,
+      "at": 1791999908734
+    },
+    {
+      "event": "SIGTERM",
+      "pid": 123248,
+      "at": 1791999914779
+    }
+  ]
+}

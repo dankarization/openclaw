@@ -1,0 +1,103 @@
+{
+  "kind": "candidate",
+  "run": "native02",
+  "localHead": "6d41c150c2e6d1ebac13b9ec776f5b8a06b6d977",
+  "tree": "9e47e8c86e5b86acc02787fd3a3f485bc1ea411a",
+  "publishedHead": "6bb9c0749da3f2232f72da7837f314ef2d35bf70",
+  "startedAt": "2026-10-14T18:12:42.502Z",
+  "scope": "Real clock/process/custody/native systemd adapter proof on a task-owned HTTP fixture service. Not Doctor CLI, managed Gateway readiness or published-driver upgrade acceptance.",
+  "unitName": "openclaw-qa-doctor-20261014-native02-candidate",
+  "unitDefinitionSha256": "b790d7a3c0744e707fc235c3d3ed43d5fd74f4a8f0e94dedd46c23930c92df0f",
+  "serviceFixture": "HTTP /ready child; not OpenClaw Gateway",
+  "stopFixture": "Actual systemd ExecStop child /usr/bin/sleep 6",
+  "cases": [
+    {
+      "name": "expiry-after-real-custody",
+      "deadlineAtMs": 1792001568025,
+      "attemptAtMs": 1792001567525,
+      "finishedAtMs": 1792001569091,
+      "custodyHolderPid": 127017,
+      "guardCalls": 1,
+      "guardAtMs": 1792001569015,
+      "mutationCount": 0,
+      "observed": "expired before stop, original service PID remains",
+      "samePid": true,
+      "expectedError": "Error: Doctor service-inspection deadline has expired.",
+      "passed": true
+    },
+    {
+      "name": "admitted-effect-settlement",
+      "deadlineAtMs": 1792001572144,
+      "startedAtMs": 1792001569144,
+      "guardAtMs": 1792001569144,
+      "settledAtMs": 1792001575174,
+      "mutationAtMs": 1792001575174,
+      "mutationCount": 1,
+      "stopElapsedMs": 6030,
+      "serviceStopped": true,
+      "restoredRunning": true,
+      "restoredNewPid": true,
+      "fixtureReadyHttpStatus": 200,
+      "gatewayReadinessClaimed": false,
+      "passed": true
+    },
+    {
+      "name": "omitted-deadline",
+      "deadlineAtMs": null,
+      "startedAtMs": 1792001575467,
+      "guardAtMs": 1792001575467,
+      "settledAtMs": 1792001581496,
+      "mutationAtMs": 1792001581496,
+      "mutationCount": 1,
+      "stopElapsedMs": 6029,
+      "serviceStopped": true,
+      "restoredRunning": true,
+      "restoredNewPid": true,
+      "fixtureReadyHttpStatus": 200,
+      "gatewayReadinessClaimed": false,
+      "passed": true
+    }
+  ],
+  "usesFakeClock": false,
+  "usesMockDiscovery": false,
+  "usesMockCommand": false,
+  "passed": true,
+  "cleanup": {
+    "ownUnitRemoved": true,
+    "ownServiceStopped": true,
+    "otherUnitsModified": false
+  },
+  "finishedAt": "2026-10-14T18:13:08.037Z",
+  "realChildEvents": [
+    {
+      "event": "ready",
+      "pid": 126997,
+      "at": 1792001563052
+    },
+    {
+      "event": "SIGTERM",
+      "pid": 126997,
+      "at": 1792001575162
+    },
+    {
+      "event": "ready",
+      "pid": 127225,
+      "at": 1792001575384
+    },
+    {
+      "event": "SIGTERM",
+      "pid": 127225,
+      "at": 1792001581485
+    },
+    {
+      "event": "ready",
+      "pid": 127286,
+      "at": 1792001581719
+    },
+    {
+      "event": "SIGTERM",
+      "pid": 127286,
+      "at": 1792001587776
+    }
+  ]
+}
