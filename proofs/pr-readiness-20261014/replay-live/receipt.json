@@ -1,0 +1,282 @@
+{
+  "receipts": {
+    "replay-live-03-first": {
+      "head": "cd93172f2f897a6675bb58f44b0e400af3f0872b",
+      "echoSourceSha256": "d0fdedc43000b51219c1beee03a3344e4f88475b6cf81a26c80fa9290e037967",
+      "phase": "first",
+      "policy": "candidate",
+      "pid": 107919,
+      "sourceIdentitySha256": "ae9cca5a29de8679db26f8a6fe002640e01fba1ef50636d26965b249d537c432",
+      "sourceMessageSidSha256": "b17ef6d19c7a5b1ee83b907c595526dcb1eb06db8227d650d5dda0a9f4ce8cd9",
+      "updateSha256": "36e3549094ac6621f887545c3e6626813692beae1a9ba2850ce1253e015c3a3e",
+      "reachedBuildContext": true,
+      "echoCalls": 1,
+      "owners": [
+        {
+          "owner": "sendDurableMessageBatchCore",
+          "script": "src/channels/message/send.ts",
+          "calls": 1
+        },
+        {
+          "owner": "sendMessageTelegram",
+          "script": "extensions/telegram/src/send-message.ts",
+          "calls": 0
+        },
+        {
+          "owner": "sendTranscriptEcho",
+          "script": "src/media-understanding/echo-transcript.ts",
+          "calls": 1
+        },
+        {
+          "owner": "sendMessageTelegram",
+          "script": "extensions/telegram/src/send-message.ts",
+          "calls": 1
+        }
+      ],
+      "deliveryIntentId": "transcript-echo:v1:9a5d8f07ad8fd517d055c9b28916d6fc7b0089caaabf4c35d0d7aaef35bc9bf8",
+      "queueOwner": {
+        "namespace": "prepared",
+        "status": "completed"
+      },
+      "preAdoption": true,
+      "usesCapturedUpdate": true,
+      "usesNativePollingSpool": false,
+      "createdAt": "2026-10-14T15:39:05.127Z",
+      "stateDirectorySha256": "fd2029f16096296ef4073c7b0a774ae535d7cdfb6be27688cca16b024f9296be"
+    },
+    "replay-live-03-replay": {
+      "head": "cd93172f2f897a6675bb58f44b0e400af3f0872b",
+      "echoSourceSha256": "d0fdedc43000b51219c1beee03a3344e4f88475b6cf81a26c80fa9290e037967",
+      "phase": "replay",
+      "policy": "candidate",
+      "pid": 108091,
+      "sourceIdentitySha256": "ae9cca5a29de8679db26f8a6fe002640e01fba1ef50636d26965b249d537c432",
+      "sourceMessageSidSha256": "b17ef6d19c7a5b1ee83b907c595526dcb1eb06db8227d650d5dda0a9f4ce8cd9",
+      "updateSha256": "36e3549094ac6621f887545c3e6626813692beae1a9ba2850ce1253e015c3a3e",
+      "reachedBuildContext": true,
+      "echoCalls": 1,
+      "owners": [
+        {
+          "owner": "sendDurableMessageBatchCore",
+          "script": "src/channels/message/send.ts",
+          "calls": 1
+        },
+        {
+          "owner": "sendMessageTelegram",
+          "script": "extensions/telegram/src/send-message.ts",
+          "calls": 0
+        },
+        {
+          "owner": "sendTranscriptEcho",
+          "script": "src/media-understanding/echo-transcript.ts",
+          "calls": 1
+        }
+      ],
+      "deliveryIntentId": "transcript-echo:v1:9a5d8f07ad8fd517d055c9b28916d6fc7b0089caaabf4c35d0d7aaef35bc9bf8",
+      "queueOwner": {
+        "namespace": "prepared",
+        "status": "completed"
+      },
+      "preAdoption": true,
+      "usesCapturedUpdate": true,
+      "usesNativePollingSpool": false,
+      "createdAt": "2026-10-14T15:41:02.381Z",
+      "stateDirectorySha256": "fd2029f16096296ef4073c7b0a774ae535d7cdfb6be27688cca16b024f9296be"
+    },
+    "replay-live-03-fresh": {
+      "head": "cd93172f2f897a6675bb58f44b0e400af3f0872b",
+      "echoSourceSha256": "d0fdedc43000b51219c1beee03a3344e4f88475b6cf81a26c80fa9290e037967",
+      "phase": "fresh",
+      "policy": "candidate",
+      "pid": 109308,
+      "sourceIdentitySha256": "ebd3be5792c5410a5da0675b3ec638f96a566968c7a3aefd6f47843673802411",
+      "sourceMessageSidSha256": "9400f1b21cb527d7fa3d3eabba93557a18ebe7a2ca4e471cfe5e4c5b4ca7f767",
+      "updateSha256": "21f067f0a2cfdd7505af93110ffb4b809150f3ba1a5251858ad92a0f72414cee",
+      "reachedBuildContext": true,
+      "echoCalls": 1,
+      "owners": [
+        {
+          "owner": "sendDurableMessageBatchCore",
+          "script": "src/channels/message/send.ts",
+          "calls": 1
+        },
+        {
+          "owner": "sendMessageTelegram",
+          "script": "extensions/telegram/src/send-message.ts",
+          "calls": 0
+        },
+        {
+          "owner": "sendTranscriptEcho",
+          "script": "src/media-understanding/echo-transcript.ts",
+          "calls": 1
+        },
+        {
+          "owner": "sendMessageTelegram",
+          "script": "extensions/telegram/src/send-message.ts",
+          "calls": 1
+        }
+      ],
+      "deliveryIntentId": "transcript-echo:v1:b2109de54cba14b0a024f60e2824b74d60fd43a2b54d939eae58c0b8f650b45d",
+      "queueOwner": {
+        "namespace": "prepared",
+        "status": "completed"
+      },
+      "preAdoption": true,
+      "usesCapturedUpdate": true,
+      "usesNativePollingSpool": false,
+      "createdAt": "2026-10-14T15:46:49.124Z",
+      "stateDirectorySha256": "fd2029f16096296ef4073c7b0a774ae535d7cdfb6be27688cca16b024f9296be"
+    },
+    "replay-live-03-crash-control": {
+      "killedOwnedFirstPid": 107919,
+      "signal": "SIGKILL",
+      "afterCompletedQueueReceipt": true,
+      "afterIndependentOneEchoObservation": true,
+      "time": 1791992424.1107314,
+      "updateSha256": "36e3549094ac6621f887545c3e6626813692beae1a9ba2850ce1253e015c3a3e",
+      "statePreserved": true
+    },
+    "replay-live-03-replay-exit": {
+      "exitCode": 0,
+      "finishedAt": 1791992463.583596
+    },
+    "replay-live-03-fresh-exit": {
+      "exitCode": 0,
+      "finishedAt": 1791992810.365868
+    },
+    "baseline-live-02-first": {
+      "head": "c05c277d04326b53858f85e2ea83c16b4756e83b",
+      "echoSourceSha256": "23af31214e07024677092d98757e4346f54271f0ba2d8cdec08fb69f2cdd6a5e",
+      "phase": "first",
+      "policy": "baseline",
+      "pid": 109595,
+      "sourceIdentitySha256": "ae9cca5a29de8679db26f8a6fe002640e01fba1ef50636d26965b249d537c432",
+      "sourceMessageSidSha256": "b17ef6d19c7a5b1ee83b907c595526dcb1eb06db8227d650d5dda0a9f4ce8cd9",
+      "updateSha256": "36e3549094ac6621f887545c3e6626813692beae1a9ba2850ce1253e015c3a3e",
+      "reachedBuildContext": true,
+      "echoCalls": 1,
+      "owners": [
+        {
+          "owner": "sendDurableMessageBatchCore",
+          "script": "src/channels/message/send.ts",
+          "calls": 1
+        },
+        {
+          "owner": "sendMessageTelegram",
+          "script": "extensions/telegram/src/send-message.ts",
+          "calls": 0
+        },
+        {
+          "owner": "sendTranscriptEcho",
+          "script": "src/media-understanding/echo-transcript.ts",
+          "calls": 1
+        },
+        {
+          "owner": "sendMessageTelegram",
+          "script": "extensions/telegram/src/send-message.ts",
+          "calls": 1
+        }
+      ],
+      "deliveryIntentId": "transcript-echo:v1:9a5d8f07ad8fd517d055c9b28916d6fc7b0089caaabf4c35d0d7aaef35bc9bf8",
+      "queueOwner": null,
+      "preAdoption": true,
+      "usesCapturedUpdate": true,
+      "usesNativePollingSpool": false,
+      "createdAt": "2026-10-14T15:52:31.442Z",
+      "stateDirectorySha256": "9f3b85488be82617491eae8e08bdb1b47685fbe0ac3b0e105d07ad28cec9d050"
+    },
+    "baseline-live-02-replay": {
+      "head": "c05c277d04326b53858f85e2ea83c16b4756e83b",
+      "echoSourceSha256": "23af31214e07024677092d98757e4346f54271f0ba2d8cdec08fb69f2cdd6a5e",
+      "phase": "replay",
+      "policy": "baseline",
+      "pid": 109975,
+      "sourceIdentitySha256": "ae9cca5a29de8679db26f8a6fe002640e01fba1ef50636d26965b249d537c432",
+      "sourceMessageSidSha256": "b17ef6d19c7a5b1ee83b907c595526dcb1eb06db8227d650d5dda0a9f4ce8cd9",
+      "updateSha256": "36e3549094ac6621f887545c3e6626813692beae1a9ba2850ce1253e015c3a3e",
+      "reachedBuildContext": true,
+      "echoCalls": 1,
+      "owners": [
+        {
+          "owner": "sendDurableMessageBatchCore",
+          "script": "src/channels/message/send.ts",
+          "calls": 1
+        },
+        {
+          "owner": "sendMessageTelegram",
+          "script": "extensions/telegram/src/send-message.ts",
+          "calls": 0
+        },
+        {
+          "owner": "sendTranscriptEcho",
+          "script": "src/media-understanding/echo-transcript.ts",
+          "calls": 1
+        },
+        {
+          "owner": "sendMessageTelegram",
+          "script": "extensions/telegram/src/send-message.ts",
+          "calls": 1
+        }
+      ],
+      "deliveryIntentId": "transcript-echo:v1:9a5d8f07ad8fd517d055c9b28916d6fc7b0089caaabf4c35d0d7aaef35bc9bf8",
+      "queueOwner": null,
+      "preAdoption": true,
+      "usesCapturedUpdate": true,
+      "usesNativePollingSpool": false,
+      "createdAt": "2026-10-14T15:55:38.919Z",
+      "stateDirectorySha256": "9f3b85488be82617491eae8e08bdb1b47685fbe0ac3b0e105d07ad28cec9d050"
+    },
+    "baseline-live-02-crash-control": {
+      "killedOwnedFirstPid": 109595,
+      "signal": "SIGKILL",
+      "afterIndependentBaselineFirstEchoObservation": true,
+      "nativeSenderReached": true,
+      "time": 1791993297.3669317,
+      "updateSha256": "36e3549094ac6621f887545c3e6626813692beae1a9ba2850ce1253e015c3a3e",
+      "statePreserved": true
+    },
+    "baseline-live-02-replay-exit": {
+      "exitCode": 0,
+      "finishedAt": 1791993340.5608938
+    }
+  },
+  "logs": {
+    "replay-live-03-first": "(node:107919) [DEP_PLUGIN_SDK] DeprecationWarning: Plugin telegram: createApproverRestrictedNativeApprovalCapability is deprecated; use createApproverRestrictedNativeApprovalCapabilityAsync instead. The legacy contract remains supported during its deprecation period. It will be removed in a later release after stable deprecation.\n(Use `node --trace-deprecation ...` to show where the warning was created)\n",
+    "replay-live-03-replay": "(node:108091) [DEP_PLUGIN_SDK] DeprecationWarning: Plugin telegram: createApproverRestrictedNativeApprovalCapability is deprecated; use createApproverRestrictedNativeApprovalCapabilityAsync instead. The legacy contract remains supported during its deprecation period. It will be removed in a later release after stable deprecation.\n(Use `node --trace-deprecation ...` to show where the warning was created)\ntelegram debounce flush failed: Error: QA_PRE_ADOPTION_CUTOFF\n{\"phase\":\"replay\",\"reached\":true,\"sourceIdentitySha256\":\"ae9cca5a29de8679db26f8a6fe002640e01fba1ef50636d26965b249d537c432\",\"completed\":true}\n",
+    "replay-live-03-fresh": "(node:109308) [DEP_PLUGIN_SDK] DeprecationWarning: Plugin telegram: createApproverRestrictedNativeApprovalCapability is deprecated; use createApproverRestrictedNativeApprovalCapabilityAsync instead. The legacy contract remains supported during its deprecation period. It will be removed in a later release after stable deprecation.\n(Use `node --trace-deprecation ...` to show where the warning was created)\ntelegram debounce flush failed: Error: QA_PRE_ADOPTION_CUTOFF\n{\"phase\":\"fresh\",\"reached\":true,\"sourceIdentitySha256\":\"ebd3be5792c5410a5da0675b3ec638f96a566968c7a3aefd6f47843673802411\",\"completed\":true}\n",
+    "baseline-live-02-first": "(node:109595) [DEP_PLUGIN_SDK] DeprecationWarning: Plugin telegram: createApproverRestrictedNativeApprovalCapability is deprecated; use createApproverRestrictedNativeApprovalCapabilityAsync instead. The legacy contract remains supported during its deprecation period. It will be removed in a later release after stable deprecation.\n(Use `node --trace-deprecation ...` to show where the warning was created)\n",
+    "baseline-live-02-replay": "(node:109975) [DEP_PLUGIN_SDK] DeprecationWarning: Plugin telegram: createApproverRestrictedNativeApprovalCapability is deprecated; use createApproverRestrictedNativeApprovalCapabilityAsync instead. The legacy contract remains supported during its deprecation period. It will be removed in a later release after stable deprecation.\n(Use `node --trace-deprecation ...` to show where the warning was created)\ntelegram debounce flush failed: Error: QA_PRE_ADOPTION_CUTOFF\n{\"phase\":\"replay\",\"reached\":true,\"sourceIdentitySha256\":\"ae9cca5a29de8679db26f8a6fe002640e01fba1ef50636d26965b249d537c432\",\"completed\":true}\n"
+  },
+  "verifiedSyntheticSttCalls": [
+    {
+      "time": 1791992337.5544817,
+      "sha256": "459aa2b820b9b75c684bd5ac0205fc1d432586bb9600996570f996d5614f68a3",
+      "bytes": 209866
+    },
+    {
+      "time": 1791992459.6126819,
+      "sha256": "459aa2b820b9b75c684bd5ac0205fc1d432586bb9600996570f996d5614f68a3",
+      "bytes": 209866
+    },
+    {
+      "time": 1791992800.1936138,
+      "sha256": "459aa2b820b9b75c684bd5ac0205fc1d432586bb9600996570f996d5614f68a3",
+      "bytes": 209866
+    },
+    {
+      "time": 1791993141.5404994,
+      "sha256": "459aa2b820b9b75c684bd5ac0205fc1d432586bb9600996570f996d5614f68a3",
+      "bytes": 209866
+    },
+    {
+      "time": 1791993336.8847814,
+      "sha256": "459aa2b820b9b75c684bd5ac0205fc1d432586bb9600996570f996d5614f68a3",
+      "bytes": 209866
+    }
+  ],
+  "fixtureSha256": "eb958478aff50d0e03ea5b7e2283a9676808cd033311d6256559ad9ea56fd541",
+  "configSha256": "0d8738a3e2a9d2f634c8a2e6529c902470fbae35c940c16e4f927bf94147b338",
+  "fixtureMtime": 1791992302.1672206,
+  "configMtime": 1791991884.6589649
+}
+
