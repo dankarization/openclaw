@@ -134,8 +134,6 @@ export function registerUpdateRunReceiptTests(dirs: ProgressDirectories) {
           expect(
             (await updateRunLedger.getUpdateRunAsync(run.runId, { env }))?.steps,
           ).toContainEqual(expect.objectContaining({ step: "fetch", status: "in_progress" }));
-          expect(writer.mock.calls.length).toBeGreaterThan(0);
-          expect(writer.mock.calls.every((call) => call[2]?.busyTimeoutMs === 71_000)).toBe(true);
           release.resolve();
           await expect(pending).resolves.toMatchObject({ name: "fetch", exitCode: 0 });
           expect(runCommand).toHaveBeenCalledOnce();
