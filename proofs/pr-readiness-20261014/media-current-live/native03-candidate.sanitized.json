@@ -1,0 +1,84 @@
+{
+  "sourceHead": "b6e89d0ee6988565f74bc1b82778f8df65196f32",
+  "kind": "candidate",
+  "run": "native03",
+  "recordedAt": "2026-10-14T17:27:09.718Z",
+  "proofScope": "real captured Telegram document -> native createTelegramBot/handleUpdate intake/getFile -> native channel/account context -> native host staging -> native exec tool; no complete Gateway poller or model turn",
+  "transport": "Existing local Telegram Bot API through SSH loopback forward; only the own QA bot file mirrored into an explicitly trusted QA root",
+  "sourceIdentitySha256": "484c74cfb0c9f1272d2322dcc879c816f2d3d9d4d3d9fd77375df0737733f20d",
+  "updateSha256": "06e68d86aaa43039b0e26f60577345233e8d185a7845234d63a111f0bdfadc73",
+  "expectedBytes": 54525952,
+  "expectedSha": "2fade4fa841545c954a8b55e00989b7aa559ece325011a080dae3d4e95fef124",
+  "cases": [
+    {
+      "name": "candidate-green",
+      "channelMiB": 128,
+      "accountMiB": 64,
+      "stagedCount": 1,
+      "expectedAccepted": true,
+      "stagedBytes": 54525952,
+      "nativeExecChecksum": "2fade4fa841545c954a8b55e00989b7aa559ece325011a080dae3d4e95fef124",
+      "nativeExecStatus": "completed",
+      "nativeTool": "createExecTool",
+      "passed": true
+    },
+    {
+      "name": "account-lower",
+      "channelMiB": 128,
+      "accountMiB": 51,
+      "stagedCount": 0,
+      "expectedAccepted": false,
+      "rejectedLimitBytes": 53477376,
+      "passed": true
+    },
+    {
+      "name": "account-higher",
+      "channelMiB": 51,
+      "accountMiB": 64,
+      "stagedCount": 1,
+      "expectedAccepted": true,
+      "stagedBytes": 54525952,
+      "nativeExecChecksum": "2fade4fa841545c954a8b55e00989b7aa559ece325011a080dae3d4e95fef124",
+      "nativeExecStatus": "completed",
+      "nativeTool": "createExecTool",
+      "passed": true
+    },
+    {
+      "name": "existing-main-managed-reference",
+      "channelMiB": 128,
+      "accountMiB": 64,
+      "stagedCount": 1,
+      "expectedAccepted": true,
+      "stagedBytes": 54525952,
+      "nativeExecChecksum": "2fade4fa841545c954a8b55e00989b7aa559ece325011a080dae3d4e95fef124",
+      "nativeExecStatus": "completed",
+      "nativeTool": "createExecTool",
+      "passed": true
+    }
+  ],
+  "realGetFileCalls": 1,
+  "usesPolling": false,
+  "usesMockGetFile": false,
+  "usesModel": false,
+  "actualGetFilePathSha256": "0e93b5cbef74b63ee46259ab44189a24e268ffb330f5bcd7362c108866891e0e",
+  "actualIntake": {
+    "bytes": 54525952,
+    "sha256": "2fade4fa841545c954a8b55e00989b7aa559ece325011a080dae3d4e95fef124",
+    "nativeKind": null
+  },
+  "identity": {
+    "channel": "telegram",
+    "accountId": "default",
+    "sourceMessageSidSha256": "624b60c58c9d8bfb6ff1886c2fd605d2adeb6ea4da576068201b6c6958ce93f4",
+    "sessionKeySha256": "2b0cdff55cec37a2b5d638dc9899465d2b69f0e1770398b9a08cd56cffc92ef8",
+    "source": "Actual createTelegramBot/handleUpdate -> native buildChannelInboundEventContext; not manually assigned"
+  },
+  "compatibility": {
+    "sourceHead": "c05c277d04326b53858f85e2ea83c16b4756e83b",
+    "managedUriUnchanged": true,
+    "bytesUnchanged": true,
+    "setup": "QA profile data clone retaining the exact existing native managed URI and bytes; no media/schema transformation"
+  },
+  "completedAt": "2026-10-14T17:28:43.986Z",
+  "passed": true
+}
