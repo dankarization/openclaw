@@ -1,0 +1,192 @@
+{
+  "executedCandidate": "e7ad0a972bbab870a047c00c4e9d1675cca5c8fe",
+  "currentTestOnlyHead": "fe684426bd861c80bdce4d0c5df35a6f8de405ed",
+  "runtimeBuildDependencyEquivalent": true,
+  "cells": [
+    {
+      "scenario": "native-writer-live-20261015",
+      "classification": "Actual fresh Doctor finalization timeout/cancellation/restoration; writer admission not established",
+      "nativeTimeoutSeconds": 45,
+      "declaredAgentDatabaseLockMs": 60000,
+      "nativeCommandClass": "unchanged installed candidate CLI --profile QA update repair --yes --json --timeout 45",
+      "operatorSignalOrForcedSafetyKill": false,
+      "outerSafetyTimeout": false,
+      "nativeExitCode": 1,
+      "nativeResultStatus": "failed",
+      "nativeReason": null,
+      "nativePhaseTimings": [
+        {
+          "phase": "preflight",
+          "startedOffsetMs": 2,
+          "durationMs": 1487,
+          "outcome": "completed"
+        },
+        {
+          "phase": "targetConfigValidation",
+          "startedOffsetMs": 1538,
+          "durationMs": 2680,
+          "outcome": "completed"
+        },
+        {
+          "phase": "configSnapshot",
+          "startedOffsetMs": 4268,
+          "durationMs": 61,
+          "outcome": "completed"
+        },
+        {
+          "phase": "doctor",
+          "startedOffsetMs": 4375,
+          "durationMs": 45594,
+          "outcome": "failed"
+        }
+      ],
+      "nativeTerminalRun": {
+        "runId": "e73aadde-fc22-4bdd-b3b6-3953efb69960",
+        "phase": "finished",
+        "status": "failed",
+        "reason": "finalization-timeout",
+        "finishedAtMs": 1792015478750
+      },
+      "holder": {
+        "acquiredAtMs": 1792015336300,
+        "releasedAtMs": 1792015396303,
+        "payloadWrites": 0,
+        "exitCode": 0
+      },
+      "commandStartedAtMs": 1792015336362,
+      "commandFinishedAtMs": 1792015479038,
+      "beforeReadiness": {
+        "healthz": 200,
+        "readyz": 200
+      },
+      "afterReadiness": {
+        "healthz": 200,
+        "readyz": 200
+      },
+      "beforeGatewayPid": "170825",
+      "afterGatewayPid": "173189",
+      "originalSessionIdentityLabelMediumPreserved": true,
+      "nativeProcessGroupAfterSettlement": [],
+      "traceQualification": {
+        "agentDatabasePathLines": 10,
+        "agentWriteLockAttempts": 0,
+        "agentPwriteCalls": 0,
+        "agentReadLockCalls": 6
+      },
+      "mutableWriterCancellationProved": false,
+      "privateEvidenceSha256": {
+        "repair.stdout.private.log": "e8e88aa090cc10f0cae20d07244db0fa1855861eafa1daf01cd29ca5e537f40b",
+        "repair.stderr.private.log": "a9231b00b29f4556f35ee258a35c22ac9940b6aa8d081e4f3cf40f602bdea3ec",
+        "native-status.private.log": "8b8b4ce2dc50de4552c8994435ec14022b7fe13804f3ce282d6b6243d9f28570",
+        "original-session.private.log": "2a01f689b916d6951754455bd5c121ff4c8f631ebbc1a6a9e4971b530d56479a",
+        "native-syscalls.private.log": "8d60ee5ef5b463325fdfb23748ec9fb0421fb3bf653433b6932d9edb92edbebd"
+      },
+      "nativeCancellationFacts": {
+        "finalizationTimeout45000ms": true,
+        "cancellationSettledBeforeRecovery": true,
+        "nativeGatewayRestoredAndVerified": true
+      }
+    },
+    {
+      "scenario": "native-writer-admitted-20261015",
+      "classification": "Longer declared-budget native repair control; completed successfully, not writer cancellation proof",
+      "nativeTimeoutSeconds": 90,
+      "declaredAgentDatabaseLockMs": 120000,
+      "nativeCommandClass": "unchanged installed candidate CLI --profile QA update repair --yes --json --timeout 90",
+      "operatorSignalOrForcedSafetyKill": false,
+      "outerSafetyTimeout": false,
+      "nativeExitCode": 0,
+      "nativeResultStatus": "warning",
+      "nativeReason": null,
+      "nativePhaseTimings": [
+        {
+          "phase": "preflight",
+          "startedOffsetMs": 2,
+          "durationMs": 1556,
+          "outcome": "completed"
+        },
+        {
+          "phase": "targetConfigValidation",
+          "startedOffsetMs": 1607,
+          "durationMs": 2800,
+          "outcome": "completed"
+        },
+        {
+          "phase": "configSnapshot",
+          "startedOffsetMs": 4463,
+          "durationMs": 59,
+          "outcome": "completed"
+        },
+        {
+          "phase": "doctor",
+          "startedOffsetMs": 4604,
+          "durationMs": 69932,
+          "outcome": "completed"
+        },
+        {
+          "phase": "plugins",
+          "startedOffsetMs": 74595,
+          "durationMs": 3257,
+          "outcome": "completed"
+        },
+        {
+          "phase": "targetConfigConvergence",
+          "startedOffsetMs": 77884,
+          "durationMs": 112704,
+          "outcome": "warning"
+        },
+        {
+          "phase": "completionCache",
+          "startedOffsetMs": 190634,
+          "durationMs": 4868,
+          "outcome": "completed"
+        }
+      ],
+      "nativeTerminalRun": {
+        "runId": "61df8998-7af5-4249-9918-97cb31a326f3",
+        "phase": "finished",
+        "status": "succeeded",
+        "reason": null,
+        "finishedAtMs": 1792015831748
+      },
+      "holder": {
+        "acquiredAtMs": 1792015631989,
+        "releasedAtMs": 1792015751989,
+        "payloadWrites": 0,
+        "exitCode": 0
+      },
+      "commandStartedAtMs": 1792015632057,
+      "commandFinishedAtMs": 1792015832027,
+      "beforeReadiness": {
+        "healthz": 200,
+        "readyz": 200
+      },
+      "afterReadiness": {
+        "healthz": 200,
+        "readyz": 200
+      },
+      "beforeGatewayPid": "173189",
+      "afterGatewayPid": "176557",
+      "originalSessionIdentityLabelMediumPreserved": true,
+      "nativeProcessGroupAfterSettlement": [],
+      "traceQualification": {
+        "agentDatabasePathLines": 481,
+        "agentWriteLockAttempts": 0,
+        "agentPwriteCalls": 0,
+        "agentReadLockCalls": 262
+      },
+      "mutableWriterCancellationProved": false,
+      "privateEvidenceSha256": {
+        "repair.stdout.private.log": "2257bd03571a8068e163e839ece028824f4b1d9ccc0c7f6269fbeaaefb004e14",
+        "repair.stderr.private.log": "eb5ff8c0e028f0e5d58fff4a3f0401b757dd01a577938755db494991f430488b",
+        "native-status.private.log": "8de8ca4d3f4e88ee32a1e29654de157d2a69560f75bd1ff1942a16a283ccff8a",
+        "original-session.private.log": "97017172450d9d56b5ad68aa9edd363813fe1542a3d3089ebd3e52132d882fc3",
+        "native-syscalls.private.log": "2572c5ca835e17bdc8c51f7dd28d1649fd2e530747bfc252cb87fc8921a519fd"
+      }
+    }
+  ],
+  "syntheticInputDisclosure": "Two retired cache rows and one unrelated preservation control were created through the native normal agent database lease and guarded transaction, while the QA Gateway was inactive. The first source-helper preparations refused before payload insertion due to profile/bootstrap/lease-choice errors; they are excluded. The separate normal native reader later observed only the unrelated control. This does not causally prove the Doctor cancellation overlapped a writer, and the second control is not described as having the original two rows present.",
+  "observationLimit": "Neither strace observation recorded an attributable agent DB write-lock attempt or payload write. A held SQLite lock, dispatched worker, successful cleanup or disappeared retired rows is insufficient to prove admission/cancellation of that same mutable writer. Exact native custody acceptance is SharedArrayBuffer state and no public stable external admission barrier was used.",
+  "conclusion": "Actual packaged CLI Doctor cancellation, joined cleanup, terminal durable failure and managed Gateway restoration/readiness are proved. A separate longer-budget native repair completed successfully. Mutable-writer cancellation remains INCONCLUSIVE; no sufficient-writer-proof claim is made.",
+  "productionChanged": false
+}
