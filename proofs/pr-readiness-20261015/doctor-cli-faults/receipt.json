@@ -1,0 +1,331 @@
+{
+  "candidateCommit": "e7ad0a972bbab870a047c00c4e9d1675cca5c8fe",
+  "currentTestOnlyHead": "fe684426bd861c80bdce4d0c5df35a6f8de405ed",
+  "runtimeBuildDependencyEquivalent": true,
+  "scope": "Real installed CLI / Doctor finalization / owned systemd Gateway. These are fault outcomes, not successful repair claims.",
+  "cases": [
+    {
+      "scenario": "custody-expiry-20261015",
+      "classification": "Native custody exclusion / maintenance admission refusal; not itself proof of the explicit deadline check",
+      "commandClass": "unchanged installed candidate CLI --profile QA update repair --yes --json --timeout 15",
+      "nativeTimeoutSeconds": 15,
+      "exitCode": 2,
+      "nativeStatus": "warning",
+      "nativePhaseTimings": [
+        {
+          "phase": "preflight",
+          "startedOffsetMs": 2,
+          "durationMs": 1038,
+          "outcome": "completed"
+        },
+        {
+          "phase": "targetConfigValidation",
+          "startedOffsetMs": 1068,
+          "durationMs": 1937,
+          "outcome": "completed"
+        },
+        {
+          "phase": "configSnapshot",
+          "startedOffsetMs": 3032,
+          "durationMs": 27,
+          "outcome": "completed"
+        },
+        {
+          "phase": "doctor",
+          "startedOffsetMs": 3083,
+          "durationMs": 31103,
+          "outcome": "deferred"
+        }
+      ],
+      "doctorPhase": {
+        "startedAtMs": 1792014457663,
+        "configuredAbsoluteDeadlineAtMs": 1792014472663,
+        "endedAtMs": 1792014488767,
+        "events": [
+          {
+            "step": "finalize:doctor",
+            "status": "in_progress",
+            "startedAtMs": 1792014457663
+          },
+          {
+            "step": "finalize:doctor",
+            "status": "skipped",
+            "endedAtMs": 1792014488767
+          }
+        ],
+        "clockNote": "Deadline derived from native phase start plus declared timeout; native lifecycle creates deadline before custody. Poll timestamps have <=~0.5s observation granularity."
+      },
+      "beforeService": {
+        "MainPID": "165875",
+        "ActiveState": "active",
+        "SubState": "running"
+      },
+      "afterService": {
+        "MainPID": "165875",
+        "ActiveState": "active",
+        "SubState": "running"
+      },
+      "beforeReadiness": {
+        "healthz": 200,
+        "readyz": 200
+      },
+      "afterReadiness": {
+        "healthz": 200,
+        "readyz": 200
+      },
+      "sameManagedGatewayPid": true,
+      "originalSessionIdentityLabelMediumPreserved": true,
+      "nativeTerminalRun": {
+        "runId": "b6bd1953-3f5a-4db7-8a5c-40d10867d465",
+        "phase": "finished",
+        "status": "skipped",
+        "finishedAtMs": 1792014488875
+      },
+      "unjoinedNativeProcessGroup": [],
+      "outerSafetyTimeout": false,
+      "forcedSafetyKill": false,
+      "privateEvidenceSha256": {
+        "repair.stdout.private.log": "c6b1e307b0603baae2c1ecc520ba56c9fb6a99c89c77149f98f4ddbc86dc6dd9",
+        "repair.stderr.private.log": "bc2c7f1cb276ffbcc7c7a457ab9e1d7944c1f34e6d79958578c9a8e1715d9314",
+        "native-status.private.log": "c8f53ab1563f1f0d50ba62ff12d81e0043daa4eb7bfa6fd361e449426423bad0",
+        "original-session.private.log": "185f4ff085604bd7fd9939befd042f903532605a13edbb536954c2088a163e55"
+      },
+      "declaredInput": {
+        "kind": "unchanged native service operation lock owner held by separate QA process",
+        "holdMs": 60000,
+        "acquiredAtMs": 1792014451396,
+        "releasedAtMs": 1792014511437,
+        "holderExitCode": 0
+      },
+      "ownUnitJournalRows": 0
+    },
+    {
+      "scenario": "native-stop-settlement-20261015",
+      "classification": "Actual explicit Doctor deadline rejection before native stop",
+      "commandClass": "unchanged installed candidate CLI --profile QA update repair --yes --json --timeout 10",
+      "nativeTimeoutSeconds": 10,
+      "exitCode": 2,
+      "nativeStatus": "warning",
+      "nativePhaseTimings": [
+        {
+          "phase": "preflight",
+          "startedOffsetMs": 2,
+          "durationMs": 1062,
+          "outcome": "completed"
+        },
+        {
+          "phase": "targetConfigValidation",
+          "startedOffsetMs": 1092,
+          "durationMs": 1892,
+          "outcome": "completed"
+        },
+        {
+          "phase": "configSnapshot",
+          "startedOffsetMs": 3009,
+          "durationMs": 26,
+          "outcome": "completed"
+        },
+        {
+          "phase": "doctor",
+          "startedOffsetMs": 3062,
+          "durationMs": 21252,
+          "outcome": "deferred"
+        }
+      ],
+      "doctorPhase": {
+        "startedAtMs": 1792014699762,
+        "configuredAbsoluteDeadlineAtMs": 1792014709762,
+        "endedAtMs": 1792014721014,
+        "events": [
+          {
+            "step": "finalize:doctor",
+            "status": "in_progress",
+            "startedAtMs": 1792014699762
+          },
+          {
+            "step": "finalize:doctor",
+            "status": "skipped",
+            "endedAtMs": 1792014721014
+          }
+        ],
+        "clockNote": "Deadline derived from native phase start plus declared timeout; native lifecycle creates deadline before custody. Poll timestamps have <=~0.5s observation granularity."
+      },
+      "beforeService": {
+        "MainPID": "165875",
+        "ActiveState": "active",
+        "SubState": "running"
+      },
+      "afterService": {
+        "MainPID": "165875",
+        "ActiveState": "active",
+        "SubState": "running"
+      },
+      "beforeReadiness": {
+        "healthz": 200,
+        "readyz": 200
+      },
+      "afterReadiness": {
+        "healthz": 200,
+        "readyz": 200
+      },
+      "sameManagedGatewayPid": true,
+      "originalSessionIdentityLabelMediumPreserved": true,
+      "nativeTerminalRun": {
+        "runId": "fce65ae9-12f1-492c-94db-b6e61f2d64ed",
+        "phase": "finished",
+        "status": "skipped",
+        "finishedAtMs": 1792014721102
+      },
+      "unjoinedNativeProcessGroup": [],
+      "outerSafetyTimeout": false,
+      "forcedSafetyKill": false,
+      "privateEvidenceSha256": {
+        "repair.stdout.private.log": "876be93ca979a0bce8b52b36de2b1557445096c225552dd1bb4313ec6b92f1e2",
+        "repair.stderr.private.log": "b96cbe9c32a5b189f997d5520cbe3c4d684c649b7381212d6957a255c0fee203",
+        "native-status.private.log": "2d2af7f26c18a8df51437124a19660b60a113b9594bd4bb3feddd3134d8b95bc",
+        "original-session.private.log": "583c5195bc4dc4afc8770f8d91450d83b632c9e55d6ab4989f5b4757164fc858"
+      },
+      "declaredInput": {
+        "kind": "own QA systemd drop-in",
+        "content": "[Service]\nExecStop=\nExecStop=/usr/bin/sleep 20\nTimeoutStopSec=45\n",
+        "sha256": "d9cf92563f945cc7cd62b3855ec1ea5f463e469ca41a7933831b9b25f983b5bf",
+        "removed": true
+      },
+      "manualServiceStartUsed": false,
+      "serviceTransitions": [
+        {
+          "atMs": 1792014693711,
+          "MainPID": "165875",
+          "ActiveState": "active",
+          "SubState": "running"
+        }
+      ]
+    },
+    {
+      "scenario": "native-admitted-stop-20261015",
+      "classification": "Actual native stop admitted before deadline, joined after deadline, native Gateway restoration",
+      "commandClass": "unchanged installed candidate CLI --profile QA update repair --yes --json --timeout 45",
+      "nativeTimeoutSeconds": 45,
+      "exitCode": 2,
+      "nativeStatus": "warning",
+      "nativePhaseTimings": [
+        {
+          "phase": "preflight",
+          "startedOffsetMs": 2,
+          "durationMs": 1068,
+          "outcome": "completed"
+        },
+        {
+          "phase": "targetConfigValidation",
+          "startedOffsetMs": 1100,
+          "durationMs": 1942,
+          "outcome": "completed"
+        },
+        {
+          "phase": "configSnapshot",
+          "startedOffsetMs": 3068,
+          "durationMs": 27,
+          "outcome": "completed"
+        },
+        {
+          "phase": "doctor",
+          "startedOffsetMs": 3120,
+          "durationMs": 98651,
+          "outcome": "deferred"
+        }
+      ],
+      "doctorPhase": {
+        "startedAtMs": 1792014783169,
+        "configuredAbsoluteDeadlineAtMs": 1792014828169,
+        "endedAtMs": 1792014881820,
+        "events": [
+          {
+            "step": "finalize:doctor",
+            "status": "in_progress",
+            "startedAtMs": 1792014783169
+          },
+          {
+            "step": "finalize:doctor",
+            "status": "skipped",
+            "endedAtMs": 1792014881820
+          }
+        ],
+        "clockNote": "Deadline derived from native phase start plus declared timeout; native lifecycle creates deadline before custody. Poll timestamps have <=~0.5s observation granularity."
+      },
+      "beforeService": {
+        "MainPID": "165875",
+        "ActiveState": "active",
+        "SubState": "running"
+      },
+      "afterService": {
+        "MainPID": "169747",
+        "ActiveState": "active",
+        "SubState": "running"
+      },
+      "beforeReadiness": {
+        "healthz": 200,
+        "readyz": 200
+      },
+      "afterReadiness": {
+        "healthz": 200,
+        "readyz": 200
+      },
+      "sameManagedGatewayPid": false,
+      "originalSessionIdentityLabelMediumPreserved": true,
+      "nativeTerminalRun": {
+        "runId": "8b0ff9b4-c577-4f91-8f2e-c78225c3a87a",
+        "phase": "finished",
+        "status": "skipped",
+        "finishedAtMs": 1792014881909
+      },
+      "unjoinedNativeProcessGroup": [],
+      "outerSafetyTimeout": false,
+      "forcedSafetyKill": false,
+      "privateEvidenceSha256": {
+        "repair.stdout.private.log": "165a456c7bc86a125616489bdfcbc55268fba851d20925241d4c6a6050672aa0",
+        "repair.stderr.private.log": "e9ac637702b416b530afc26537fe440ec4fdfb80a8324dee100e2c7eb803c015",
+        "native-status.private.log": "0205acbe1d94a4b9dc6ed6d35d2016a75e6ff14222ed07d248e4f8f407498790",
+        "original-session.private.log": "0f762b209dd1778deb4d6be4df514593398c301ff4f793c86a9fbe9a73ba667a"
+      },
+      "declaredInput": {
+        "kind": "own QA systemd drop-in",
+        "content": "[Service]\nExecStop=\nExecStop=/usr/bin/sleep 60\nTimeoutStopSec=90\n",
+        "sha256": "9fa07f68b8f6e8f55e59d7dce2eb1adfe2ee392b566421a84a283f1af611d264",
+        "removed": true
+      },
+      "manualServiceStartUsed": false,
+      "serviceTransitions": [
+        {
+          "atMs": 1792014777075,
+          "MainPID": "165875",
+          "ActiveState": "active",
+          "SubState": "running"
+        },
+        {
+          "atMs": 1792014805223,
+          "MainPID": "165875",
+          "ActiveState": "deactivating",
+          "SubState": "stop"
+        },
+        {
+          "atMs": 1792014865189,
+          "MainPID": "0",
+          "ActiveState": "inactive",
+          "SubState": "dead"
+        },
+        {
+          "atMs": 1792014868770,
+          "MainPID": "169747",
+          "ActiveState": "active",
+          "SubState": "running"
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "All three CLI results exit2 / deferred Doctor and native terminal finished/skipped; none is relabelled succeeded.",
+    "The service-control cases do not prove SQLite writer admission/cancellation.",
+    "Native policy refresh disclosed a group-writable QA service definition directory and retained operator overrides; no permissions or guard were bypassed.",
+    "The ten-second case was rejected before stop. A separate declared 45s/60s case then reached actual stop; no deadlines in product code were changed."
+  ]
+}
