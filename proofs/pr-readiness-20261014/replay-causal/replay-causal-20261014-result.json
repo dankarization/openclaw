@@ -1,0 +1,31 @@
+{
+  "baseCommit": "04f2e80e9a172c4decdc4c2c37fb261c78ea53fa",
+  "head": "45bcbf83237d358441fe700a02daed239015b641",
+  "candidateTree": "3dae2559923d401b444e7b6c9b9bf250a0318ab6",
+  "args": [
+    "node",
+    "scripts/test-projects.mts",
+    "src/media-understanding/echo-transcript.integration.test.ts",
+    "--",
+    "--maxWorkers=1"
+  ],
+  "testSha256": "71d5e3dbe10bd9fd3dbfc1e3f9183fd78f30bd0b7b78888e69ce7d94b05ec2ee",
+  "scope": "real SQLite with fake Telegram delivery adapter; not real Telegram transport",
+  "results": [
+    {
+      "phase": "base",
+      "tree": "77f4458629119bb37b8c6f6d89b5dc07c93db869",
+      "exitCode": 1,
+      "wallSeconds": 161.1,
+      "log": "replay-causal-base-20261014.log"
+    },
+    {
+      "phase": "head",
+      "tree": "3dae2559923d401b444e7b6c9b9bf250a0318ab6",
+      "exitCode": 0,
+      "wallSeconds": 155.7,
+      "log": "replay-causal-head-20261014.log"
+    }
+  ],
+  "restoredTree": "3dae2559923d401b444e7b6c9b9bf250a0318ab6"
+}
