@@ -1118,6 +1118,18 @@ class ChatController internal constructor(
     }
   }
 
+  /** Uses the same queue as identity retirement so an old response cannot recreate purged metadata. */
+  internal suspend fun persistSessionGroupCatalog(
+    lease: GatewaySession.RequestLease,
+    gatewayId: String,
+    save: suspend () -> Unit,
+  ): Boolean =
+    cacheMutationMutex.withLock {
+      if (!lease.isCurrent() || currentCacheScope()?.gatewayId != gatewayId) return@withLock false
+      save()
+      lease.isCurrent() && currentCacheScope()?.gatewayId == gatewayId
+    }
+
   /** Hydrates the live selection; a remounted screen must not reselect its captured previous chat. */
   fun loadCurrent(mainSessionKey: String) {
     synchronized(gatewayScopeApplyLock) {

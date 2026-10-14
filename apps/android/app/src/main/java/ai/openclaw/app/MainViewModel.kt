@@ -72,7 +72,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -615,13 +614,18 @@ class MainViewModel internal constructor(
   val connectedGatewayStableIds: StateFlow<List<String>> = prefs.gatewayRegistry.connectedStableIds
 
   init {
-    viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
-      sessionGroupCatalogState.value = displayedSessionGroups(activeGatewayStableId.value)
-      sessionSectionOrderState.value = displayedSessionSectionOrder(activeGatewayStableId.value)
-      activeGatewayStableId.drop(1).collect { gatewayId ->
-        pendingTalkSetupMessageMutable.value = null
-        sessionGroupCatalogState.value = displayedSessionGroups(gatewayId)
-        sessionSectionOrderState.value = displayedSessionSectionOrder(gatewayId)
+    viewModelScope.launch {
+      runtimeRef.collectLatest { runtime ->
+        activeGatewayStableId.collectLatest gateway@{ gatewayId ->
+          pendingTalkSetupMessageMutable.value = null
+          sessionGroupCatalogState.value = prefs.legacySessionCustomGroups()
+          sessionSectionOrderState.value = emptyList()
+          if (runtime == null || gatewayId == null) return@gateway
+          runtime.observeSessionGroupCatalog(gatewayId).collect { catalog ->
+            sessionGroupCatalogState.value = unionSessionGroupNames(catalog?.names.orEmpty(), prefs.legacySessionCustomGroups())
+            sessionSectionOrderState.value = catalog?.sectionOrder.orEmpty()
+          }
+        }
       }
     }
     viewModelScope.launch {
@@ -1791,35 +1795,26 @@ class MainViewModel internal constructor(
     )
   }
 
-  private fun displayedSessionGroups(gatewayId: String?): List<String> {
-    val id = gatewayId?.trim()?.takeIf { it.isNotEmpty() } ?: return emptyList()
-    return unionSessionGroupNames(prefs.storedSessionGroupCatalog(id).orEmpty(), prefs.legacySessionCustomGroups())
-  }
-
-  private fun displayedSessionSectionOrder(gatewayId: String?): List<String> {
-    val id = gatewayId?.trim()?.takeIf { it.isNotEmpty() } ?: return emptyList()
-    return prefs.storedSessionGroupSectionOrder(id)
-  }
-
   private fun ownsSessionGroupLease(
     lease: GatewaySession.RequestLease,
     gatewayId: String,
   ): Boolean = lease.isCurrent() && activeGatewayStableId.value == gatewayId
 
-  private fun publishSessionGroupCatalog(
+  private suspend fun publishSessionGroupCatalog(
     lease: GatewaySession.RequestLease,
     gatewayId: String,
     names: List<String>,
     sectionOrder: List<String>,
   ) {
+    val runtime = runtimeRef.value ?: return
+    if (activeGatewayStableId.value != gatewayId) return
+    if (!runtime.saveSessionGroupCatalog(lease, gatewayId, names, sectionOrder)) return
     lease.commitIfCurrent {
       if (activeGatewayStableId.value != gatewayId) return@commitIfCurrent
-      prefs.setStoredSessionGroupCatalog(gatewayId, names)
-      prefs.setStoredSessionGroupSectionOrder(gatewayId, sectionOrder)
       val migration = decideSessionGroupMigration(names, prefs.legacySessionCustomGroups(), canPut = false)
       if (migration.markMigrated) prefs.markSessionGroupCatalogMigrated(gatewayId) else prefs.clearSessionGroupCatalogMigrated(gatewayId)
       if (migration.consumeLegacy) prefs.consumeLegacySessionCustomGroups()
-      sessionGroupCatalogState.value = displayedSessionGroups(gatewayId)
+      sessionGroupCatalogState.value = unionSessionGroupNames(names, prefs.legacySessionCustomGroups())
       sessionSectionOrderState.value = sectionOrder
     }
   }

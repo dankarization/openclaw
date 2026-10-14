@@ -139,6 +139,15 @@ class SecurePrefs(
     appContext.getSharedPreferences(plainPrefsName, Context.MODE_PRIVATE)
   private val hadPlainPrefsBeforeInit = plainPrefs.all.isNotEmpty()
 
+  init {
+    // Earlier development builds stored disposable Gateway metadata outside the cache owner.
+    // It has no identity-retirement receipt and must be refreshed from the authenticated Gateway.
+    plainPrefs.edit {
+      remove(sessionGroupCatalogCacheKey)
+      remove(sessionGroupSectionOrderKey)
+    }
+  }
+
   // Gateway credentials and arbitrary secret strings are isolated behind EncryptedSharedPreferences.
   private val masterKey by lazy {
     MasterKey
@@ -1033,46 +1042,6 @@ class SecurePrefs(
     _sessionCustomGroups.value = emptyList()
   }
 
-  /** Null when this gateway has never had a catalog read stored. Empty is a stored empty catalog. */
-  fun storedSessionGroupCatalog(gatewayId: String): List<String>? {
-    val id = gatewayId.trim()
-    if (id.isEmpty()) return null
-    val map = loadSessionGroupCatalogMap()
-    if (id !in map) return null
-    return map[id].orEmpty()
-  }
-
-  fun setStoredSessionGroupCatalog(
-    gatewayId: String,
-    names: List<String>,
-  ) {
-    val id = gatewayId.trim()
-    if (id.isEmpty()) return
-    val cleaned = names.map(String::trim).filter { it.isNotEmpty() }.distinct()
-    val updated = loadSessionGroupCatalogMap().toMutableMap()
-    updated[id] = cleaned
-    plainPrefs.edit { putString(sessionGroupCatalogCacheKey, json.encodeToString(updated)) }
-  }
-
-  /** Gateway `sectionOrder` for this catalog. Empty means the default builder order. */
-  fun storedSessionGroupSectionOrder(gatewayId: String): List<String> {
-    val id = gatewayId.trim()
-    if (id.isEmpty()) return emptyList()
-    return loadSessionGroupSectionOrderMap()[id].orEmpty()
-  }
-
-  fun setStoredSessionGroupSectionOrder(
-    gatewayId: String,
-    sectionOrder: List<String>,
-  ) {
-    val id = gatewayId.trim()
-    if (id.isEmpty()) return
-    val cleaned = sectionOrder.map(String::trim).filter { it.isNotEmpty() }.distinct()
-    val updated = loadSessionGroupSectionOrderMap().toMutableMap()
-    updated[id] = cleaned
-    plainPrefs.edit { putString(sessionGroupSectionOrderKey, json.encodeToString(updated)) }
-  }
-
   fun isSessionGroupCatalogMigrated(gatewayId: String): Boolean = gatewayId in loadStringList(sessionGroupCatalogMigratedKey)
 
   fun markSessionGroupCatalogMigrated(gatewayId: String) {
@@ -1158,16 +1127,6 @@ class SecurePrefs(
     } else {
       sanitizeSidebarVisiblePages(loadStringList(sidebarVisiblePagesKey))
     }
-
-  private fun loadSessionGroupCatalogMap(): Map<String, List<String>> {
-    val raw = plainPrefs.getString(sessionGroupCatalogCacheKey, null)?.takeIf { it.isNotEmpty() } ?: return emptyMap()
-    return runCatching { json.decodeFromString<Map<String, List<String>>>(raw) }.getOrDefault(emptyMap())
-  }
-
-  private fun loadSessionGroupSectionOrderMap(): Map<String, List<String>> {
-    val raw = plainPrefs.getString(sessionGroupSectionOrderKey, null)?.takeIf { it.isNotEmpty() } ?: return emptyMap()
-    return runCatching { json.decodeFromString<Map<String, List<String>>>(raw) }.getOrDefault(emptyMap())
-  }
 
   private fun loadStringList(key: String): List<String> {
     val raw = plainPrefs.getString(key, null)?.trim()

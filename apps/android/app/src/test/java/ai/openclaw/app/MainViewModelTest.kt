@@ -1,5 +1,6 @@
 package ai.openclaw.app
 
+import ai.openclaw.app.chat.AndroidClientDatabases
 import ai.openclaw.app.chat.ChatCacheScope
 import ai.openclaw.app.chat.ChatComposerOwner
 import ai.openclaw.app.chat.createChatController
@@ -17,6 +18,7 @@ import android.os.Looper
 import androidx.lifecycle.SavedStateHandle
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -178,7 +180,11 @@ class MainViewModelTest {
         val reloaded = SecurePrefs(app, securePrefsOverride = ReflectionHelpers.getField(prefs, "securePrefsOverride"))
         assertTrue(reloaded.isSessionGroupLegacyConsumed())
         assertTrue(reloaded.isSessionGroupCatalogMigrated(gatewayId))
-        assertEquals(listOf("New", "Legacy"), reloaded.storedSessionGroupCatalog(gatewayId))
+        assertEquals(listOf("New", "Legacy"), runtime.observeSessionGroupCatalog(gatewayId).first()?.names)
+        val databases = ReflectionHelpers.getField<AndroidClientDatabases>(runtime, "clientDatabases")
+        controller.clearGatewayCache(gatewayId) { databases.commitGatewayRemoval(gatewayId, requireCacheRemoval = true) }
+        assertNull(runtime.observeSessionGroupCatalog(gatewayId).first())
+        assertTrue("Retired folders must disappear without switching Gateway", waitUntil(5_000) { viewModel.sessionCustomGroups.value.isEmpty() })
       } finally {
         closeNodeRuntimeTestFixture(runtime)
       }
