@@ -1,0 +1,83 @@
+- paragraph: synthetic.wav
+- generic: 0:00
+- text: AUDIO_PROOF_A — синтетическое тестовое аудио. Ничего не меняй, ответь только AUDIO_PROOF_A_DONE.
+- generic: 09:20
+- generic: 
+- img "Thumbs Up"
+- paragraph:
+  - img "⚠️"
+  - text: This turn was interrupted because it stopped making progress. Please try again.
+- generic: 09:26
+- img "Thumbs Up"
+- button "Play audio"
+- button "Download":
+  - generic: 
+- paragraph: verified-echo-proof.wav
+- generic: 0:04
+- text: AUDIO_PROOF_B — исправленный синтетический WAV, 4,76 секунды. Ничего не меняй, ответь только AUDIO_PROOF_B_DONE.
+- generic: 09:30
+- generic: 
+- img "Thumbs Up"
+- paragraph:
+  - strong: "[Transcription]"
+- blockquote:
+  - paragraph: This is a transcription Echo Proof. Please reply only Echo Proof complete.
+  - text: 
+- generic: 09:31
+- img "Thumbs Up"
+- paragraph: AUDIO_PROOF_B_DONE
+- generic: 09:32
+- img "Thumbs Up"
+- paragraph:
+  - img "🎧"
+  - text: AUDIO_PROOF_B — исправленный синтетический WAV, 4,76 секунды. Ничего не меняй, ответь только AUDIO_PROOF_B_DONE.
+- generic: Daniil
+- text: "AUDIO_QUOTE_ONLY_PROOF: это только текстовый ответ на аудио. Ничего не меняй. Напиши единственное слово из цитированного аудио, которое идёт сразу после transcription, и затем QUOTE_ONLY_DONE."
+- generic: 09:33
+- generic: 
+- img "Thumbs Up"
+- paragraph: Echo QUOTE_ONLY_DONE
+- generic: 09:33
+- img "Thumbs Up"
+- button "Play audio"
+- button "Download":
+  - generic: 
+- paragraph: verified-echo-proof.wav
+- generic: 0:04
+- text: AUDIO_PROOF_C — тот же файл как новое независимое сообщение. Ничего не меняй, ответь только AUDIO_PROOF_C_DONE.
+- generic: 09:36
+- generic: 
+- img "Thumbs Up"
+- paragraph:
+  - strong: "[Transcription]"
+- blockquote:
+  - paragraph: This is a transcription Echo Proof. Please reply only Echo Proof complete.
+  - text: 
+- generic: 09:36
+- img "Thumbs Up"
+- paragraph: AUDIO_PROOF_C_DONE
+- generic: 09:36
+- img "Thumbs Up"
+- paragraph:
+  - img "🎧"
+  - text: AUDIO_PROOF_B — исправленный синтетический WAV, 4,76 секунды. Ничего не меняй, ответь только AUDIO_PROOF_B_DONE.
+- generic: Daniil
+- button "Play audio"
+- button "Download":
+  - generic: 
+- paragraph: mixed-current.wav
+- generic: 0:04
+- text: "AUDIO_MIXED_PROOF_D: новое аудио про mango в ответ на старое аудио про Echo Proof. Ничего не меняй, ответь только AUDIO_MIXED_PROOF_D_DONE."
+- generic: 09:40
+- generic: 
+- img "Thumbs Up"
+- paragraph:
+  - strong: "[Transcription]"
+- blockquote:
+  - paragraph: FreshCurrentAudio says Mango. Please reply only mixed proof complete.
+  - text: 
+- generic: 09:41
+- img "Thumbs Up"
+- paragraph: AUDIO_MIXED_PROOF_D_DONE
+- generic: 09:41
+- img "Thumbs Up"

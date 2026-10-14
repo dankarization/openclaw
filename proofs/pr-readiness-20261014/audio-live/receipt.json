@@ -1,0 +1,77 @@
+{
+  "date": "2026-10-14",
+  "timezone": "Asia/Tbilisi",
+  "authority": {
+    "version": "2026.10.2",
+    "servingSource": "6c3111c1101ccd99a5167436364fd6e591a1c640",
+    "echoOwnerGitBlob": "1e55cc1ec49ca35a2063be470ba6b64b921c70e9",
+    "applyOwnerGitBlob": "0dd513ab7d968374d5261694e97a88fbf8347a5e",
+    "inboundContextGitBlob": "b79cfe31e0890a2f7b8e5eecf45476f26fc838ed"
+  },
+  "transport": "Real Telegram Web A operator account -> installed Gateway -> actual Telegram outbound messages",
+  "media": "Synthetic PCM WAV uploaded using Telegram File; audio attachments, not recorded voice-note media",
+  "inputs": {
+    "B_C": {
+      "durationSeconds": 4.757868480725624,
+      "bytes": 209866,
+      "sha256": "459aa2b820b9b75c684bd5ac0205fc1d432586bb9600996570f996d5614f68a3"
+    },
+    "D": {
+      "durationSeconds": 4.630022675736962,
+      "bytes": 204228,
+      "sha256": "ba5fad2a371a6098d8075310a8930c82d5ce867b806992e94d4a81d204a87ad2"
+    }
+  },
+  "cases": [
+    {
+      "name": "B fresh audio",
+      "echoCount": 1,
+      "echoAt": "09:31:49.168",
+      "finalAt": "09:32:06.343",
+      "final": "AUDIO_PROOF_B_DONE"
+    },
+    {
+      "name": "text reply quoting B audio",
+      "echoCount": 0,
+      "finalAt": "09:33:54.043",
+      "final": "Echo QUOTE_ONLY_DONE",
+      "canonicalGuiUserTextContainsQuotedTranscript": true
+    },
+    {
+      "name": "C independent new message with same audio bytes",
+      "echoCount": 1,
+      "echoAt": "09:36:41.075",
+      "finalAt": "09:36:48.469",
+      "final": "AUDIO_PROOF_C_DONE"
+    },
+    {
+      "name": "D fresh mango audio replying to B Echo audio",
+      "echoCount": 1,
+      "echoAt": "09:41:14.786",
+      "finalAt": "09:41:22.295",
+      "echoOnly": "FreshCurrentAudio says Mango. Please reply only mixed proof complete.",
+      "final": "AUDIO_MIXED_PROOF_D_DONE"
+    }
+  ],
+  "totalEchoMessages": 3,
+  "sourceMessagesDistinct": true,
+  "initialExcludedFailure": {
+    "file": "synthetic.wav",
+    "durationSeconds": 0.183562,
+    "reason": "Local converter truncated fixture. It reached custom STT fallback; no valid speech proof. Watchdog interrupted turn. Two remaining STT processes were individually cancelled only after pidfd/script/input SHA checks; old caller/children confirmed gone.",
+    "gatewayOrSharedSttServiceRestarted": false
+  },
+  "limits": [
+    "Installed stable integration, not complete current upstream PR head",
+    "No same-source Telegram replay or Gateway restart",
+    "Not a native Telegram voice-note or group/bot-originated quote run",
+    "No shared multi-account STT-call-count assertion",
+    "Word Echo response alone does not isolate model context from prior history; saved current user-turn transcript is separately captured"
+  ],
+  "cleanup": {
+    "gatewayRestarted": false,
+    "codexChanged": false,
+    "configChanged": false,
+    "qaServerCreated": false
+  }
+}
