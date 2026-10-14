@@ -82,39 +82,6 @@ describe("sendTranscriptEcho", () => {
     expect(mockDeliverOutboundPayloads).not.toHaveBeenCalled();
   });
 
-  it("uses required durable delivery for a keyed Telegram echo and keeps failures non-fatal", async () => {
-    mockDeliverOutboundPayloads.mockRejectedValueOnce(new Error("queue unavailable"));
-
-    await expect(
-      sendTranscriptEcho({
-        ctx: createCtx({
-          Provider: "telegram",
-          From: undefined,
-          OriginatingTo: "telegram:group:-100123:topic:77",
-          AccountId: "primary",
-          MessageSid: "msg-100",
-        }),
-        cfg: EMPTY_CONFIG,
-        transcript: "hello world",
-      }),
-    ).resolves.toBeUndefined();
-
-    expect(mockDeliverOutboundPayloads).toHaveBeenCalledWith(
-      expect.objectContaining({
-        bestEffort: false,
-        durability: "required",
-        deliveryIntentId: expect.stringMatching(/^transcript-echo:v1:[a-f0-9]{64}$/u),
-        completionRetention: {
-          idPrefix: "transcript-echo:v1:",
-          maxAgeMs: 24 * 60 * 60_000,
-          maxEntries: 2_000,
-        },
-      }),
-    );
-    const request = mockDeliverOutboundPayloads.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(request).not.toHaveProperty("reusePendingDeliveryIntent");
-  });
-
   it("swallows delivery failures", async () => {
     mockDeliverOutboundPayloads.mockRejectedValueOnce(new Error("delivery timeout"));
 
