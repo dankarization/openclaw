@@ -1,0 +1,29 @@
+{
+  "containerIdSha256": "16067e3c423f6d187382ff5e381c30941dc3e3560af6547e27e2fd910df8e15e",
+  "image": "openclaw-sandbox:qa-170200-b6e89d0",
+  "imageId": "sha256:19d89d88692ade093b225f6bf7a4e28330afe170433204e04358b7a3484291e8",
+  "runningAtInspection": true,
+  "network": "none",
+  "readOnlyRoot": true,
+  "memoryBytes": 536870912,
+  "memorySwapBytes": 536870912,
+  "nanoCpus": 1000000000,
+  "pidsLimit": 128,
+  "capDrop": [
+    "ALL"
+  ],
+  "user": "QA_UID:QA_GID",
+  "workingDir": "/workspace",
+  "mounts": [
+    {
+      "source": "/QA_SANDBOX_PROFILE/state/sandbox/skills-workspaces/workspace-56a1ae4baf6af864b173f42485f57d24/.openclaw/sandbox-skills/skills",
+      "destination": "/workspace/.openclaw/sandbox-skills/skills",
+      "rw": false
+    },
+    {
+      "source": "/QA_SANDBOX_PROFILE/workspace",
+      "destination": "/workspace",
+      "rw": true
+    }
+  ]
+}

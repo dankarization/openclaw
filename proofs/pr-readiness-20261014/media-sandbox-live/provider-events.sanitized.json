@@ -1,0 +1,29 @@
+[
+  {
+    "at": "2026-10-14T20:57:02.147Z",
+    "fixtureRevision": 5,
+    "attempt": "2026-10-14T20-53-22-209Z",
+    "event": "native_exec_requested",
+    "requestNumber": 1,
+    "requestSha256": "0d30f048fde93632c87a913f5992cc404b38f53b2894594002c83ac53bfa03a5",
+    "stagedPathSha256": "5dc4a1b04ae4d6fdcca99e4ff187bfa865a46517a312540364e256966b5f18cf",
+    "tool": "exec",
+    "pathSource": "actual user attachment marker in native model request",
+    "runtimeWorkspace": "/workspace",
+    "nativeConfiguredHost": "sandbox",
+    "toolCallIdSha256": "3c07a2e401d7fa39b31fcb918574d8a8b4aacb140ea944e9d21d7ad8b01a51f2"
+  },
+  {
+    "at": "2026-10-14T20:57:02.906Z",
+    "fixtureRevision": 5,
+    "attempt": "2026-10-14T20-53-22-209Z",
+    "event": "native_tool_result_observed",
+    "requestNumber": 2,
+    "bytes": 54525952,
+    "sha256": "2fade4fa841545c954a8b55e00989b7aa559ece325011a080dae3d4e95fef124",
+    "outputSha256": "c6538efb2646ec2da091f35cfca0298a6e9750f5103f449fdbc58e83bd6bf7fc",
+    "trailingRole": "tool",
+    "dockerWitnessObserved": true,
+    "toolCallIdSha256": "3c07a2e401d7fa39b31fcb918574d8a8b4aacb140ea944e9d21d7ad8b01a51f2"
+  }
+]

@@ -1,0 +1,41 @@
+{
+  "status": "PASS_NATIVE_DOCKER_SANDBOX_TELEGRAM_ROUNDTRIP",
+  "sourceHead": "b6e89d0ee6988565f74bc1b82778f8df65196f32",
+  "sourceTree": "596e9f727453cd8a4d05d69b0fbf3768d6a8ff30",
+  "executedUtc": "2026-10-14T20:57:02.906Z",
+  "fileBytes": 54525952,
+  "fileSha256": "2fade4fa841545c954a8b55e00989b7aa559ece325011a080dae3d4e95fef124",
+  "modelRequests": 2,
+  "nativePairedExecCalls": 1,
+  "dockerWitnessObserved": true,
+  "actualNativeAttachmentUsed": true,
+  "normalTelegramPolling": true,
+  "nativeOutboundSendOk": true,
+  "nativeCleanShutdown": true,
+  "sources": {
+    "gateway.mjs": {
+      "asExecutedSha256": "a428572efe5912b0c8be3b6165b188854f03f24f63765cf1af48da108d69eebb",
+      "sanitizedSha256": "44417a718e91656cb10f0a19711e83fa4a9c81513243949c2c40941f09c27340"
+    },
+    "provider.mjs": {
+      "asExecutedSha256": "0e9c40a25f69d833e0aa5465fd1ac3afc0220617357bc464a255df5ee6fd65b3",
+      "sanitizedSha256": "c288410cc885e20b4c5fbc2a77d30d164545e8e74e0b8936abc1d690a023cf26"
+    },
+    "run-after-slot.sh": {
+      "asExecutedSha256": "a9fc32c8caada5ca8d5e4542db5896e93c868e1e9caa59de11ed92d199fc9ba1",
+      "sanitizedSha256": "1252097347a3e77b8d2212a8c4ce7e216264ec3b70e9a631b374f612109c0af6"
+    },
+    "build-image-after-slot.sh": {
+      "asExecutedSha256": "7634743d0223bdac7e7b543c5cce9b05187f3dbba79e45ea5b9a36b4dd223dbb",
+      "sanitizedSha256": "e789f8858a4ae78d939c1d9322da411c5a452ba57b7e91283718f06edfb811a9"
+    }
+  },
+  "transportDisclosure": "Existing local Bot API via task-owned loopback SSH forward. Only the synthetic QA-bot file is mirrored at its real returned absolute Bot API path on QA; real getFile response unchanged. Fresh real forwarded document, not captured update injection.",
+  "modelDisclosure": "Deterministic OpenAI-compatible orchestration requests ordinary native exec and waits for paired result; never reads attachment bytes.",
+  "remainingLimits": [
+    "Contributor-owned real Telegram bot, not maintained leased Test Server",
+    "Source-run Gateway, not packaged stable installation",
+    "No latest-stable settings/media upgrade qualification",
+    "No 4GiB or aggregate-budget stress; resource-policy owner decision remains"
+  ]
+}

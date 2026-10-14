@@ -1,0 +1,29 @@
+{
+  "scope": "Selected actual native model/tool fields; path and call ID consistently replaced",
+  "sourceRequestSha256": "ae16a3dbb2a2ab9d129374e8e521e05524b94e4cfe4e5977aad391425a7f1c56",
+  "pairedOriginalCallIdSha256": "3c07a2e401d7fa39b31fcb918574d8a8b4aacb140ea944e9d21d7ad8b01a51f2",
+  "messages": [
+    {
+      "role": "user",
+      "contentExcerpt": "[media attached: media/inbound/QA_STAGED_DIR/input-qa-large-document.bin]"
+    },
+    {
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "id": "CALL_1",
+          "type": "function",
+          "function": {
+            "name": "exec",
+            "arguments": "{\"command\": \"test -f /.dockerenv && printf 'QA_NATIVE_DOCKER_EXEC\\\\n' && wc -c -- 'media/inbound/QA_STAGED_DIR/input-qa-large-document.bin' && sha256sum -- 'media/inbound/QA_STAGED_DIR/input-qa-large-document.bin'\", \"workdir\": \"/workspace\", \"timeoutSeconds\": 90, \"yieldMs\": 10000}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "CALL_1",
+      "content": "Warning: continuation options are unavailable; running synchronously.\n\n\n\nQA_NATIVE_DOCKER_EXEC\n54525952 media/inbound/QA_STAGED_DIR/input-qa-large-document.bin\n2fade4fa841545c954a8b55e00989b7aa559ece325011a080dae3d4e95fef124  media/inbound/QA_STAGED_DIR/input-qa-large-document.bin"
+    }
+  ]
+}

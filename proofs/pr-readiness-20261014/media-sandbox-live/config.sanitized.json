@@ -1,0 +1,120 @@
+{
+  "gateway": {
+    "mode": "local",
+    "port": 18958,
+    "bind": "loopback",
+    "auth": {
+      "mode": "token",
+      "token": "REDACTED_QA_GATEWAY_TOKEN"
+    },
+    "controlUi": {
+      "enabled": false
+    }
+  },
+  "agents": {
+    "defaults": {
+      "workspace": "/QA_SANDBOX_PROFILE/workspace",
+      "sandbox": {
+        "mode": "all",
+        "backend": "docker",
+        "scope": "session",
+        "workspaceAccess": "rw",
+        "workspaceRoot": "/QA_SANDBOX_PROFILE/sandboxes",
+        "docker": {
+          "image": "openclaw-sandbox:qa-170200-b6e89d0",
+          "containerPrefix": "oc-media-qa-170200-20261015-",
+          "workdir": "/workspace",
+          "readOnlyRoot": true,
+          "network": "none",
+          "capDrop": [
+            "ALL"
+          ],
+          "pidsLimit": 128,
+          "memory": "512m",
+          "memorySwap": "512m",
+          "cpus": 1,
+          "user": "QA_UID:QA_GID"
+        }
+      },
+      "model": {
+        "primary": "qa-media/proof-model"
+      }
+    }
+  },
+  "models": {
+    "providers": {
+      "qa-media": {
+        "baseUrl": "http://127.0.0.1:18959/v1",
+        "apiKey": "synthetic-not-a-real-key",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "proof-model",
+            "name": "Deterministic QA orchestration fixture",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "contextWindow": 128000,
+            "maxTokens": 2000,
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            }
+          }
+        ]
+      }
+    }
+  },
+  "plugins": {
+    "allow": [
+      "telegram"
+    ],
+    "entries": {
+      "telegram": {
+        "enabled": true
+      }
+    },
+    "slots": {
+      "memory": "none"
+    }
+  },
+  "session": {
+    "dmScope": "per-channel-peer"
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "tokenFile": "/QA_INPUT/telegram-qa.token",
+      "apiRoot": "http://127.0.0.1:18182",
+      "trustedLocalFileRoots": [
+        "/QA_BOT_API_ROOT/OWN_BOT/documents"
+      ],
+      "dmPolicy": "allowlist",
+      "allowFrom": [
+        "QA_USER_ID"
+      ],
+      "mediaMaxMb": 128,
+      "accounts": {
+        "default": {
+          "mediaMaxMb": 64
+        }
+      }
+    }
+  },
+  "tools": {
+    "allow": [
+      "exec"
+    ],
+    "exec": {
+      "host": "sandbox",
+      "mode": "full"
+    }
+  },
+  "logging": {
+    "level": "info",
+    "consoleLevel": "info"
+  }
+}
