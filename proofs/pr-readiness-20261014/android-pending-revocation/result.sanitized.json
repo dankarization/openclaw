@@ -1,0 +1,160 @@
+{
+  "apkHead": "a3dd5af5727afd66f3dbedf42cc9a85152bb7ca0",
+  "apkSha256": "681118665160db825edeacbda7d4e30c9294f55b33052d2ca8e7c3e9f309ea8b",
+  "gatewayHead": "a8b899d9a0039249bc01e362684f6c51c3de40c9",
+  "profile": "contributor-owned isolated Android AVD/native Gateway",
+  "runReceipt": "pending-fast-1792005276505",
+  "recordedStatus": "CAPTURED_REQUIRES_BEHAVIORAL_REVIEW",
+  "uiCoordinates": {
+    "firstTaps": [
+      [
+        792,
+        1686
+      ]
+    ],
+    "secondTaps": [
+      [
+        960,
+        1686
+      ]
+    ]
+  },
+  "before": {
+    "observedAtMs": 1792005282047,
+    "thinkingLevel": "medium",
+    "fastMode": false,
+    "updatedAtMs": 1792005198063
+  },
+  "trace": [
+    {
+      "ts": "2026-10-14T19:14:41.907Z",
+      "elapsedMs": 9782,
+      "event": "native-admin-preconnected",
+      "scopes": [
+        "operator.admin",
+        "operator.read",
+        "operator.write",
+        "operator.pairing"
+      ]
+    },
+    {
+      "ts": "2026-10-14T19:14:42.069Z",
+      "elapsedMs": 9942,
+      "event": "hold-armed"
+    },
+    {
+      "ts": "2026-10-14T19:14:42.351Z",
+      "elapsedMs": 10224,
+      "event": "first-high-ui-tap-complete"
+    },
+    {
+      "ts": "2026-10-14T19:14:50.452Z",
+      "elapsedMs": 18325,
+      "event": "first-high-native-ack-held",
+      "id": "first-high"
+    },
+    {
+      "ts": "2026-10-14T19:14:50.670Z",
+      "elapsedMs": 18543,
+      "event": "second-ultra-ui-tap-complete"
+    },
+    {
+      "ts": "2026-10-14T19:14:50.670Z",
+      "elapsedMs": 18543,
+      "event": "native-revoke-issued"
+    },
+    {
+      "ts": "2026-10-14T19:14:51.226Z",
+      "elapsedMs": 19099,
+      "event": "native-revoke-complete",
+      "heldToRevokeCompleteMs": 785
+    },
+    {
+      "ts": "2026-10-14T19:14:51.251Z",
+      "elapsedMs": 19124,
+      "event": "first-native-ack-released"
+    }
+  ],
+  "revoke": {
+    "role": "operator",
+    "revokedAtMs": 1792005291105,
+    "heldAckToRevokeCompletionMs": 785
+  },
+  "relayEvents": [
+    {
+      "ts": "2026-10-14T19:14:50.440Z",
+      "event": "android-patch-result",
+      "id": "first-high",
+      "ok": true
+    },
+    {
+      "ts": "2026-10-14T19:14:50.441Z",
+      "event": "patch-ack-held",
+      "id": "first-high"
+    },
+    {
+      "ts": "2026-10-14T19:14:51.241Z",
+      "event": "release"
+    },
+    {
+      "ts": "2026-10-14T19:14:51.257Z",
+      "event": "upstream-close",
+      "role": "operator",
+      "code": 4001,
+      "reason": "device removed"
+    },
+    {
+      "ts": "2026-10-14T19:14:51.267Z",
+      "event": "android-request",
+      "id": "queued-ultra",
+      "method": "sessions.patch",
+      "thinkingLevel": "ultra"
+    },
+    {
+      "ts": "2026-10-14T19:14:52.501Z",
+      "event": "connect-request",
+      "role": "operator",
+      "requestedScopes": [
+        "operator.read",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-14T19:14:52.825Z",
+      "event": "upstream-close",
+      "role": "operator",
+      "code": 1008,
+      "reason": "unauthorized: gateway token mismatch (provide gateway auth token)"
+    }
+  ],
+  "after": {
+    "observedAtMs": 1792005292767,
+    "thinkingLevel": "high",
+    "fastMode": false,
+    "updatedAtMs": 1792005282415
+  },
+  "finalObservation": {
+    "method": "sessions.list",
+    "observedAtMs": 1792005346050,
+    "observedAt": "2026-10-14T19:15:46.050Z",
+    "thinkingLevel": "high",
+    "fastMode": false,
+    "updatedAtMs": 1792005282415
+  },
+  "observations": {
+    "initialHighPatchCommitted": true,
+    "ultraAndroidRequestObserved": true,
+    "ultraObservedAfterNativeUpstreamClose": true,
+    "nativeDeviceRemovedClose": 4001,
+    "nativeReconnectRejectedClose": 1008,
+    "ultraForwardedToClosedUpstream": false,
+    "explicitForbiddenUltraResponse": false,
+    "finalHighPreserved": true
+  },
+  "limits": [
+    "Transparent relay buffers downlink frames while upstream is not OPEN; Ultra was not forwarded to the closed upstream.",
+    "This is native revocation/socket invalidation plus real queued Android intent, not an explicit FORBIDDEN response to Ultra.",
+    "Incomplete-picker canonical preservation through send/queued reconnect remains untested.",
+    "Earlier late/invalid pending attempt is excluded."
+  ]
+}
