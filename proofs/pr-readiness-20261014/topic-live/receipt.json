@@ -1,0 +1,41 @@
+{
+  "capturedAt": "2026-10-14T05:10:12.498Z",
+  "installedVersion": "2026.10.2",
+  "servingSource": "6c3111c1101ccd99a5167436364fd6e591a1c640",
+  "reviewedPr": 166011,
+  "reviewedHead": "a8b899d9a0039249bc01e362684f6c51c3de40c9",
+  "scope": "Live installed stable-based integration; not exact current PR head",
+  "steps": [
+    {
+      "phase": "before",
+      "telegram": "PR-proof-1410-before",
+      "gui": "PR-proof-1410-before"
+    },
+    {
+      "phase": "during",
+      "telegram": "PR-proof-1410-during",
+      "gui": "PR-proof-1410-during",
+      "activeConfirmedBy": "Stop generating visible in DOM",
+      "observedAt": "2026-10-14T05:02:52.195Z"
+    },
+    {
+      "phase": "after",
+      "telegram": "PR-proof-1410-after",
+      "gui": "PR-proof-1410-after",
+      "reloadPersists": true
+    },
+    {
+      "phase": "manual-priority",
+      "telegram": "PR-proof-telegram-next",
+      "gui": "PR-proof-GUI-manual",
+      "reloadPersists": true
+    }
+  ],
+  "finalResponse": "PR_PROOF_DONE",
+  "rootDmArchive": "Temporarily unarchived with operator approval; restored and Unarchive button verified",
+  "limitations": [
+    "Screenshot 05 is blank and excluded",
+    "No exact-current-head browser deployment",
+    "No Telegram replay/restart or audio test performed in this run"
+  ]
+}
