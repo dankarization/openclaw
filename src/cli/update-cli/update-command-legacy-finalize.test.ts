@@ -16,6 +16,7 @@ import {
 import { resolvePreferredOpenClawTmpDir } from "../../infra/tmp-openclaw-dir.js";
 import { createManagedHandoffLeaseStore } from "../../infra/update-managed-service-handoff-lease.js";
 import { createUpdateRun, getUpdateRun } from "../../infra/update-run-ledger.js";
+import { isRequiredUpdateRunStep } from "../../infra/update-run-write.js";
 import {
   inspectNodeWorkerProcessIdentity,
   requireNodeWorkerProcessIdentity,
@@ -497,13 +498,34 @@ function runLegacyFinalizationScenario(scenario: (typeof scenarios)[number], sig
         expect(receiver.pid).not.toBe(receiver.parent);
         expect(getUpdateRun(runId, { env })).toMatchObject({ status: "succeeded" });
         if (scenario.startsWith("ledger-timeout-")) {
-          const timeouts = fs
+          const writes = fs
             .readFileSync(path.join(scratch, "ledger-wait-probe"), "utf8")
             .trim()
             .split("\n")
-            .map(Number);
-          expect(timeouts.length).toBeGreaterThanOrEqual(3);
-          expect(new Set(timeouts), details).toEqual(
+            .map(
+              (line) =>
+                JSON.parse(line) as {
+                  timeoutMs: number;
+                  changedSteps: Parameters<typeof isRequiredUpdateRunStep>[0][];
+                  phaseChanged: boolean;
+                  statusChanged: boolean;
+                },
+            );
+          const optional = writes.filter(
+            (write) =>
+              !write.phaseChanged &&
+              !write.statusChanged &&
+              write.changedSteps.length > 0 &&
+              write.changedSteps.every((step) => !isRequiredUpdateRunStep(step)),
+          );
+          expect(optional.flatMap((write) => write.changedSteps.map((step) => step.step))).toEqual([
+            "managed-service-executor-check",
+            "managed-service-restart",
+          ]);
+          expect(new Set(optional.map((write) => write.timeoutMs))).toEqual(new Set([1_000]));
+          const required = writes.filter((write) => !optional.includes(write));
+          expect(required.length).toBeGreaterThanOrEqual(3);
+          expect(new Set(required.map((write) => write.timeoutMs)), details).toEqual(
             new Set([
               scenario === "ledger-timeout-explicit" ? 71_000 : input.params.updateStepTimeoutMs,
             ]),
