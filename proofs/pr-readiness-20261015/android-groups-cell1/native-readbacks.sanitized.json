@@ -1,0 +1,77 @@
+{
+  "groups-after-ui-create": {
+    "method": "sessions.groups.list",
+    "grantedScopes": [
+      "operator.admin",
+      "operator.read",
+      "operator.write",
+      "operator.pairing"
+    ],
+    "result": {
+      "groups": [
+        {
+          "name": "QA_REMOTE_EXISTING",
+          "position": 0
+        },
+        {
+          "name": "QA_UI_GROUP_A",
+          "position": 1
+        }
+      ],
+      "sectionOrder": [],
+      "appendOnly": true
+    }
+  },
+  "groups-after-ui-rename": {
+    "method": "sessions.groups.list",
+    "grantedScopes": [
+      "operator.admin",
+      "operator.read",
+      "operator.write",
+      "operator.pairing"
+    ],
+    "result": {
+      "groups": [
+        {
+          "name": "QA_REMOTE_EXISTING",
+          "position": 0
+        },
+        {
+          "name": "QA_UI_RENAMEDA",
+          "position": 1
+        }
+      ],
+      "sectionOrder": [],
+      "appendOnly": true
+    }
+  },
+  "groups-after-ui-reorder-relaunch": {
+    "method": "sessions.groups.list",
+    "grantedScopes": [
+      "operator.admin",
+      "operator.read",
+      "operator.write",
+      "operator.pairing"
+    ],
+    "result": {
+      "groups": [
+        {
+          "name": "QA_REMOTE_EXISTING",
+          "position": 0
+        },
+        {
+          "name": "QA_UI_RENAMEDA",
+          "position": 1
+        }
+      ],
+      "sectionOrder": [
+        "category:QA_UI_RENAMEDA",
+        "category:QA_REMOTE_EXISTING",
+        "ungrouped",
+        "groups",
+        "work"
+      ],
+      "appendOnly": true
+    }
+  }
+}

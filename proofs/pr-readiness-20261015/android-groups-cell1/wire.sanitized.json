@@ -1,0 +1,404 @@
+{
+  "fullPrivateTraceSha256": "8aec271e04cdad99760437568ae0b18185b783eb2259b1df4919faff615bf1c7",
+  "events": [
+    {
+      "ts": "2026-10-14T21:18:48.362Z",
+      "event": "authenticated",
+      "role": "operator",
+      "grantedScopes": [
+        "operator.admin",
+        "operator.approvals",
+        "operator.questions",
+        "operator.read",
+        "operator.talk.secrets",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-14T21:18:48.564Z",
+      "event": "authenticated",
+      "role": "node",
+      "grantedScopes": []
+    },
+    {
+      "ts": "2026-10-14T21:20:06.581Z",
+      "event": "android-request",
+      "id": "id-09c878cb8ee593fa",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-14T21:20:06.962Z",
+      "event": "android-native-result",
+      "id": "id-09c878cb8ee593fa",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          }
+        ],
+        "sectionOrder": [],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-14T21:21:01.241Z",
+      "event": "android-request",
+      "id": "id-7a455c2840f8fe80",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-14T21:21:01.248Z",
+      "event": "android-native-result",
+      "id": "id-7a455c2840f8fe80",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          }
+        ],
+        "sectionOrder": [],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-14T21:21:01.353Z",
+      "event": "android-request",
+      "id": "id-341f3239bd66a2be",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-14T21:21:01.363Z",
+      "event": "android-native-result",
+      "id": "id-341f3239bd66a2be",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          }
+        ],
+        "sectionOrder": [],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-14T21:21:01.450Z",
+      "event": "android-request",
+      "id": "id-ad33e9059eecb5b4",
+      "method": "sessions.groups.put",
+      "params": {
+        "names": [
+          "QA_UI_GROUP_A"
+        ],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-14T21:21:01.473Z",
+      "event": "android-native-result",
+      "id": "id-ad33e9059eecb5b4",
+      "method": "sessions.groups.put",
+      "ok": true,
+      "payload": {
+        "ok": true,
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          },
+          {
+            "name": "QA_UI_GROUP_A",
+            "position": 1
+          }
+        ],
+        "sectionOrder": []
+      }
+    },
+    {
+      "ts": "2026-10-14T21:21:01.656Z",
+      "event": "android-request",
+      "id": "id-79ac180103164a5b",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-14T21:21:01.663Z",
+      "event": "android-native-result",
+      "id": "id-79ac180103164a5b",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          },
+          {
+            "name": "QA_UI_GROUP_A",
+            "position": 1
+          }
+        ],
+        "sectionOrder": [],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-14T21:22:20.547Z",
+      "event": "android-request",
+      "id": "id-513e6b410007c0f6",
+      "method": "sessions.groups.rename",
+      "params": {
+        "name": "QA_UI_GROUP_A",
+        "to": "QA_UI_RENAMEDA"
+      }
+    },
+    {
+      "ts": "2026-10-14T21:22:21.447Z",
+      "event": "android-native-result",
+      "id": "id-513e6b410007c0f6",
+      "method": "sessions.groups.rename",
+      "ok": true,
+      "payload": {
+        "ok": true,
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          },
+          {
+            "name": "QA_UI_RENAMEDA",
+            "position": 1
+          }
+        ],
+        "sectionOrder": [],
+        "updatedSessions": 0
+      }
+    },
+    {
+      "ts": "2026-10-14T21:22:21.601Z",
+      "event": "android-request",
+      "id": "id-b7c81cdb4e7a4ad6",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-14T21:22:21.603Z",
+      "event": "android-native-result",
+      "id": "id-b7c81cdb4e7a4ad6",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          },
+          {
+            "name": "QA_UI_RENAMEDA",
+            "position": 1
+          }
+        ],
+        "sectionOrder": [],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-14T21:22:49.612Z",
+      "event": "android-request",
+      "id": "id-e1c1da34dda8a8ad",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-14T21:22:49.617Z",
+      "event": "android-native-result",
+      "id": "id-e1c1da34dda8a8ad",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          },
+          {
+            "name": "QA_UI_RENAMEDA",
+            "position": 1
+          }
+        ],
+        "sectionOrder": [],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-14T21:22:49.663Z",
+      "event": "android-request",
+      "id": "id-b091e7f83a104354",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-14T21:22:49.669Z",
+      "event": "android-native-result",
+      "id": "id-b091e7f83a104354",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          },
+          {
+            "name": "QA_UI_RENAMEDA",
+            "position": 1
+          }
+        ],
+        "sectionOrder": [],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-14T21:22:49.764Z",
+      "event": "android-request",
+      "id": "id-a9c9f7ced234c407",
+      "method": "sessions.groups.put",
+      "params": {
+        "names": [],
+        "appendOnly": true,
+        "sectionOrder": [
+          "category:QA_UI_RENAMEDA",
+          "category:QA_REMOTE_EXISTING",
+          "ungrouped",
+          "groups",
+          "work"
+        ]
+      }
+    },
+    {
+      "ts": "2026-10-14T21:22:49.784Z",
+      "event": "android-native-result",
+      "id": "id-a9c9f7ced234c407",
+      "method": "sessions.groups.put",
+      "ok": true,
+      "payload": {
+        "ok": true,
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          },
+          {
+            "name": "QA_UI_RENAMEDA",
+            "position": 1
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_UI_RENAMEDA",
+          "category:QA_REMOTE_EXISTING",
+          "ungrouped",
+          "groups",
+          "work"
+        ]
+      }
+    },
+    {
+      "ts": "2026-10-14T21:22:50.046Z",
+      "event": "android-request",
+      "id": "id-4a6145fe08f61bb0",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-14T21:22:50.052Z",
+      "event": "android-native-result",
+      "id": "id-4a6145fe08f61bb0",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          },
+          {
+            "name": "QA_UI_RENAMEDA",
+            "position": 1
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_UI_RENAMEDA",
+          "category:QA_REMOTE_EXISTING",
+          "ungrouped",
+          "groups",
+          "work"
+        ],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-14T21:23:00.611Z",
+      "event": "authenticated",
+      "role": "operator",
+      "grantedScopes": [
+        "operator.admin",
+        "operator.approvals",
+        "operator.questions",
+        "operator.read",
+        "operator.talk.secrets",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-14T21:23:09.400Z",
+      "event": "authenticated",
+      "role": "node",
+      "grantedScopes": []
+    },
+    {
+      "ts": "2026-10-14T21:23:20.381Z",
+      "event": "android-request",
+      "id": "id-e89ddbff852702b0",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-14T21:23:20.385Z",
+      "event": "android-native-result",
+      "id": "id-e89ddbff852702b0",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          },
+          {
+            "name": "QA_UI_RENAMEDA",
+            "position": 1
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_UI_RENAMEDA",
+          "category:QA_REMOTE_EXISTING",
+          "ungrouped",
+          "groups",
+          "work"
+        ],
+        "appendOnly": true
+      }
+    }
+  ]
+}
