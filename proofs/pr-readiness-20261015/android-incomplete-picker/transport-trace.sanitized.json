@@ -1,0 +1,684 @@
+{
+  "scope": "Selected actual transport events; duplicate metadata omitted, opaque request/run IDs consistently hashed; full private trace hash binds original",
+  "sourceSha256": "60f7e39a203323d3bccbb2074aa293c394e6eff1372f5a16920514c84c483aff",
+  "events": [
+    {
+      "ts": "2026-10-14T20:34:23.954Z",
+      "event": "authenticated",
+      "role": "operator",
+      "grantedScopes": [
+        "operator.read",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-14T20:34:24.957Z",
+      "event": "metadata-medium-omitted",
+      "context": "sessions.list.defaults",
+      "key": "thinkingLevels",
+      "before": [
+        {
+          "id": "off",
+          "label": "off"
+        },
+        {
+          "id": "minimal",
+          "label": "minimal"
+        },
+        {
+          "id": "low",
+          "label": "low"
+        },
+        {
+          "id": "medium",
+          "label": "medium"
+        },
+        {
+          "id": "high",
+          "label": "high"
+        },
+        {
+          "id": "ultra",
+          "label": "ultra"
+        }
+      ],
+      "after": [
+        {
+          "id": "off",
+          "label": "off"
+        },
+        {
+          "id": "minimal",
+          "label": "minimal"
+        },
+        {
+          "id": "low",
+          "label": "low"
+        },
+        {
+          "id": "high",
+          "label": "high"
+        },
+        {
+          "id": "ultra",
+          "label": "ultra"
+        }
+      ],
+      "effectiveThinking": {
+        "thinkingDefault": "medium"
+      }
+    },
+    {
+      "ts": "2026-10-14T20:34:24.957Z",
+      "event": "metadata-medium-omitted",
+      "context": "sessions.list.defaults",
+      "key": "thinkingOptions",
+      "before": [
+        "off",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "ultra"
+      ],
+      "after": [
+        "off",
+        "minimal",
+        "low",
+        "high",
+        "ultra"
+      ],
+      "effectiveThinking": {
+        "thinkingDefault": "medium"
+      }
+    },
+    {
+      "ts": "2026-10-14T20:34:24.957Z",
+      "event": "metadata-medium-omitted",
+      "context": "sessions.list.main",
+      "key": "thinkingLevels",
+      "before": [
+        {
+          "id": "off",
+          "label": "off"
+        },
+        {
+          "id": "minimal",
+          "label": "minimal"
+        },
+        {
+          "id": "low",
+          "label": "low"
+        },
+        {
+          "id": "medium",
+          "label": "medium"
+        },
+        {
+          "id": "high",
+          "label": "high"
+        },
+        {
+          "id": "ultra",
+          "label": "ultra"
+        }
+      ],
+      "after": [
+        {
+          "id": "off",
+          "label": "off"
+        },
+        {
+          "id": "minimal",
+          "label": "minimal"
+        },
+        {
+          "id": "low",
+          "label": "low"
+        },
+        {
+          "id": "high",
+          "label": "high"
+        },
+        {
+          "id": "ultra",
+          "label": "ultra"
+        }
+      ],
+      "effectiveThinking": {
+        "thinkingLevel": "medium",
+        "thinkingDefault": "medium"
+      }
+    },
+    {
+      "ts": "2026-10-14T20:34:24.957Z",
+      "event": "metadata-medium-omitted",
+      "context": "sessions.list.main",
+      "key": "thinkingOptions",
+      "before": [
+        "off",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "ultra"
+      ],
+      "after": [
+        "off",
+        "minimal",
+        "low",
+        "high",
+        "ultra"
+      ],
+      "effectiveThinking": {
+        "thinkingLevel": "medium",
+        "thinkingDefault": "medium"
+      }
+    },
+    {
+      "ts": "2026-10-14T20:34:25.232Z",
+      "event": "metadata-medium-omitted",
+      "context": "models.list",
+      "key": "thinkingLevels",
+      "before": [
+        {
+          "id": "off",
+          "label": "off"
+        },
+        {
+          "id": "minimal",
+          "label": "minimal"
+        },
+        {
+          "id": "low",
+          "label": "low"
+        },
+        {
+          "id": "medium",
+          "label": "medium"
+        },
+        {
+          "id": "high",
+          "label": "high"
+        },
+        {
+          "id": "ultra",
+          "label": "ultra"
+        }
+      ],
+      "after": [
+        {
+          "id": "off",
+          "label": "off"
+        },
+        {
+          "id": "minimal",
+          "label": "minimal"
+        },
+        {
+          "id": "low",
+          "label": "low"
+        },
+        {
+          "id": "high",
+          "label": "high"
+        },
+        {
+          "id": "ultra",
+          "label": "ultra"
+        }
+      ],
+      "effectiveThinking": {
+        "thinkingDefault": "medium"
+      }
+    },
+    {
+      "ts": "2026-10-14T20:34:32.369Z",
+      "event": "authenticated",
+      "role": "node",
+      "grantedScopes": []
+    },
+    {
+      "ts": "2026-10-14T20:34:32.999Z",
+      "event": "metadata-medium-omitted",
+      "context": "chat.history.sessionInfo",
+      "key": "thinkingLevels",
+      "before": [
+        {
+          "id": "off",
+          "label": "off"
+        },
+        {
+          "id": "minimal",
+          "label": "minimal"
+        },
+        {
+          "id": "low",
+          "label": "low"
+        },
+        {
+          "id": "medium",
+          "label": "medium"
+        },
+        {
+          "id": "high",
+          "label": "high"
+        },
+        {
+          "id": "ultra",
+          "label": "ultra"
+        }
+      ],
+      "after": [
+        {
+          "id": "off",
+          "label": "off"
+        },
+        {
+          "id": "minimal",
+          "label": "minimal"
+        },
+        {
+          "id": "low",
+          "label": "low"
+        },
+        {
+          "id": "high",
+          "label": "high"
+        },
+        {
+          "id": "ultra",
+          "label": "ultra"
+        }
+      ],
+      "effectiveThinking": {
+        "thinkingDefault": "medium"
+      }
+    },
+    {
+      "ts": "2026-10-14T20:34:32.999Z",
+      "event": "metadata-medium-omitted",
+      "context": "chat.history.sessionInfo",
+      "key": "thinkingOptions",
+      "before": [
+        "off",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "ultra"
+      ],
+      "after": [
+        "off",
+        "minimal",
+        "low",
+        "high",
+        "ultra"
+      ],
+      "effectiveThinking": {
+        "thinkingDefault": "medium"
+      }
+    },
+    {
+      "ts": "2026-10-14T20:38:55.074Z",
+      "event": "android-request",
+      "id": "6f51d51b9896f400fad2a551efdbba585a470726ebbaf9e70ade6ef7d7b809f4",
+      "method": "chat.send",
+      "thinking": "medium",
+      "message": "QA_MEDIUM_DIRECT_20261015"
+    },
+    {
+      "ts": "2026-10-14T20:39:07.996Z",
+      "event": "native-result",
+      "id": "6f51d51b9896f400fad2a551efdbba585a470726ebbaf9e70ade6ef7d7b809f4",
+      "method": "chat.send",
+      "ok": true,
+      "status": "started",
+      "runIdSha256": "42678bc8b3c213a2c67ad6807bfecad5646073591394f9773c9bac8b6f00fa48"
+    },
+    {
+      "ts": "2026-10-14T20:40:02.803Z",
+      "event": "offline-control"
+    },
+    {
+      "ts": "2026-10-14T20:41:21.031Z",
+      "event": "online-control"
+    },
+    {
+      "ts": "2026-10-14T20:41:52.301Z",
+      "event": "authenticated",
+      "role": "node",
+      "grantedScopes": []
+    },
+    {
+      "ts": "2026-10-14T20:42:01.895Z",
+      "event": "authenticated",
+      "role": "operator",
+      "grantedScopes": [
+        "operator.read",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-14T20:42:02.262Z",
+      "event": "metadata-medium-omitted",
+      "context": "chat.history.sessionInfo",
+      "key": "thinkingLevels",
+      "before": [
+        {
+          "id": "off",
+          "label": "off"
+        },
+        {
+          "id": "minimal",
+          "label": "minimal"
+        },
+        {
+          "id": "low",
+          "label": "low"
+        },
+        {
+          "id": "medium",
+          "label": "medium"
+        },
+        {
+          "id": "high",
+          "label": "high"
+        },
+        {
+          "id": "ultra",
+          "label": "ultra"
+        }
+      ],
+      "after": [
+        {
+          "id": "off",
+          "label": "off"
+        },
+        {
+          "id": "minimal",
+          "label": "minimal"
+        },
+        {
+          "id": "low",
+          "label": "low"
+        },
+        {
+          "id": "high",
+          "label": "high"
+        },
+        {
+          "id": "ultra",
+          "label": "ultra"
+        }
+      ],
+      "effectiveThinking": {
+        "thinkingLevel": "medium",
+        "thinkingDefault": "medium"
+      }
+    },
+    {
+      "ts": "2026-10-14T20:42:02.262Z",
+      "event": "metadata-medium-omitted",
+      "context": "chat.history.sessionInfo",
+      "key": "thinkingOptions",
+      "before": [
+        "off",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "ultra"
+      ],
+      "after": [
+        "off",
+        "minimal",
+        "low",
+        "high",
+        "ultra"
+      ],
+      "effectiveThinking": {
+        "thinkingLevel": "medium",
+        "thinkingDefault": "medium"
+      }
+    },
+    {
+      "ts": "2026-10-14T20:42:03.103Z",
+      "event": "metadata-medium-omitted",
+      "context": "models.list",
+      "key": "thinkingLevels",
+      "before": [
+        {
+          "id": "off",
+          "label": "off"
+        },
+        {
+          "id": "minimal",
+          "label": "minimal"
+        },
+        {
+          "id": "low",
+          "label": "low"
+        },
+        {
+          "id": "medium",
+          "label": "medium"
+        },
+        {
+          "id": "high",
+          "label": "high"
+        },
+        {
+          "id": "ultra",
+          "label": "ultra"
+        }
+      ],
+      "after": [
+        {
+          "id": "off",
+          "label": "off"
+        },
+        {
+          "id": "minimal",
+          "label": "minimal"
+        },
+        {
+          "id": "low",
+          "label": "low"
+        },
+        {
+          "id": "high",
+          "label": "high"
+        },
+        {
+          "id": "ultra",
+          "label": "ultra"
+        }
+      ],
+      "effectiveThinking": {
+        "thinkingDefault": "medium"
+      }
+    },
+    {
+      "ts": "2026-10-14T20:42:03.105Z",
+      "event": "android-request",
+      "id": "cc865406aceb2bd1e11be6b782133905e12aa74ca23a1f240080790006aaf59a",
+      "method": "chat.send",
+      "thinking": "medium",
+      "message": "QA_MEDIUM_QUEUED_20261015"
+    },
+    {
+      "ts": "2026-10-14T20:42:03.199Z",
+      "event": "metadata-medium-omitted",
+      "context": "sessions.list.defaults",
+      "key": "thinkingLevels",
+      "before": [
+        {
+          "id": "off",
+          "label": "off"
+        },
+        {
+          "id": "minimal",
+          "label": "minimal"
+        },
+        {
+          "id": "low",
+          "label": "low"
+        },
+        {
+          "id": "medium",
+          "label": "medium"
+        },
+        {
+          "id": "high",
+          "label": "high"
+        },
+        {
+          "id": "ultra",
+          "label": "ultra"
+        }
+      ],
+      "after": [
+        {
+          "id": "off",
+          "label": "off"
+        },
+        {
+          "id": "minimal",
+          "label": "minimal"
+        },
+        {
+          "id": "low",
+          "label": "low"
+        },
+        {
+          "id": "high",
+          "label": "high"
+        },
+        {
+          "id": "ultra",
+          "label": "ultra"
+        }
+      ],
+      "effectiveThinking": {
+        "thinkingDefault": "medium"
+      }
+    },
+    {
+      "ts": "2026-10-14T20:42:03.200Z",
+      "event": "metadata-medium-omitted",
+      "context": "sessions.list.defaults",
+      "key": "thinkingOptions",
+      "before": [
+        "off",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "ultra"
+      ],
+      "after": [
+        "off",
+        "minimal",
+        "low",
+        "high",
+        "ultra"
+      ],
+      "effectiveThinking": {
+        "thinkingDefault": "medium"
+      }
+    },
+    {
+      "ts": "2026-10-14T20:42:03.200Z",
+      "event": "metadata-medium-omitted",
+      "context": "sessions.list.main",
+      "key": "thinkingLevels",
+      "before": [
+        {
+          "id": "off",
+          "label": "off"
+        },
+        {
+          "id": "minimal",
+          "label": "minimal"
+        },
+        {
+          "id": "low",
+          "label": "low"
+        },
+        {
+          "id": "medium",
+          "label": "medium"
+        },
+        {
+          "id": "high",
+          "label": "high"
+        },
+        {
+          "id": "ultra",
+          "label": "ultra"
+        }
+      ],
+      "after": [
+        {
+          "id": "off",
+          "label": "off"
+        },
+        {
+          "id": "minimal",
+          "label": "minimal"
+        },
+        {
+          "id": "low",
+          "label": "low"
+        },
+        {
+          "id": "high",
+          "label": "high"
+        },
+        {
+          "id": "ultra",
+          "label": "ultra"
+        }
+      ],
+      "effectiveThinking": {
+        "thinkingLevel": "medium",
+        "thinkingDefault": "medium"
+      }
+    },
+    {
+      "ts": "2026-10-14T20:42:03.201Z",
+      "event": "metadata-medium-omitted",
+      "context": "sessions.list.main",
+      "key": "thinkingOptions",
+      "before": [
+        "off",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "ultra"
+      ],
+      "after": [
+        "off",
+        "minimal",
+        "low",
+        "high",
+        "ultra"
+      ],
+      "effectiveThinking": {
+        "thinkingLevel": "medium",
+        "thinkingDefault": "medium"
+      }
+    },
+    {
+      "ts": "2026-10-14T20:42:03.380Z",
+      "event": "native-result",
+      "id": "cc865406aceb2bd1e11be6b782133905e12aa74ca23a1f240080790006aaf59a",
+      "method": "chat.send",
+      "ok": true,
+      "status": "started",
+      "runIdSha256": "2992aec71691309552d8d6c69de87c591909f0bf9ab44ac3c70f29a9c2418382"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "observedVia": "Unmodified native GatewayClient sessions.list (read-only admin observer)",
+  "sessionKey": "agent:main:main",
+  "thinkingLevel": "medium",
+  "fastMode": false,
+  "rawReceiptSha256": "12a554121f102d202201e2dd0665a8e5b1172ca99660ca26258dfdb72b234eaf"
+}

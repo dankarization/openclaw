@@ -1,0 +1,67 @@
+{
+  "result": "PASS_REAL_ANDROID_MEDIUM_DIRECT_SEND_AND_QUEUED_RECONNECT",
+  "apkSource": "a3dd5af5727afd66f3dbedf42cc9a85152bb7ca0",
+  "apkSha256": "681118665160db825edeacbda7d4e30c9294f55b33052d2ca8e7c3e9f309ea8b",
+  "currentTestOnlyPrHead": "1508bc63fd59fe4ef4242288464e70fe3bf29ce2",
+  "runtimeEquivalence": "Only one helper test file changed from APK source:50deleted lines; runtime/build/dependencies unchanged",
+  "gatewaySource": "a8b899d9a0039249bc01e362684f6c51c3de40c9",
+  "actualUiMessages": [
+    "QA_MEDIUM_DIRECT_20261015",
+    "QA_MEDIUM_QUEUED_20261015"
+  ],
+  "directAcceptedAt": "2026-10-14T20:39:07.996Z",
+  "queuedAcceptedAt": "2026-10-14T20:42:03.380Z",
+  "offlineAt": "2026-10-14T20:40:02.803Z",
+  "onlineAt": "2026-10-14T20:41:21.031Z",
+  "wireThinking": [
+    "medium",
+    "medium"
+  ],
+  "modelReasoningEffort": [
+    "medium",
+    "medium"
+  ],
+  "finalThinking": "medium",
+  "finalFastMode": false,
+  "fixtures": {
+    "metadataFault": "Omit only Medium entries from advertised arrays; effective values/auth/handlers unchanged",
+    "model": "Disclosed deterministic OpenAI-compatible ACK provider; real native agent invocation, no model-intelligence claim",
+    "outbox": "Actual Android UI offline Send; no injected queue item or chat.send"
+  },
+  "sources": {
+    "metadata-relay.mjs": {
+      "originalSha256": "28282ca35f86e3cbcaa1e23a5e6c65f7b000e41882c47ff6af03683d7b1a9499",
+      "publicSanitizedSha256": "05303c263b7317232cc3bf0fd8628dccf60a66b80fa634a9366967aa29da2848"
+    },
+    "metadata-provider.mjs": {
+      "originalSha256": "bb56cac778080353c0fb3f2073d163f15e260622231836f2f77f775392e821f5",
+      "publicSanitizedSha256": "d3439c070a00f919e0f53b0fec2a1d24c416086102d235360c09a570c34ed99d"
+    },
+    "gateway-minimal.mjs": {
+      "originalSha256": "2c9e49d8096a6bfab85e6fdeee46db501e8f1eacdfe68a2b8fcfc03badb86216",
+      "publicSanitizedSha256": "3f39e4ea0795ff22a41933956393ded50f6e97442e4e89d7a0ec1118e9308c10"
+    },
+    "incomplete-launch.py": {
+      "originalSha256": "c87da5a264ec20829e9f9b14fca7b9f18ad2050257b67f7c5ad072e2ec9bdd83",
+      "publicSanitizedSha256": "956469c7dba5fb19ff1527e8552824c4c36994bf18b55832c67ace5853eb54c2"
+    },
+    "incomplete-ui.py": {
+      "originalSha256": "f9183b78f732519a7b6449971d53227314d89fcd10b68ad9619b0d51ca10694f",
+      "publicSanitizedSha256": "37b92052755d18c9693da63c1e21e637174efa2873b8310b7f1dc335ba76b55a"
+    },
+    "incomplete-credential.py": {
+      "originalSha256": "efe0e5c4200fb3b84bf5ba7cf2e72cb528de8e713b87231447cc55831b0239a8",
+      "publicSanitizedSha256": "289ca5fca8fadf97979011707e3bc8db853b8ae2a262418a925bf00257111cbd"
+    },
+    "OpenClawNativeCredentialFixture.java": {
+      "originalSha256": "0731baacd24388b001a97b3305ee9a0bbef5a2f7c0cca8cf1ad29f6b336d0c40",
+      "publicSanitizedSha256": "0731baacd24388b001a97b3305ee9a0bbef5a2f7c0cca8cf1ad29f6b336d0c40"
+    }
+  },
+  "limitations": [
+    "Synthetic own AVD/profile and deterministic model",
+    "Controlled incomplete metadata reproducer, not a naturally incomplete production catalog",
+    "Owner approval of write versus admin admission remains open",
+    "Native session setup/grant issued by separate admin before UI actions; neither UI message injected by RPC"
+  ]
+}
