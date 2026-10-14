@@ -1,0 +1,7 @@
+{
+  "verifiedAt": 1792004147.58946,
+  "transport": "actual Telegram Web file forward to owned QA bot",
+  "visibleDeliveredResponse": "QA_NATIVE_MEDIA_PROOF bytes=54525952 sha256=2fade4fa841545c954a8b55e00989b7aa559ece325011a080dae3d4e95fef124",
+  "screenshot": "telegram-agent-read-52MiB.jpg",
+  "noProductionChange": true
+}

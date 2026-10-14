@@ -1,0 +1,30 @@
+{
+  "scope": "Selected actual OpenAI API fields from the successful current turn; identity/runtime metadata omitted, paths and opaque call ID consistently replaced; not the full private request",
+  "sourceRequestSha256": "285105444a0119c9b668843af32bb7cfd74d1e5be9a9f863e8c7f1749a51883b",
+  "messages": [
+    {
+      "role": "user",
+      "contentExcerpt": "[media attached: /QA_WORKSPACE/media/inbound/STAGED_DIR/input-qa-large-document.bin]"
+    },
+    {
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "id": "CALL_1",
+          "type": "function",
+          "function": {
+            "name": "exec",
+            "arguments": "{\"command\": \"wc -c -- '/QA_WORKSPACE/media/inbound/STAGED_DIR/input-qa-large-document.bin' && sha256sum -- '/QA_WORKSPACE/media/inbound/STAGED_DIR/input-qa-large-document.bin'\", \"workdir\": \"/QA_WORKSPACE\", \"timeoutSeconds\": 90, \"yieldMs\": 10000}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "CALL_1",
+      "content": "Warning: continuation options are unavailable; running synchronously.\n\n\n\n54525952 /QA_WORKSPACE/media/inbound/STAGED_DIR/input-qa-large-document.bin\n2fade4fa841545c954a8b55e00989b7aa559ece325011a080dae3d4e95fef124  /QA_WORKSPACE/media/inbound/STAGED_DIR/input-qa-large-document.bin"
+    }
+  ],
+  "pairedOriginalCallIdSha256": "8d7f0c59da0ddb90b621fec41c1e7cbb6796d7240bae9e0875b2db7a8f83e0f7",
+  "actualPairedExecCalls": 1
+}

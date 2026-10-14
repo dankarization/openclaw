@@ -1,0 +1,27 @@
+// Complete native Gateway startup, including its normal Telegram polling/agent/tool owners.
+import fs from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
+import { execFileSync } from 'node:child_process';
+const root = '/QA_ROOT';
+const repo = root + '/media-lane/repo';
+const run = root + '/media-lane/proof/full-gateway';
+const actual = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+if (actual !== 'b6e89d0ee6988565f74bc1b82778f8df65196f32') throw Error('Exact media PR head changed');
+if (process.env.OPENCLAW_SKIP_CHANNELS) throw Error('Normal Telegram polling must remain enabled');
+Object.assign(process.env, { OPENCLAW_STATE_DIR: run + '/state', OPENCLAW_CONFIG_PATH: run + '/config.private.json', OPENCLAW_SKIP_BROWSER_CONTROL_SERVER: '1', OPENCLAW_SKIP_CANVAS_HOST: '1', OPENCLAW_SKIP_CRON: '1', OPENCLAW_SKIP_GMAIL_WATCHER: '1', TSX_TSCONFIG_PATH: repo + '/tsconfig.json' });
+const require = createRequire(repo + '/package.json');
+const { register } = await import(pathToFileURL(require.resolve('tsx/esm/api')));
+register({ tsconfig: repo + '/tsconfig.json' });
+const { validateConfigObject, captureRuntimeConfigAsyncReader } = await import(pathToFileURL(repo + '/src/config/config.ts'));
+const config = JSON.parse(await fs.readFile(process.env.OPENCLAW_CONFIG_PATH, 'utf8'));
+const checked = validateConfigObject(config);
+if (!checked.ok) throw Error(JSON.stringify(checked.issues));
+await captureRuntimeConfigAsyncReader()();
+const { startGatewayServer } = await import(pathToFileURL(repo + '/src/gateway/server.ts'));
+const server = await startGatewayServer(18948, { bind: 'loopback', controlUiEnabled: false });
+await server.startupSettled;
+console.log('QA_MEDIA_FULL_GATEWAY_READY port=18948 normalTelegramPolling=true');
+let stopping = false;
+const stop = async () => { if (stopping) return; stopping = true; await server.close({ reason: 'bounded media QA proof complete' }); process.exit(0); };
+process.on('SIGTERM', stop); process.on('SIGINT', stop);

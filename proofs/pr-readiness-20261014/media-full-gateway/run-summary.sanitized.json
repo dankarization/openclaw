@@ -1,0 +1,46 @@
+{
+  "status": "PASS_COMPLETE_NATIVE_GATEWAY_HOST_EXEC_TELEGRAM_ROUNDTRIP",
+  "executedSource": "b6e89d0ee6988565f74bc1b82778f8df65196f32",
+  "executedTree": "596e9f727453cd8a4d05d69b0fbf3768d6a8ff30",
+  "productCheckoutClean": true,
+  "dateUtc": "2026-10-14",
+  "successfulAttempt": "2026-10-14T18-48-28-367Z",
+  "fixtureRevision": 4,
+  "nativeExecRequestsThisAttempt": 1,
+  "modelRequestsThisAttempt": 2,
+  "fileBytes": 54525952,
+  "fileSha256": "2fade4fa841545c954a8b55e00989b7aa559ece325011a080dae3d4e95fef124",
+  "requestSha256": [
+    "1593e8bf7ad1ac5e04aa3763dffb806180fa0c77c38de7b60d98618d7738f8b4",
+    "285105444a0119c9b668843af32bb7cfd74d1e5be9a9f863e8c7f1749a51883b"
+  ],
+  "actualWireExecAndResultPaired": true,
+  "actualToolCommandContainsCurrentNativeAttachment": true,
+  "actualToolOutputContainsSamePathAndChecksum": true,
+  "nativeGatewayOutboundSendOkPresent": true,
+  "nativeGatewayCleanShutdownPresent": true,
+  "visibleTelegramResponse": "QA_NATIVE_MEDIA_PROOF bytes=54525952 sha256=2fade4fa841545c954a8b55e00989b7aa559ece325011a080dae3d4e95fef124",
+  "sources": {
+    "full-provider.mjs": {
+      "asExecutedSha256": "53e3d9d7a49099f1a4c4fb6c8a9c58a84936353cc3e598024fcf1e6bea3ca95f",
+      "publicSanitizedSha256": "a1d86c3aaf1e892ddd86b6e290d175c9aa6c3c2d58c62180b1a22e50c009bf53"
+    },
+    "full-gateway.mjs": {
+      "asExecutedSha256": "a634b6dd072f4377e28621d7ba13ddded2b191a1f647e75bb8ee09653feb18ef",
+      "publicSanitizedSha256": "3ac9a38af0808b58957e9fc18b30a00b1af1f5f042475cb9be170589308f9669"
+    },
+    "full-run.sh": {
+      "asExecutedSha256": "183870b91ae120f24c35fafb54bdadd0d2dfc4bf1be7be99dc84918c031b93ab",
+      "publicSanitizedSha256": "6fc82c441be72b6f78ac99bb8b9ddca94abff25eed91fb70c7a07b8f0fcfe35f"
+    }
+  },
+  "transportMapping": "Existing local Bot API accessed through loopback SSH forward; only own synthetic QA document mirrored as a regular file at the actual returned QA path. getFile response not rewritten.",
+  "limitations": [
+    "Contributor-owned real Telegram QA lane, not maintained leased Test Server",
+    "Source-run native Gateway, not packaged stable installation",
+    "Deterministic model fixture; orchestration and native tool access, not model intelligence",
+    "Host exec, sandbox off; no Docker/local-sandbox or SSH runtime proof",
+    "No latest-stable settings/media upgrade proof",
+    "No 4 GiB stress or aggregate-budget proof; maintainer resource-policy decision remains"
+  ]
+}

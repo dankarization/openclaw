@@ -1,0 +1,26 @@
+[
+  {
+    "at": "2026-10-14T18:49:51.768Z",
+    "fixtureRevision": 4,
+    "attempt": "2026-10-14T18-48-28-367Z",
+    "event": "native_exec_requested",
+    "requestNumber": 1,
+    "requestSha256": "1593e8bf7ad1ac5e04aa3763dffb806180fa0c77c38de7b60d98618d7738f8b4",
+    "stagedPathSha256": "18da48722c3dd9bfae71b5cc9b8fc4bf7acab02a75085183af5d33e9a4e24296",
+    "tool": "exec",
+    "pathSource": "actual user attachment marker in native model request",
+    "toolCallIdSha256": "3c07a2e401d7fa39b31fcb918574d8a8b4aacb140ea944e9d21d7ad8b01a51f2"
+  },
+  {
+    "at": "2026-10-14T18:49:52.018Z",
+    "fixtureRevision": 4,
+    "attempt": "2026-10-14T18-48-28-367Z",
+    "event": "native_tool_result_observed",
+    "requestNumber": 2,
+    "bytes": 54525952,
+    "sha256": "2fade4fa841545c954a8b55e00989b7aa559ece325011a080dae3d4e95fef124",
+    "outputSha256": "4eaca5aab60e777d114b7eafeb7ab10d0d49bff0ff5f8e173e03aed225083d7a",
+    "trailingRole": "tool",
+    "toolCallIdSha256": "8d7f0c59da0ddb90b621fec41c1e7cbb6796d7240bae9e0875b2db7a8f83e0f7"
+  }
+]
