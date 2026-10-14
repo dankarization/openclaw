@@ -1,0 +1,84 @@
+{
+  "topic-qa-prepare-receipt.json": {
+    "stage": "gateway-launched",
+    "results": [
+      {
+        "command": [
+          "config",
+          "set"
+        ],
+        "exitCode": 0
+      },
+      {
+        "command": [
+          "config",
+          "validate"
+        ],
+        "exitCode": 0
+      },
+      {
+        "command": [
+          "doctor",
+          "--lint"
+        ],
+        "exitCode": 0
+      }
+    ],
+    "head": "243d553c89f7a4944b03b71da15aacd3ce684af7",
+    "tree": "9b6b59c6786faaf1495651c35974aed9c9a6f6e8",
+    "gatewayPid": 112456,
+    "mockPid": 112455,
+    "finishedAt": 1791993938.4044704
+  },
+  "native-receipt-manual-owner-20261014.sanitized.json": {
+    "recordedAt": "2026-10-14T16:45:21.806Z",
+    "sourceHead": "243d553c89f7a4944b03b71da15aacd3ce684af7",
+    "readOwner": "loadSessionEntryReadOnly",
+    "readConsistency": "latest",
+    "topicName": "QA 166011 channel name C",
+    "label": "QA 166011 manual owner",
+    "displayName": "QA 166011 in...",
+    "updatedAt": 1791996187997,
+    "totalTokens": 11,
+    "deliveryOrigin": {
+      "provider": "telegram",
+      "chatType": "direct",
+      "threadIdSha256": "1ce8a4a71ba785bd430fc4a4e131cf9540cfd8a021262ce2b9a289c33f254346"
+    },
+    "environment": "dedicated contributor QA",
+    "sessionKeySha256": "2b0cdff55cec37a2b5d638dc9899465d2b69f0e1770398b9a08cd56cffc92ef8",
+    "sessionIdSha256": "83c04e2bce863125ae67a1484eae229bdb9087bd355c325e4794dda8ddd7fef9"
+  },
+  "native-receipt-quiet-rename-D-20261014.sanitized.json": {
+    "recordedAt": "2026-10-14T16:50:09.890Z",
+    "sourceHead": "243d553c89f7a4944b03b71da15aacd3ce684af7",
+    "readOwner": "loadSessionEntryReadOnly",
+    "readConsistency": "latest",
+    "topicName": "QA 166011 quiet rename D",
+    "label": "QA 166011 manual owner",
+    "displayName": "QA 166011 in...",
+    "updatedAt": 1791996187997,
+    "totalTokens": 11,
+    "deliveryOrigin": {
+      "provider": "telegram",
+      "chatType": "direct",
+      "threadIdSha256": "1ce8a4a71ba785bd430fc4a4e131cf9540cfd8a021262ce2b9a289c33f254346"
+    },
+    "environment": "dedicated contributor QA",
+    "sessionKeySha256": "2b0cdff55cec37a2b5d638dc9899465d2b69f0e1770398b9a08cd56cffc92ef8",
+    "sessionIdSha256": "83c04e2bce863125ae67a1484eae229bdb9087bd355c325e4794dda8ddd7fef9"
+  },
+  "quiet-rename-model-receipt.json": {
+    "before": {
+      "recordedAt": "2026-10-14T16:47:39.122608+00:00",
+      "modelRequestsLines": 30,
+      "mtime": "2026-10-14T16:45:24.456167+00:00"
+    },
+    "after": {
+      "recordedAt": "2026-10-14T16:51:17.807481+00:00",
+      "modelRequestsLines": 30,
+      "mtime": "2026-10-14T16:45:24.456167+00:00"
+    },
+    "modelRequestDelta": 0
+  }
+}
