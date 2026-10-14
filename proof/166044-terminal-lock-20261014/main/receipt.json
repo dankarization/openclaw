@@ -1,0 +1,93 @@
+{
+  "kind": "native-terminal-owner-real-sqlite-contention",
+  "sourceHead": "c05c277d04326b53858f85e2ea83c16b4756e83b",
+  "sourceTree": "bdea78650b3dc0031d0043716191f0c82521ef00",
+  "allowanceMs": 71000,
+  "requestedHoldMs": 8000,
+  "ready": {
+    "event": "ready",
+    "pid": 118614,
+    "runId": "9fad9837-6774-4864-bda9-7c3dcab9e69f",
+    "databasePath": "/home/dankar/openclaw-pr-qa-20261014/updater-lane/terminal-lock-proof-20261014/main-profile/state/openclaw.sqlite",
+    "allowanceMs": 71000,
+    "atMs": 1791998092314
+  },
+  "locked": {
+    "event": "locked",
+    "databasePath": "/home/dankar/openclaw-pr-qa-20261014/updater-lane/terminal-lock-proof-20261014/main-profile/state/openclaw.sqlite",
+    "pid": 118670,
+    "acquiredAtMs": 1791998092450,
+    "transactionActive": true
+  },
+  "operation": {
+    "event": "operation-result",
+    "outcome": "threw",
+    "error": {
+      "name": "Error",
+      "message": "database is locked",
+      "code": "ERR_SQLITE_ERROR",
+      "errcode": 5,
+      "errstr": "database is locked",
+      "stack": [
+        "Error: database is locked",
+        "    at <anonymous> (/home/dankar/openclaw-pr-qa-20261014/replay-baseline-c05c277/src/infra/sqlite-native-observer.ts:184:48)",
+        "    at execute (/home/dankar/openclaw-pr-qa-20261014/replay-baseline-c05c277/src/infra/sqlite-native-observer.ts:172:22)",
+        "    at DatabaseSync.database.exec (/home/dankar/openclaw-pr-qa-20261014/replay-baseline-c05c277/src/infra/sqlite-native-observer.ts:183:5)",
+        "    at execNativeBegin (/home/dankar/openclaw-pr-qa-20261014/replay-baseline-c05c277/src/infra/sqlite-transaction.ts:133:8)",
+        "    at beginImmediateTransaction (/home/dankar/openclaw-pr-qa-20261014/replay-baseline-c05c277/src/infra/sqlite-transaction.ts:146:5)",
+        "    at execTimedTransactionStep (/home/dankar/openclaw-pr-qa-20261014/replay-baseline-c05c277/src/infra/sqlite-transaction.ts:330:7)",
+        "    at runSqliteTransactionSync (/home/dankar/openclaw-pr-qa-20261014/replay-baseline-c05c277/src/infra/sqlite-transaction.ts:439:19)",
+        "    at <anonymous> (/home/dankar/openclaw-pr-qa-20261014/replay-baseline-c05c277/src/infra/sqlite-transaction.ts:601:5)",
+        "    at withSqlitePostCommitPublications (/home/dankar/openclaw-pr-qa-20261014/replay-baseline-c05c277/src/infra/sqlite-post-commit.ts:248:14)"
+      ]
+    },
+    "startedAtMs": 1791998092453,
+    "finishedAtMs": 1791998097549,
+    "durationMs": 5096.193455999999
+  },
+  "unlocked": {
+    "event": "unlocked",
+    "acquiredAtMs": 1791998092450,
+    "releasedAtMs": 1791998100459,
+    "heldMs": 8009.064852,
+    "transactionActive": false
+  },
+  "nativeReadout": {
+    "runId": "9fad9837-6774-4864-bda9-7c3dcab9e69f",
+    "createdAtMs": 1791998092175,
+    "updatedAtMs": 1791998092175,
+    "trigger": "cli",
+    "phase": "requested",
+    "status": "running",
+    "reason": null,
+    "origin": {},
+    "target": {},
+    "before": {},
+    "after": {},
+    "steps": [
+      {
+        "step": "requested",
+        "status": "in_progress",
+        "startedAtMs": 1791998092175
+      }
+    ],
+    "verification": {},
+    "repair": [],
+    "confirmedAtMs": null,
+    "finishedAtMs": null,
+    "downtimeMs": null
+  },
+  "joined": [
+    {
+      "exit": 2
+    },
+    {
+      "exit": 0
+    }
+  ],
+  "readerJoined": {
+    "exit": 0
+  },
+  "cleanup": "all-managed-children-joined",
+  "scope": "source behavior only; not published-driver or service-readiness proof"
+}
