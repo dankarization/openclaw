@@ -1,0 +1,57 @@
+{
+  "apkHead": "a3dd5af5727afd66f3dbedf42cc9a85152bb7ca0",
+  "apkSha256": "681118665160db825edeacbda7d4e30c9294f55b33052d2ca8e7c3e9f309ea8b",
+  "gatewayHead": "a8b899d9a0039249bc01e362684f6c51c3de40c9",
+  "profile": "isolated Android QA",
+  "grantedScopes": [
+    "operator.read"
+  ],
+  "actualAndroidUiEffortControlEnabled": false,
+  "negativeControlTransport": "two explicit RPCs forwarded on the actual authenticated Android operator socket; not claimed as UI emission",
+  "before": {
+    "thinkingLevel": "medium",
+    "fastMode": false
+  },
+  "mutations": [
+    {
+      "patch": {
+        "thinkingLevel": "high"
+      },
+      "ok": false,
+      "error": {
+        "code": "FORBIDDEN",
+        "message": "missing scope: operator.write",
+        "details": {
+          "code": "MISSING_SCOPE",
+          "missingScope": "operator.write",
+          "requiredScopes": [
+            "operator.write"
+          ]
+        }
+      }
+    },
+    {
+      "patch": {
+        "fastMode": true
+      },
+      "ok": false,
+      "error": {
+        "code": "FORBIDDEN",
+        "message": "missing scope: operator.write",
+        "details": {
+          "code": "MISSING_SCOPE",
+          "missingScope": "operator.write",
+          "requiredScopes": [
+            "operator.write"
+          ]
+        }
+      }
+    }
+  ],
+  "after": {
+    "thinkingLevel": "medium",
+    "fastMode": false
+  },
+  "preserved": true,
+  "elapsedMs": 75
+}
