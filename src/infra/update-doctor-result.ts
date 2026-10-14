@@ -171,6 +171,7 @@ export type UpdateDoctorWriteAuthority = {
   commandAuthority?: import("./update-managed-command-custody.js").ManagedCommandProcessAuthority;
   postCoreSchemaRepair?: { runId: string; assertCurrent: () => void };
   databaseGenerations?: UpdateDatabaseGenerations;
+  serviceInspectionDeadlineAtMs?: number;
   originalRecoveryCapture?: {
     runId: string;
     installRoot: string;

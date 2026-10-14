@@ -75,6 +75,7 @@ const scenarios = [
   "grantless-scratch-owned-incumbent",
   "grantless-scratch-owned-parent-git",
   "grantless-scratch-owned-parent-completed",
+  "grantless-scratch-owned-parent-budget",
   "grantless-scratch-owned-parent-pnpm-root-move",
   "grantless-scratch-owned-parent-git-root-switch",
   "grantless-scratch-owned-parent-wrong-handoff",
@@ -198,6 +199,7 @@ function runLegacyFinalizationScenario(scenario: (typeof scenarios)[number], sig
       OPENCLAW_UPDATE_IN_PROGRESS: "1",
       OPENCLAW_TEST_RUNTIME_LOG: "1",
       ...(completedByGateway ? { OPENCLAW_TEST_COMPLETED_TERMINAL: "1" } : {}),
+      ...(scenario.endsWith("-budget") ? { OPENCLAW_TEST_LEGACY_LEDGER_BUDGET: "47000" } : {}),
       ...(scratchEnvironment
         ? {
             TMPDIR: ownedEnvironment ? workerTemp : normalTemp,
@@ -371,7 +373,15 @@ function runLegacyFinalizationScenario(scenario: (typeof scenarios)[number], sig
           channel: "stable",
           downgradeRisk: false,
           shouldRestart: true,
-          opts: { json: true, yes: true, run: { runId, env } },
+          opts: {
+            json: true,
+            yes: true,
+            run: {
+              runId,
+              env,
+              ...(scenario.endsWith("-budget") ? { ledgerBusyTimeoutMs: 47_000 } : {}),
+            },
+          },
           result: {
             status: "ok",
             ...(completedByGateway

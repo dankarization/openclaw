@@ -44,6 +44,7 @@ import {
 } from "./update-command-config-snapshot.js";
 import { restoreFailedUpdateDatabases } from "./update-command-database-backup.js";
 import { createUpdateCommandExecutionGuards } from "./update-command-execution-guards.js";
+import { updateRunLedgerOptions } from "./update-command-ledger.js";
 import { readPackageUpdateIdentity } from "./update-command-package-identity.js";
 import { UpdateCommandPendingRecoveryFailure } from "./update-command-result.js";
 import type {
@@ -131,7 +132,7 @@ export async function rollbackFailedUpdate(params: {
       // Service authority and diagnostic history can select distinct state
       // roots. Neither may contain pending recovery before legacy mutation.
       if (opts.run && resolveOpenClawStateSqlitePath(opts.run.env) !== targetPath) {
-        await assertUpdateRecoveryAdmission({ env: opts.run.env });
+        await assertUpdateRecoveryAdmission(updateRunLedgerOptions(opts.run));
         assertCurrent();
       }
     } catch (error) {
@@ -443,7 +444,7 @@ export async function rollbackFailedUpdate(params: {
               endedAtMs: Date.now(),
               detail: restored.advisory?.message ?? restored.stderrTail ?? restored.reason,
             },
-            { env: opts.run.env },
+            updateRunLedgerOptions(opts.run),
           );
         }
         if (restored.exitCode !== 0) {
@@ -614,7 +615,7 @@ export async function rollbackFailedUpdate(params: {
           status: "completed",
           endedAtMs: Date.now(),
         },
-        { env: opts.run.env },
+        updateRunLedgerOptions(opts.run),
       );
     }
     failureReason = "restart-unhealthy";
@@ -711,7 +712,7 @@ export async function rollbackFailedUpdate(params: {
     if (run) {
       const endedAtMs = Date.now();
       for (const row of updateRunStepsFromResultStep(step)) {
-        recordUpdateRunStep(run.runId, { ...row, detail, endedAtMs }, { env: run.env });
+        recordUpdateRunStep(run.runId, { ...row, detail, endedAtMs }, updateRunLedgerOptions(run));
       }
     }
     return failed(failureReason);

@@ -5,6 +5,8 @@ import {
   normalizeFsSafeNativeEnv,
 } from "../../infra/fs-safe-env.js";
 import {
+  resolveOwnedManagedUpdateEnv,
+  resolveUpdatedInstallCommandEnv,
   withOwnedManagedUpdateEnv,
   withUpdateEnv,
   withUpdateInProgressEnv,
@@ -91,5 +93,19 @@ it.skipIf(process.platform !== "win32")(
     expect(process.env.OPENCLAW_STATE_DIR).toBe("./previous-state");
     expect(process.env.openclaw_state_dir).toBe("./previous-state");
     expect(fsSafeEnvInput(process.env).OPENCLAW_FS_SAFE_NATIVE_MODE).toBeUndefined();
+  },
+);
+
+it.each(["TMPDIR", "TMP", "TEMP"] as const)(
+  "retains explicit caller %s across owned service environment composition",
+  (key) => {
+    const processEnv = { [key]: "/operator/plex/scratch", OPENCLAW_STATE_DIR: "/caller/state" };
+    const serviceEnv = { [key]: "/service/ssd/scratch", OPENCLAW_STATE_DIR: "/service/state" };
+    for (const resolve of [resolveUpdatedInstallCommandEnv, resolveOwnedManagedUpdateEnv]) {
+      const env = resolve({ processEnv, serviceEnv });
+      expect(env[key]).toBe("/operator/plex/scratch");
+      expect(env.OPENCLAW_STATE_DIR).toBe("/service/state");
+      expect(resolve({ processEnv: {}, serviceEnv })[key]).toBe("/service/ssd/scratch");
+    }
   },
 );

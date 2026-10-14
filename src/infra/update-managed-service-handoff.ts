@@ -140,7 +140,7 @@ function recordRunWarnings(ledger) {
   if (!params.runId) return;
   for (const [step, detail] of runWarnings) {
     try {
-      ledger.recordUpdateRunStep(params.runId, { step, status: "completed", detail, endedAtMs: Date.now() });
+      ledger.recordUpdateRunStep(params.runId, { step, status: "completed", detail, endedAtMs: Date.now() }, ledgerOptions);
       runWarnings.delete(step);
     } catch { /* The candidate runtime records warnings after state migration. */ }
   }
@@ -244,7 +244,10 @@ function openStateDatabase() {
     const sqlite = require("node:sqlite");
     fs.mkdirSync(path.dirname(params.stateDatabasePath), { recursive: true, mode: 0o700 });
     db = new sqlite.DatabaseSync(params.nodeSqliteLocation);
-    db.exec("PRAGMA busy_timeout = 5000;");
+    const busyTimeoutMs = params.ledgerBusyTimeoutMs ?? 5000;
+    if (!Number.isSafeInteger(busyTimeoutMs) || busyTimeoutMs < 0 || busyTimeoutMs > 2_147_483_647)
+      throw new Error("managed update SQLite budget is invalid");
+    db.exec("PRAGMA busy_timeout = " + busyTimeoutMs + ";");
     leaseStore.transact(db, () => {
       assertStateDatabaseWriteAllowed(db);
       db.exec(extractSqliteTableSchema(OPENCLAW_STATE_SCHEMA_SQL, "gateway_restart_sentinel", {
@@ -293,21 +296,23 @@ let runOutcome;
 let terminalRuntimePath = params.recoveryModulePath;
 let serviceStoppedAtMs, serviceDowntimeMs;
 
+const ledgerOptions = { busyTimeoutMs: params.ledgerBusyTimeoutMs };
+
 async function finishManagedUpdateRun() {
   if (!runLedger || !runOutcome) return;
   if (foregroundParked && runOutcome.status === "succeeded") return;
   if (!ownsManagedUpdateLease()) throw new Error("managed update terminal writer lost its current claim");
   const terminalResult = { ...runOutcome, ...(serviceDowntimeMs !== undefined ? { downtimeMs: serviceDowntimeMs } : {}) };
-  if (!updaterStarted) { recordRunWarnings(runLedger); await runLedger.finishUpdateRun(params.runId, terminalResult); }
+  if (!updaterStarted) { recordRunWarnings(runLedger); await runLedger.finishUpdateRun(params.runId, terminalResult, ledgerOptions); }
   else {
     // Doctor may have advanced the schema. A new process loads the candidate's
     // entire module graph; a cache-busted import would retain old DB readers.
     const payload = JSON.stringify([terminalRuntimePath, params.runId, terminalResult, [...runWarnings],
       path.join(params.cwd, "runtime", ${JSON.stringify(MANAGED_HANDOFF_RUNTIME_ENTRY)}),
-      params.updateLeaseDatabaseIdentity, params.updateLeaseKey, params.handoffId, managedUpdateLease.helper]);
+      params.updateLeaseDatabaseIdentity, params.updateLeaseKey, params.handoffId, managedUpdateLease.helper, params.ledgerBusyTimeoutMs]);
     if (Buffer.byteLength(payload) > 64 * 1024) throw new Error("managed update terminal result exceeds the command payload limit");
     const exit = await runOwnedUpdateCommand("finalize", [process.execPath, ...params.runtimeArgs, "--input-type=module", "-e",
-      'import { pathToFileURL } from "node:url"; const [modulePath, runId, result, warnings, leaseRuntime, databaseIdentity, root, owner, helper] = JSON.parse(process.argv[1]); const { finishUpdateRun, recordUpdateRunDiagnostic, recordUpdateRunStep } = await import(pathToFileURL(modulePath).href); const { createManagedHandoffLeaseStore } = await import(pathToFileURL(leaseRuntime).href); const store = createManagedHandoffLeaseStore({ databasePath: databaseIdentity.databasePath, existingIdentity: databaseIdentity }); const current = store.read(root); const lease = current.kind === "current" ? current.lease : null; if (!lease || lease.owner !== owner || lease.executor.pid !== process.pid || JSON.stringify(lease.helper) !== JSON.stringify(helper) || !(store.isProcessIdentityCurrent(lease.executor) || (process.connected && store.acceptParentBoundExecutor(lease)))) throw new Error("managed update terminal writer lost its current claim"); for (const [step, detail] of warnings) { try { if (recordUpdateRunDiagnostic) recordUpdateRunDiagnostic(runId, detail, undefined, step); else recordUpdateRunStep(runId, {step,status:"completed",detail,endedAtMs:Date.now()}); } catch {} } await finishUpdateRun(runId, result);',
+      'import { pathToFileURL } from "node:url"; const [modulePath, runId, result, warnings, leaseRuntime, databaseIdentity, root, owner, helper, busyTimeoutMs] = JSON.parse(process.argv[1]); const ledgerOptions = { busyTimeoutMs: busyTimeoutMs ?? undefined }; const { finishUpdateRun, recordUpdateRunDiagnostic, recordUpdateRunStep } = await import(pathToFileURL(modulePath).href); const { createManagedHandoffLeaseStore } = await import(pathToFileURL(leaseRuntime).href); const store = createManagedHandoffLeaseStore({ databasePath: databaseIdentity.databasePath, existingIdentity: databaseIdentity }); const current = store.read(root); const lease = current.kind === "current" ? current.lease : null; if (!lease || lease.owner !== owner || lease.executor.pid !== process.pid || JSON.stringify(lease.helper) !== JSON.stringify(helper) || !(store.isProcessIdentityCurrent(lease.executor) || (process.connected && store.acceptParentBoundExecutor(lease)))) throw new Error("managed update terminal writer lost its current claim"); for (const [step, detail] of warnings) { try { if (recordUpdateRunDiagnostic) recordUpdateRunDiagnostic(runId, detail, ledgerOptions, step); else recordUpdateRunStep(runId, {step,status:"completed",detail,endedAtMs:Date.now()}, ledgerOptions); } catch {} } await finishUpdateRun(runId, result, ledgerOptions);',
       payload], params.recoveryTimeoutMs);
     if (exit.signal || exit.code !== 0) throw new Error("installed runtime could not finalize the update run");
   }
@@ -1453,7 +1458,7 @@ async function spawnManagedServiceUpdateHandoff(
               detail: message,
               endedAtMs: Date.now(),
             },
-            { env: serviceEnv },
+            { env: serviceEnv, busyTimeoutMs: params.ledgerBusyTimeoutMs },
           );
         } catch {
           /* Identity warnings must not abort an update. */
@@ -1560,6 +1565,7 @@ async function spawnManagedServiceUpdateHandoff(
   const helperParams = {
     operatorRestartWarning: owner.operatorRestartWarning,
     runId: metaFile.meta.runId,
+    ledgerBusyTimeoutMs: params.ledgerBusyTimeoutMs,
     beforePark: Boolean(params.beforePark),
     requester: resolveManagedUpdateRequester(params.requester),
     serviceManagerEnv: resolveServiceManagerEnv(serviceEnv),

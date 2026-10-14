@@ -44,6 +44,7 @@ import type {
   DoctorMaintenanceParams,
 } from "./doctor-maintenance-types.js";
 import { isDoctorUpdateRepairMode, resolveDoctorRepairMode } from "./doctor-repair-mode.js";
+import { resolveRemainingDoctorServiceInspectionTimeoutMs } from "./doctor-service-inspection-budget.js";
 import {
   assertDoctorServiceSelection,
   isServiceRepairExternallyManaged,
@@ -63,6 +64,8 @@ export async function beginDoctorMaintenance(
     return undefined;
   }
   const env = { ...process.env, ...(params.runId ? { [UPDATE_RUN_ID_ENV]: params.runId } : {}) };
+  const remainingServiceTimeout = () =>
+    resolveRemainingDoctorServiceInspectionTimeoutMs(params.serviceInspectionDeadlineAtMs);
   // Ordinary activation remains with the parent. Stale-instance recovery below
   // retains custody through offline repair and verified restoration.
   const parentActivation = isDoctorUpdateRepairMode(resolveDoctorRepairMode(params.options))
@@ -333,6 +336,7 @@ export async function beginDoctorMaintenance(
     await acquireStoppedMaintenanceResources();
     assertUpdateAdmissionCurrent?.();
     await assertDoctorAgentLeaseAdmission(env);
+    remainingServiceTimeout();
     repairStoresMayBeOpen = true;
   };
   let admissionFailureHandled = false;
@@ -433,6 +437,7 @@ export async function beginDoctorMaintenance(
           shouldRestart: true,
           jsonMode: true,
           phase: "inspect",
+          timeoutMs: remainingServiceTimeout(),
         });
         assertDoctorMaintenanceInspection(inspection, env);
         serviceUpdateVerdict = inspection.serviceUpdateVerdict;
@@ -524,6 +529,10 @@ export async function beginDoctorMaintenance(
                           jsonMode: true,
                           expectedService: inspection,
                           retainNativeIdentity: true,
+                          timeoutMs: remainingServiceTimeout(),
+                          assertDeadline: () => {
+                            remainingServiceTimeout();
+                          },
                           assertCurrent: () => assertServiceCurrent?.(),
                           warn,
                           onStopped: (before) => {

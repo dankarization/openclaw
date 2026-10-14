@@ -19,6 +19,7 @@ export type UpdatePostCoreInput = {
   root: string;
   requester?: UpdateRequester;
   originalRecoveryCapture?: UpdateRecoveryBaselineRef;
+  ledgerBusyTimeoutMs?: number;
   opts: Pick<UpdateCommandOptions, "json" | "restart" | "yes" | "acceptCapabilities" | "timeout">;
 };
 
@@ -27,6 +28,8 @@ export type UpdateDoctorInput = {
   runId: string;
   root: string;
   configInputHash: string;
+  /** Parent phase deadline; absent on published drivers without this capability. */
+  serviceInspectionDeadlineAtMs?: number;
   requester?: UpdateRequester;
   repair: boolean;
   yes?: boolean;
@@ -34,6 +37,7 @@ export type UpdateDoctorInput = {
   postCoreSchemaRepair?: true;
   databaseGenerations?: UpdateDatabaseGenerations;
   originalRecoveryCapture?: UpdateRecoveryBaselineRef;
+  ledgerBusyTimeoutMs?: number;
 };
 
 export type MigratedUpdateFinalizationInput = Partial<UpdateTimeoutHandoff> & {

@@ -4,6 +4,7 @@ import { needsCandidateManagedServiceStop } from "../cli/update-cli/update-comma
 import { UpdateCommandRecoveryPendingError } from "../cli/update-cli/update-command-recovery-error.js";
 import type { PreManagedServiceStop } from "../cli/update-cli/update-command-service-context-types.js";
 import { maybeStopManagedServiceBeforeMutableUpdate } from "../cli/update-cli/update-command-service-maintenance.js";
+import { resolveRemainingDoctorServiceInspectionTimeoutMs } from "../commands/doctor-service-inspection-budget.js";
 import { cloneEnvWithPlatformSemantics } from "../config/config-env-vars.js";
 import {
   findServiceOwnershipRefusal,
@@ -108,6 +109,8 @@ export async function stopSupervisedPredecessorGateway(
   params: {
     root: string;
     timeoutMs?: number;
+    ledgerBusyTimeoutMs?: number;
+    serviceInspectionDeadlineAtMs?: number;
     assertCurrent: () => void;
     warn: (message: string) => void;
   },
@@ -145,6 +148,7 @@ export async function stopSupervisedPredecessorGateway(
       { step, status: "completed", endedAtMs: stoppedAtMs },
       {
         env,
+        busyTimeoutMs: params.ledgerBusyTimeoutMs,
         context,
         assertCurrent: params.assertCurrent,
         retainSettlement(completion) {
@@ -171,16 +175,22 @@ export async function stopSupervisedPredecessorGateway(
   try {
     // The native stop reports its mutation before later checks can still throw;
     // the ledger keeps that fact for finalization and recovery either way.
+    const remainingMs = resolveRemainingDoctorServiceInspectionTimeoutMs(
+      params.serviceInspectionDeadlineAtMs,
+    );
     const state = await maybeStopManagedServiceBeforeMutableUpdate({
       updateInstallKind: "package",
       root: params.root,
       shouldRestart: true,
       jsonMode: true,
       phase: "prepare",
-      // The delegated Doctor input carries no step budget; bound the drain and
-      // stop by the service stop budget so a stuck predecessor cannot outlive
-      // the parent's Doctor allowance.
-      timeoutMs: params.timeoutMs ?? GATEWAY_SERVICE_STOP_TIMEOUT_MS,
+      timeoutMs: Math.min(
+        params.timeoutMs ?? GATEWAY_SERVICE_STOP_TIMEOUT_MS,
+        remainingMs ?? Infinity,
+      ),
+      assertDeadline: () => {
+        resolveRemainingDoctorServiceInspectionTimeoutMs(params.serviceInspectionDeadlineAtMs);
+      },
       onStopped: record,
       assertCurrent: params.assertCurrent,
       warn: params.warn,

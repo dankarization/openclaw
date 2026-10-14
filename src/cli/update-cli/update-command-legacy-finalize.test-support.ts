@@ -42,6 +42,10 @@ const overrides = new Map<string, string>([
     source("./update-command-convergence.ts"),
     `export async function convergeUpdatePlugins(p) {
     p.assertCurrent();
+    if (process.env.OPENCLAW_TEST_LEGACY_LEDGER_BUDGET) {
+      const expected=Number(process.env.OPENCLAW_TEST_LEGACY_LEDGER_BUDGET);
+      if(p.opts.run.ledgerBusyTimeoutMs!==expected) throw new Error("Legacy per-run writer budget was lost in candidate transfer");
+    }
     return {resultWithPostUpdate:p.result,postUpdateConfigSnapshot:p.configSnapshot};
   }`,
   ],

@@ -158,6 +158,8 @@ export async function stopLaunchAgent({
   onMutation,
   assertCurrent,
   updateHandoff,
+  beforeEffect,
+  prepareEffect,
 }: GatewayServiceControlArgs): Promise<void> {
   const serviceEnv = env ?? (process.env as GatewayServiceEnv);
   const domain = resolveLaunchAgentGuiDomain();
@@ -284,7 +286,9 @@ export async function stopLaunchAgent({
     if (persistDisable) {
       await assertStopCurrent();
       assertServingCurrent();
-      const disabled = await execLaunchctl(["disable", serviceTarget]);
+      await prepareEffect?.();
+      assertServingCurrent();
+      const disabled = await execLaunchctl(["disable", serviceTarget], undefined, beforeEffect);
       if (disabled.code === 0) {
         reportMutation("disable");
       } else {
@@ -296,7 +300,13 @@ export async function stopLaunchAgent({
     // --disable additionally preserves the operator's policy across login/reboot.
     await assertStopCurrent();
     assertServingCurrent();
-    const bootout = await execLaunchctl(["bootout", serviceTarget], LAUNCH_AGENT_STOP_TIMEOUT_MS);
+    await prepareEffect?.();
+    assertServingCurrent();
+    const bootout = await execLaunchctl(
+      ["bootout", serviceTarget],
+      LAUNCH_AGENT_STOP_TIMEOUT_MS,
+      beforeEffect,
+    );
     if (bootout.code !== 0 && !isLaunchctlNotLoaded(bootout)) {
       throw launchAgentStopError(
         serviceTarget,

@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { collectNestedErrorCandidates } from "@openclaw/normalization-core/error-coercion";
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
+import { resolveRemainingDoctorServiceInspectionTimeoutMs } from "../../commands/doctor-service-inspection-budget.js";
 import {
   UPDATE_DEFER_CONFIGURED_PLUGIN_INSTALL_REPAIR_ENV,
   UPDATE_PARENT_SUPPORTS_DOCTOR_CONFIG_WRITE_ENV,
@@ -106,6 +107,7 @@ export async function runUpdateFinalizationDoctorInFreshProcess(params: {
   json: boolean;
   workspaceSuggestions?: boolean;
   timeoutMs?: number;
+  serviceInspectionDeadlineAtMs?: number;
   nodeRunner?: string;
   entryPath?: string;
   onWarnings?: (warnings: string[]) => void;
@@ -113,6 +115,14 @@ export async function runUpdateFinalizationDoctorInFreshProcess(params: {
   /** Propagate a refused child authority to the finalization owner without retrying it. */
   onAuthorityRefused?: () => void;
 }): Promise<PluginUpdateWarning | void> {
+  const requestedTimeoutMs = params.opts
+    ? parseUpdateTimeoutMs(params.opts.timeout)
+    : params.timeoutMs;
+  const serviceInspectionDeadlineAtMs =
+    params.serviceInspectionDeadlineAtMs ??
+    (requestedTimeoutMs === undefined ? undefined : Date.now() + requestedTimeoutMs);
+  const doctorTimeoutMs = () =>
+    resolveRemainingDoctorServiceInspectionTimeoutMs(serviceInspectionDeadlineAtMs);
   const {
     run,
     executorFence,
@@ -151,7 +161,7 @@ export async function runUpdateFinalizationDoctorInFreshProcess(params: {
       cwd: params.root,
       // Normal updates also carry a default step allowance. Only operator opts
       // may impose a Doctor deadline; standalone finalization supplies its own.
-      timeoutMs: params.opts ? parseUpdateTimeoutMs(params.opts.timeout) : params.timeoutMs,
+      timeoutMs: doctorTimeoutMs(),
       maxOutputBytes: 4 * 1024 * 1024,
       terminateOnOutputLimit: true,
       onOutputChunk: captureUpdateFinalizationDoctorOutput(params.phase),
@@ -185,7 +195,7 @@ export async function runUpdateFinalizationDoctorInFreshProcess(params: {
           workerCommand,
           {
             cwd: params.root,
-            timeoutMs: params.timeoutMs,
+            timeoutMs: doctorTimeoutMs(),
             baseEnv,
             env: commandOptions.env,
           },
@@ -209,6 +219,10 @@ export async function runUpdateFinalizationDoctorInFreshProcess(params: {
           },
           input: {
             configInputHash: snapshot.hash,
+            ledgerBusyTimeoutMs: run?.ledgerBusyTimeoutMs,
+            ...(serviceInspectionDeadlineAtMs !== undefined
+              ? { serviceInspectionDeadlineAtMs }
+              : {}),
             originalRecoveryCapture: run?.originalRecoveryCapture,
             repair: true,
             databaseGenerations:
@@ -220,7 +234,11 @@ export async function runUpdateFinalizationDoctorInFreshProcess(params: {
               : {}),
           },
         },
-        (runCommand) => runCommand([...workerCommand, "--doctor"], commandOptions),
+        (runCommand) =>
+          runCommand([...workerCommand, "--doctor"], {
+            ...commandOptions,
+            timeoutMs: doctorTimeoutMs(),
+          }),
       );
       result = child;
       assertUpdateDoctorChildSucceeded(child);
