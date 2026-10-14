@@ -240,7 +240,6 @@ fun ShellScreen(
           drawerContent = {
             OpenClawSidebar(
               viewModel = viewModel,
-              rowHostBand = foldBounds.sidebarBand,
               agents = gatewayAgents,
               selectedAgentId = chatSessionOwnerAgentId ?: gatewayDefaultAgentId,
               sessions = chatSessions,

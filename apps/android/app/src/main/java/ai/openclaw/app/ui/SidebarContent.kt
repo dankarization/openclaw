@@ -80,8 +80,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.onPlaced
-import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -89,9 +87,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.round
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -497,28 +493,6 @@ internal data class SidebarPalette(
   val hairline: Color,
 )
 
-internal class SidebarRowHost {
-  private data class Placement(
-    val band: IntRect?,
-    val viewport: IntRect,
-  )
-
-  private var placement: Placement? = null
-  var generation by mutableLongStateOf(0L)
-    private set
-
-  fun recordPlacement(
-    band: IntRect?,
-    viewport: IntRect,
-  ) {
-    val next = Placement(band, viewport)
-    if (next != placement) {
-      placement = next
-      generation++
-    }
-  }
-}
-
 internal fun sidebarPalette(colors: ClawColors): SidebarPalette =
   SidebarPalette(
     background = colors.canvas,
@@ -548,14 +522,12 @@ internal fun OpenClawSidebar(
   onSelectCatalogSession: (SessionCatalogEntry) -> Unit,
   onCreateCatalogSession: (String) -> Unit,
   onSelectDestination: (SidebarDestination) -> Unit,
-  rowHostBand: IntRect? = null,
 ) {
   val palette = sidebarPalette(ClawTheme.colors)
   var sessionNowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
   val scope = rememberCoroutineScope()
   val lifecycle = LocalLifecycleOwner.current.lifecycle
   val scrollState = rememberScrollState()
-  val rowHost = remember { SidebarRowHost() }
   val agentPicker = agentPickerState(agents, selectedAgentId)
   val storedGroups by viewModel.sessionCustomGroups.collectAsState()
   val storedSectionOrder by viewModel.sessionSectionOrder.collectAsState()
@@ -672,7 +644,6 @@ internal fun OpenClawSidebar(
         SidebarSessionRow(
           session = session,
           attention = attentionFor(listOf(sidebarAttentionSessionKey(session.key, session.ownerAgentId ?: selectedAgentId ?: defaultAgentId))),
-          rowHost = rowHost,
           selected = session.key == activeSessionKey,
           palette = palette,
           onClick = { onSelectSession(session) },
@@ -875,10 +846,7 @@ internal fun OpenClawSidebar(
           Modifier
             .weight(1f)
             .fillMaxWidth()
-            .onPlaced {
-              // Observe the viewport, never row reorder/drag offsets or the scrolling content.
-              rowHost.recordPlacement(rowHostBand, IntRect(it.positionInParent().round(), it.size))
-            }.verticalScroll(scrollState),
+            .verticalScroll(scrollState),
       ) {
         if (searchState.query.isNotEmpty()) {
           SidebarSectionTitle(nativeString("Threads"), palette)
@@ -894,7 +862,6 @@ internal fun OpenClawSidebar(
           }
         } else {
           SidebarPagesHeader(
-            rowHost = rowHost,
             expanded = pagesExpanded,
             menuMode = pagesMenuMode,
             destinations = orderedPages,
@@ -925,7 +892,6 @@ internal fun OpenClawSidebar(
               key(destination.stableId) {
                 SidebarNavigationRow(
                   destination = destination,
-                  rowHost = rowHost,
                   selected = destination == activeDestination,
                   palette = palette,
                   onClick = { onSelectDestination(destination) },
@@ -1228,7 +1194,6 @@ internal fun OpenClawSidebar(
                   if (section.expanded) {
                     SidebarSessionCatalog(
                       attentionFor = ::attentionFor,
-                      rowHost = rowHost,
                       state = catalogState,
                       catalog = catalog,
                       activeSessionKey = activeSessionKey,
@@ -1510,7 +1475,6 @@ private fun SidebarGroupFolderMenu(
 
 @Composable
 private fun SidebarPagesHeader(
-  rowHost: SidebarRowHost,
   expanded: Boolean,
   menuMode: SidebarPagesMenuMode,
   destinations: List<SidebarDestination>,
@@ -1630,7 +1594,6 @@ private fun SidebarPagesHeader(
                 val visible = destination.stableId in visiblePageIds
                 SidebarNavigationRow(
                   destination = destination,
-                  rowHost = rowHost,
                   selected = false,
                   pinned = visible,
                   palette = palette,
@@ -1665,7 +1628,6 @@ private fun SidebarPagesHeader(
 @Composable
 private fun SidebarSessionCatalog(
   attentionFor: (Collection<String>) -> SidebarAttention?,
-  rowHost: SidebarRowHost,
   state: SessionCatalogState,
   catalog: SessionCatalog,
   activeSessionKey: String,
@@ -1785,7 +1747,6 @@ private fun SidebarSessionCatalog(
                 SidebarCatalogSessionRow(
                   session = session,
                   attention = session.sessionKey?.let { attentionFor(listOf(sidebarAttentionSessionKey(it, session.agentId ?: state.agentId))) },
-                  rowHost = rowHost,
                   liveSession = session.sessionKey?.let(liveSessionsByKey::get),
                   selected = session.sessionKey == activeSessionKey,
                   continuing = state.continuingEntryId == session.locatorId,
@@ -1826,7 +1787,6 @@ internal fun sidebarCatalogSessionSelectionEnabled(
 private fun SidebarCatalogSessionRow(
   session: SessionCatalogEntry,
   attention: SidebarAttention?,
-  rowHost: SidebarRowHost,
   liveSession: ChatSessionEntry?,
   selected: Boolean,
   continuing: Boolean,
@@ -1861,7 +1821,6 @@ private fun SidebarCatalogSessionRow(
   SidebarRowSurface(
     selected = selected,
     stateDescription = attention?.status,
-    rowHost = rowHost,
     palette = palette,
     enabled = enabled && selectionEnabled,
     onClick = onClick,

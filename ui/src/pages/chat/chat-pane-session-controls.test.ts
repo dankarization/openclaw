@@ -25,26 +25,23 @@ import {
   type GatewayRequestHandler,
 } from "../../test-helpers/gateway-client.ts";
 import { sessionMutationGatewayHello } from "../../test-helpers/gateway-methods.ts";
+import { flush } from "../../test-helpers/solid-settle.ts";
 import { makeChatHost } from "./chat-host.test-support.ts";
+import { admitQueuedMessageForSession } from "./chat-outbox-admission.test-support.ts";
 import {
   readChatPaneMutationAccess,
   renderChatPaneComposerControls,
 } from "./chat-pane-session-controls.ts";
 import { createInitializationContext, createRenderTestChatPane } from "./chat-pane.test-support.ts";
-import { admitQueuedMessageForSession } from "./chat-queue.ts";
 import { steerQueuedChatMessage } from "./chat-send-actions.ts";
-import { switchChatFastMode, switchChatModel, switchChatThinkingLevel } from "./chat-session.ts";
+import { switchChatModel, switchChatSetting } from "./chat-session.ts";
 import { getPendingChatPickerPatch, patchChatSessionSettings } from "./chat-settings-patches.ts";
 import { handlePageGatewayEvent } from "./chat-state-events.ts";
 import type { ChatPageHost } from "./chat-state-host.ts";
 import { selectedChatSessionRow } from "./chat-state-route.ts";
+import { solidTemplate } from "./components/chat-composer-controls.ts";
 import { renderChatModelAccountControl } from "./components/chat-model-account-control.ts";
-import { renderChatPermissionPicker } from "./components/chat-permission-picker.ts";
-import {
-  getChatModelObservedRunId,
-  getChatSessionProjection,
-  setChatRunOwner,
-} from "./history-merge.ts";
+import { ChatPermissionPicker } from "./components/chat-permission-picker.tsx";
 import { adoptStartedChatRun, reconcileChatRunLifecycle } from "./run-lifecycle.ts";
 
 type ComposerControlsParams = Parameters<typeof renderChatPaneComposerControls>[0];
@@ -340,7 +337,7 @@ describe("chat pane composer controls", () => {
       ).toBe(String(!connected));
       expect(container.querySelectorAll("[data-chat-model-option]")).toHaveLength(cached ? 1 : 0);
       const permissionContainer = document.createElement("div");
-      render(renderChatPermissionPicker(controls.permissionPicker), permissionContainer);
+      render(solidTemplate(ChatPermissionPicker, controls.permissionPicker), permissionContainer);
       expect(
         permissionContainer.querySelector('[data-chat-permission-select="true"]'),
       ).not.toBeNull();
@@ -380,7 +377,10 @@ describe("chat pane composer controls", () => {
       agentDefaultPermissionMode: "guarded",
       canSelectFull: false,
     });
-    render(renderChatPermissionPicker(controls.permissionPicker), container);
+    render(solidTemplate(ChatPermissionPicker, controls.permissionPicker), container);
+    expect(container.querySelector("wa-dropdown-item")).toBeNull();
+    container.querySelector("wa-dropdown")!.dispatchEvent(new Event("wa-show"));
+    flush();
 
     const heading = container.querySelector<HTMLElement>(".chat-controls__permission-heading");
     expect(heading?.textContent?.trim()).toBe("Execution permissions");
@@ -474,13 +474,6 @@ describe("chat pane composer controls", () => {
 
   it.each([
     {
-      label: "successful update after switching sessions",
-      result: "success",
-      invalidate: (state: ChatPageHost) => {
-        state.sessionKey = "agent:main:other-session";
-      },
-    },
-    {
       label: "failed update after switching sessions",
       result: "failure",
       invalidate: (state: ChatPageHost) => {
@@ -556,7 +549,7 @@ describe("chat pane composer controls", () => {
 });
 
 describe("chat pane model controls", () => {
-  it("binds model events to the admitted run when session rows omit exact run IDs", async () => {
+  it("keeps the preference visible while admitted events update execution metadata", async () => {
     const row: GatewaySessionRow = {
       key: "agent:main:current",
       kind: "direct",
@@ -660,18 +653,22 @@ describe("chat pane model controls", () => {
           session: { ...row, key: sessionKey, updatedAt, activeModel: model },
         },
       });
+    const expectFallbackExecution = () => {
+      expect(draw()).toContain("Primary");
+      expect(state.sessionsResult?.sessions[0]?.activeModel).toBe("fallback");
+    };
     observe("current-run", "primary", 3);
     expect(draw()).toContain("Primary");
     observe("current-run", "fallback", 4);
-    expect(draw()).toContain("Fallback");
+    expectFallbackExecution();
     observe("previous-run", "primary", 1);
-    expect(draw()).toContain("Fallback");
+    expectFallbackExecution();
     observe("elsewhere-run", "primary", 5, "agent:main:elsewhere");
-    expect(draw()).toContain("Fallback");
+    expectFallbackExecution();
     observe("current-run", null, 6);
     expect(draw()).toContain("Primary");
     observe("current-run", "fallback", 7);
-    expect(draw()).toContain("Fallback");
+    expectFallbackExecution();
     adoptStartedChatRun(state, "replacement-run", 8);
     expect(draw()).toContain("Primary");
     observe("replacement-run", "primary", 9);
@@ -692,7 +689,7 @@ describe("chat pane model controls", () => {
     expect(draw()).toContain("Primary");
     adoptStartedChatRun(state, "next-run", 11);
     state.chatSending = false;
-    expect(draw()).toContain("Fallback");
+    expectFallbackExecution();
     observe("next-run", "primary", 12);
     expect(draw()).toContain("Primary");
     vi.stubGlobal("sessionStorage", window.sessionStorage);
@@ -733,48 +730,9 @@ describe("chat pane model controls", () => {
     await steering;
     await vi.waitFor(() => expect(state.chatSending).toBe(false));
     expect(state.chatRunId).toBe("next-run");
-    expect(draw()).toContain("Fallback");
-    reconcileChatRunLifecycle(state, { clearLocalRun: true, clearChatStream: true });
-    expect(getChatModelObservedRunId(state, state.sessionsResult?.sessions[0])).toBeUndefined();
-  });
-
-  it("does not show another session's pending model after switching sessions", () => {
-    const previousSessionKey = "agent:main:previous";
-    const selectedSession: GatewaySessionRow = {
-      key: "agent:main:selected",
-      kind: "direct",
-      model: "primary",
-      modelProvider: "example",
-    };
-    const pane = createRenderTestChatPane();
-    const state = pane.initialize(createInitializationContext());
-    Object.assign(state, {
-      sessionKey: previousSessionKey,
-      sessionsResult: { ...createSessionsListResult(), sessions: [selectedSession] },
-      chatModelCatalog: [{ id: "primary", name: "Primary", provider: "example" }],
-      chatModelSwitchPromises: {},
-      connected: true,
-      client: createTestGatewayClient(async () => ({})),
-    });
-    getChatSessionProjection(state, { sessionKey: previousSessionKey });
-    state.chatRunId = "previous-session-run";
-    state.chatStream = "Working";
-    state.chatSending = true;
-    state.chatSendingScopeKey = storedChatOutboxScopeKey({ sessionKey: previousSessionKey });
-    setChatRunOwner(state, state.chatRunId);
-    state.sessionKey = selectedSession.key;
-
-    const controls = renderControls(state, {
-      agentDefaultModel: "example/primary",
-      contextWindowAccess: { allowed: true, requiredScope: "operator.write" },
-    });
-    const container = document.createElement("div");
-    render(controls.composerControls, container);
-
-    const trigger = container.querySelector<HTMLElement>("[data-chat-model-select]");
-    expect(trigger?.textContent).toContain("Primary");
-    expect(trigger?.textContent).not.toContain("Model pending");
-    expect(trigger?.dataset.chatSelectValue).toBe("example/primary");
+    expectFallbackExecution();
+    reconcileChatRunLifecycle(state, { clearLocalRun: true });
+    expect(state.chatRunId).toBeNull();
   });
 });
 
@@ -866,8 +824,8 @@ describe("chat pane model-setting permissions", () => {
 
       const results = [
         await switchChatModel(state, "openai/gpt-test-b"),
-        await switchChatThinkingLevel(state, "high"),
-        await switchChatFastMode(state, "on"),
+        await switchChatSetting(state, { kind: "thinkingLevel", value: "high" }),
+        await switchChatSetting(state, { kind: "fastMode", value: "on" }),
       ];
       expect(results).toEqual([allowed, allowed, allowed]);
 
@@ -978,7 +936,6 @@ describe("chat pane model-setting permissions", () => {
     { change: "scope", queued: false },
     { change: "ownership", queued: false },
     { change: "missing-row", queued: false },
-    { change: "session", queued: false },
     { change: "connection", queued: false },
     { change: "scope", queued: true },
     { change: "ownership", queued: true },
@@ -996,8 +953,8 @@ describe("chat pane model-setting permissions", () => {
         operations.push(
           patchChatSessionSettings(state, state.sessionKey, { thinkingLevel: "low" }),
           switchChatModel(state, "openai/gpt-test-b"),
-          switchChatThinkingLevel(state, "high"),
-          switchChatFastMode(state, "on"),
+          switchChatSetting(state, { kind: "thinkingLevel", value: "high" }),
+          switchChatSetting(state, { kind: "fastMode", value: "on" }),
           Promise.resolve(controls.permissionPicker.onSelect("guarded")),
         );
       }

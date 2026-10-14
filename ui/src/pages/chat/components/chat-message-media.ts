@@ -32,8 +32,12 @@ export type ArtifactDownloadResolver = (
 
 export type ImageRenderOptions = {
   galleryImages?: readonly ImageBlock[];
-  galleryVideos?: (item: AttachmentItem) => { index: number; items: readonly AttachmentItem[] };
+  galleryVideos?: (item: AttachmentItem) => {
+    index: number;
+    items: readonly (AttachmentItem & { messageId?: string })[];
+  };
   sessionKey?: string;
+  messageId?: string;
   agentId?: string;
   policyKey?: string;
   canonicalMessageKey?: string;
@@ -639,6 +643,8 @@ export function projectMessageMedia(
         url: mediaPath,
         fileName,
         sizeBytes,
+        width,
+        height,
         ...(validLayout && factIndexes.has(factIndex) ? { factIndex } : {}),
       };
       if (appendImageBlock(images, projected) && !positionedSources.has(mediaPath)) {
@@ -707,6 +713,12 @@ export function schedulePairingQrExpiryRefresh(
   );
 }
 
+export function omittedMediaReason(sizeBytes: number | undefined): string {
+  return sizeBytes === undefined
+    ? t("chat.attachments.omittedFromHistory")
+    : t("chat.attachments.omittedFromHistoryWithSize", { size: formatBytes(sizeBytes) });
+}
+
 // Reply previews and completed-run actions describe the media the bubble renders.
 export function extractMessageMediaText(
   message: unknown,
@@ -721,13 +733,7 @@ export function extractMessageMediaText(
       if (item.type !== "omitted_media") {
         return [];
       }
-      const reason =
-        item.media.sizeBytes === undefined
-          ? t("chat.attachments.omittedFromHistory")
-          : t("chat.attachments.omittedFromHistoryWithSize", {
-              size: formatBytes(item.media.sizeBytes),
-            });
-      return [`${t("chat.attachments.image")} · ${reason}`];
+      return [`${t("chat.attachments.image")} · ${omittedMediaReason(item.media.sizeBytes)}`];
     }),
     ...attachments.map(
       (item) => item.attachment.label.trim() || t("chat.attachments.attachedFile"),
