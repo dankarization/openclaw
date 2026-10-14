@@ -1,0 +1,273 @@
+{
+  "scope": "One actual unchanged published 2026.10.3 npm driver upgrading its own named QA managed Gateway to the canonical full candidate package; no --timeout argument",
+  "proofSource": {
+    "candidateCommit": "e7ad0a972bbab870a047c00c4e9d1675cca5c8fe",
+    "candidateTree": "af9dbbb7d52d13d281fcd65c60c14f345e7353d4",
+    "currentHead": "fe684426bd861c80bdce4d0c5df35a6f8de405ed",
+    "currentTree": "d9fd98b261be67388ee509e33d03ae57b551042f",
+    "onlySuccessorDelta": "delete src/infra/update-doctor-deadline.test.ts; all runtime/build/dependency bytes identical",
+    "canonicalPackageRun": "https://github.com/dankarization/openclaw/actions/runs/38633526007",
+    "packageSha256": "a6ceed5cb652ab8064a2c34ed91617a4e9e9cedab7d9bffa4a62343a8811deac",
+    "artifactZipSha256": "8e11b3d32017ac7c0b9bd3586293d0c9a97382742f74730c9a7eefca32e65ed3",
+    "officialStockPackageSha256": "761685d010d96645d1deabe19299ecde263eac3f2489a17322f48c461a1130a5"
+  },
+  "commandClass": "published CLI update --tag file:verified-candidate --yes --json",
+  "internalTimeoutArgumentOmitted": true,
+  "timing": {
+    "startedAtMs": 1792013507332,
+    "finishedAtMs": 1792013986589,
+    "observedAtMs": 1792013996541
+  },
+  "exitCode": 0,
+  "nativeResult": {
+    "status": "ok",
+    "mode": "npm",
+    "before": {
+      "version": "2026.10.3",
+      "buildId": "2026.10.3-release-59cb44796b0f-2026-10-13T07-33-17.552Z"
+    },
+    "after": {
+      "version": "2026.10.3",
+      "buildId": "2026.10.3-e7ad0a972bba-2026-10-14T20-37-53.254Z"
+    },
+    "durationMs": 401092,
+    "run": {
+      "runId": "74c27e65-0999-4d82-8c49-f8b5c2413589",
+      "phase": "finished",
+      "status": "succeeded",
+      "createdAtMs": 1792013519497,
+      "finishedAtMs": 1792013911085
+    }
+  },
+  "before": {
+    "service": {
+      "MainPID": "160036",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "readiness": {
+      "healthz": 200,
+      "readyz": 200
+    }
+  },
+  "after": {
+    "service": {
+      "MainPID": "165875",
+      "ActiveState": "active",
+      "SubState": "running"
+    },
+    "readiness": {
+      "healthz": 200,
+      "readyz": 200
+    },
+    "survivingNativeProcessGroup": []
+  },
+  "preservation": {
+    "sessionPreserved": true,
+    "workspacePreserved": true,
+    "originalConfiguredValuesPreserved": true,
+    "configSemanticallyIdentical": false,
+    "configBeforeSha256": "257c36210573ea6c560060e1a166cbc71b624c1c5cd1e0046a8e8179b6612b9c",
+    "configAfterSha256": "3babb6bdd6a416fceace9a3ea640bbb2483d4a3b4dffa2b5556adb06f268b5fc",
+    "exactPreUpdateConfigSnapshotMatched": true,
+    "configChangePaths": [
+      {
+        "kind": "added",
+        "path": "agents.entries"
+      },
+      {
+        "kind": "added",
+        "path": "wizard"
+      }
+    ],
+    "nativeAddedConfigFields": {
+      "wizard": {
+        "lastRunAt": "2026-10-14T21:37:02.303Z",
+        "lastRunVersion": "2026.10.3",
+        "lastRunCommand": "doctor",
+        "lastRunMode": "local"
+      },
+      "agents.entries": {
+        "main": {}
+      }
+    }
+  },
+  "nativeSteps": [
+    {
+      "name": "database snapshot",
+      "durationMs": 5051,
+      "exitCode": 0
+    },
+    {
+      "name": "package-install",
+      "durationMs": 51654,
+      "exitCode": 0,
+      "killed": false,
+      "termination": "exit"
+    },
+    {
+      "name": "candidate-state-snapshot",
+      "durationMs": 13987,
+      "exitCode": 0
+    },
+    {
+      "name": "candidate-doctor",
+      "durationMs": 18184,
+      "exitCode": 0
+    },
+    {
+      "name": "candidate-doctor-lint",
+      "durationMs": 10513,
+      "exitCode": 0,
+      "killed": false,
+      "termination": "exit"
+    },
+    {
+      "name": "candidate-config",
+      "durationMs": 2347,
+      "exitCode": 0
+    },
+    {
+      "name": "candidate-plugins",
+      "durationMs": 2882,
+      "exitCode": 0
+    },
+    {
+      "name": "candidate-recovery",
+      "durationMs": 2313,
+      "exitCode": 0
+    },
+    {
+      "name": "candidate-gateway-startup",
+      "durationMs": 10800,
+      "exitCode": 0
+    },
+    {
+      "name": "package-swap",
+      "durationMs": 128692,
+      "exitCode": 0
+    },
+    {
+      "name": "openclaw doctor",
+      "durationMs": 21795,
+      "exitCode": 0,
+      "killed": false,
+      "termination": "exit"
+    },
+    {
+      "name": "update-driver-handoff",
+      "durationMs": 5349,
+      "exitCode": 0
+    },
+    {
+      "name": "post-plugin doctor",
+      "durationMs": 19212,
+      "exitCode": 0
+    },
+    {
+      "name": "post-plugin-doctor-warning-1",
+      "durationMs": 0,
+      "exitCode": 0
+    },
+    {
+      "name": "post-plugin-doctor-warning-2",
+      "durationMs": 0,
+      "exitCode": 0
+    },
+    {
+      "name": "finalize:plugins:0",
+      "durationMs": 0,
+      "exitCode": 0
+    },
+    {
+      "name": "managed-service-executor-check",
+      "durationMs": 845,
+      "exitCode": 0
+    },
+    {
+      "name": "managed-service-install",
+      "durationMs": 8018,
+      "exitCode": 0
+    },
+    {
+      "name": "managed-service-reconciliation",
+      "durationMs": 0,
+      "exitCode": 0
+    },
+    {
+      "name": "gateway verification",
+      "durationMs": 3385,
+      "exitCode": 0
+    },
+    {
+      "name": "post-activation doctor inspections",
+      "durationMs": 7001,
+      "exitCode": 1,
+      "killed": false,
+      "termination": "exit"
+    },
+    {
+      "name": "post-plugin-doctor-lint",
+      "durationMs": 4348,
+      "exitCode": 0,
+      "killed": false,
+      "termination": "exit"
+    }
+  ],
+  "nativeWarnings": [
+    {
+      "phase": "database snapshot",
+      "warnings": [
+        "Database changed during capture; its snapshot requires manual recovery: $QA_STATE/agents/main/agent/openclaw-agent.sqlite",
+        "Automatic database restoration is disabled because a source database changed or its write generation could not be captured. Snapshots remain available at $QA_ROOT/updater-lane/acceptance-packages/stock-driver-2026.10.3/lib/node_modules/.openclaw.package-backup-160345-1792013702501.databases; later writes must be preserved."
+      ]
+    },
+    {
+      "phase": "candidate-doctor-lint",
+      "warnings": [
+        "Doctor lint warning [core/doctor/codex-session-routes]: Codex plugin enabled for routes that use the Codex runtime.: agents.defaults.model routes openai/gpt-6-astra to openai/gpt-6-astra with Codex runtime, but the Codex plugin is disabled by config.: Enable plugins.entries.codex and plugin loading, and remove codex from plugins.deny; or set the affected OpenAI models to an OpenClaw runtime policy.",
+        "Doctor lint warning [core/doctor/claude-cli]: update-validation-scope: Advisory inspection deferred until after update activation; required migration, config, plugin, and Gateway readiness checks remain enabled.: Run `openclaw doctor --lint --only core/doctor/claude-cli` after activation to complete this inspection.",
+        "Doctor lint warning [core/doctor/command-owner]: update-validation-scope: Advisory inspection deferred until after update activation; required migration, config, plugin, and Gateway readiness checks remain enabled.: Run `openclaw doctor --lint --only core/doctor/command-owner` after activation to complete this inspection.",
+        "Doctor lint warning [core/doctor/update-snapshots]: update-validation-scope: Advisory inspection deferred until after update activation; required migration, config, plugin, and Gateway readiness checks remain enabled.: Run `openclaw doctor --lint --only core/doctor/update-snapshots` after activation to complete this inspection.",
+        "Doctor lint warning [core/doctor/security]: update-validation-scope: Advisory inspection deferred until after update activation; required migration, config, plugin, and Gateway readiness checks remain enabled.: Run `openclaw doctor --lint --only core/doctor/security` after activation to complete this inspection.",
+        "Doctor lint warning [core/doctor/oauth-tls]: update-validation-scope: Advisory inspection deferred until after update activation; required migration, config, plugin, and Gateway readiness checks remain enabled.: Run `openclaw doctor --lint --only core/doctor/oauth-tls` after activation to complete this inspection.",
+        "Doctor lint warning [core/doctor/hooks-model]: update-validation-scope: Advisory inspection deferred until after update activation; required migration, config, plugin, and Gateway readiness checks remain enabled.: Run `openclaw doctor --lint --only core/doctor/hooks-model` after activation to complete this inspection.",
+        "Doctor lint warning [core/doctor/model-references]: update-validation-scope: Advisory inspection deferred until after update activation; required migration, config, plugin, and Gateway readiness checks remain enabled.: Run `openclaw doctor --lint --only core/doctor/model-references` after activation to complete this inspection.",
+        "Doctor lint warning [core/doctor/acp-agent-model]: update-validation-scope: Advisory inspection deferred until after update activation; required migration, config, plugin, and Gateway readiness checks remain enabled.: Run `openclaw doctor --lint --only core/doctor/acp-agent-model` after activation to complete this inspection.",
+        "Doctor lint warning [core/doctor/provider-catalog-projection]: update-validation-scope: Advisory inspection deferred until after update activation; required migration, config, plugin, and Gateway readiness checks remain enabled.: Run `openclaw doctor --lint --only core/doctor/provider-catalog-projection` after activation to complete this inspection.",
+        "Doctor lint warning [core/doctor/local-audio-acceleration]: update-validation-scope: Advisory inspection deferred until after update activation; required migration, config, plugin, and Gateway readiness checks remain enabled.: Run `openclaw doctor --lint --only core/doctor/local-audio-acceleration` after activation to complete this inspection.",
+        "Doctor lint warning [core/doctor/runtime-tool-schemas]: update-validation-scope: Advisory inspection deferred until after update activation; required migration, config, plugin, and Gateway readiness checks remain enabled.: Run `openclaw doctor --lint --only core/doctor/runtime-tool-schemas` after activation to complete this inspection.",
+        "Doctor lint warning [core/doctor/skill-workshop-tool-policy]: update-validation-scope: Advisory inspection deferred until after update activation; required migration, config, plugin, and Gateway readiness checks remain enabled.: Run `openclaw doctor --lint --only core/doctor/skill-workshop-tool-policy` after activation to complete this inspection.",
+        "Doctor lint warning [core/doctor/bootstrap-size]: update-validation-scope: Advisory inspection deferred until after update activation; required migration, config, plugin, and Gateway readiness checks remain enabled.: Run `openclaw doctor --lint --only core/doctor/bootstrap-size` after activation to complete this inspection."
+      ]
+    },
+    {
+      "phase": "openclaw doctor",
+      "warnings": [
+        "Skipped agent database path repair during update Doctor. Run openclaw doctor --fix after the update finishes.",
+        "core/doctor/security: WARNING: openclaw.json contains plaintext secret-bearing config fields."
+      ]
+    },
+    {
+      "phase": "managed-service-reconciliation",
+      "warnings": [
+        "Refreshed Gateway service definition. Backup: $QA_USER_UNITS/openclaw-gateway-pr166000-proof.service.reconcile-47e80e09-0cbf-4bf7-846f-e0a3007b7704.bak, $QA_USER_UNITS/openclaw-gateway-pr166000-proof.service.reconcile-47e80e09-0cbf-4bf7-846f-e0a3007b7704.receipt.bak"
+      ]
+    }
+  ],
+  "advisoryDisclosure": "Post-activation doctor inspections exit 1 was reported recoverable-maintenance; the native durable update still finished/succeeded. The synthetic QA config deliberately has a local auth token and disabled Codex plugin, so warning-only security/runtime advisories are not represented as clean checks. Original configured values, including authentication, were retained. Automatic database rollback was disabled when the live source changed during capture; original live data was preserved, not restored from that snapshot. An unrelated pre-existing process with an unavailable cwd caused runtime cleanup retention; it was not killed or repaired.",
+  "privateRawEvidenceSha256": {
+    "omitted-upgrade.stdout.private.log": "8305f562b8d05019343662b8d12b0b381029f17352f7b7adb9ff865a91bc1f4e",
+    "omitted-upgrade.stderr.private.log": "001d8b7f1e4ada33e7101ab25bfe56bfaf7a0669c9be1c0ba32a551926372265",
+    "omitted-before-session.private.log": "794f464b874ab70047b6334f7474e8c005e12cf109246b5d6551a903d4062d3a",
+    "omitted-after-session.private.log": "334daa35291603a1b8081958a84aecb939fa13fdcabbcc16f026f0eada184402",
+    "omitted-before-version.private.log": "a8ee461ea7416946e6b6f4bc3d9bc8834c8a3f595a1572c9fca43d999482b30a",
+    "omitted-after-version.private.log": "974bf3d1aa6df517e3fffaae7a6f9aec638ae1a78dfae5e3fd600c699b1df774"
+  },
+  "excludedAttempt": "An earlier read-only preflight omitted the global --profile and refused before any update child was executed. It is not an upgrade attempt or passing result.",
+  "limitations": [
+    "This successful default-timeout run does not prove deadline expiry, writer cancellation or admitted native stop settlement. Separate cells are required.",
+    "No production Gateway, configuration, credentials, Codex dependency or user data were changed.",
+    "Raw logs/config/session contents remain private; this is an allowlisted export, not a complete log."
+  ]
+}
