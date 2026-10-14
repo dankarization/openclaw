@@ -484,12 +484,12 @@ it.each([false, true])(
       ]);
     try {
       await beforeCompletion(custodyEntered.promise);
-      // Custody precedes the work deadline; total phase time also includes it.
-      await vi.advanceTimersByTimeAsync(3_500);
+      // Custody consumes the same admitted phase allowance as Doctor work.
+      await vi.advanceTimersByTimeAsync(350);
       expect(finished).toBe(false);
       custodyReady.resolve();
       const { signal, capture } = await beforeCompletion(workEntered.promise);
-      await vi.advanceTimersByTimeAsync(999);
+      await vi.advanceTimersByTimeAsync(649);
       expect(signal.aborted).toBe(false);
       if (progress) {
         capture(Buffer.from("\nPROGRESS fixture-validation"), "stderr");
@@ -504,7 +504,7 @@ it.each([false, true])(
       expect(await running).toBe(signal.reason);
       expect(vi.getTimerCount()).toBe(0);
       expect(lifecycle.phaseTimings).toEqual([
-        { phase: "doctor", startedOffsetMs: 0, durationMs: 4_600, outcome: "failed" },
+        { phase: "doctor", startedOffsetMs: 0, durationMs: 1_100, outcome: "failed" },
       ]);
       lifecycle.complete(1);
       expect(writeJson).toHaveBeenCalledWith(
