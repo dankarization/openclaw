@@ -1,0 +1,123 @@
+{
+  "schema": 1,
+  "observedDate": "2026-10-15 Asia/Tbilisi",
+  "PR": 166044,
+  "publishedHead": "a29246c1e63568cef6fc065bf9af4f72fb192d29",
+  "publishedTree": "70bafe8d6f87e2358e5de92da9c48bc617b1daa0",
+  "packageCommit": "a43613ac57ccb42543a66db3515ca947e312e118",
+  "packageTree": "d831096203bb95a4cf7ba16825695def02e04fc2",
+  "packageSha256": "e18692dd420e5c8bb2cd75f9f997a65a5ad2f3e5c91d25ba39b6222a22fb9735",
+  "buildRun": 38634051723,
+  "buildArtifact": 11931393997,
+  "headDelta": "Only two mock assertions deleted from update-command-run-progress.test-support.ts; production, build and dependency files byte-identical",
+  "driver": "unchanged official 2026.10.3 npm package",
+  "command": "openclaw --profile QA_PROFILE update --tag file:VERIFIED_CANDIDATE.tgz --yes --json",
+  "internalTimeoutOverride": false,
+  "before": {
+    "version": "2026.10.3",
+    "buildId": "2026.10.3-release-59cb44796b0f-2026-10-13T07-33-17.552Z"
+  },
+  "after": {
+    "version": "2026.10.3",
+    "buildId": "2026.10.3-a43613ac57cc-2026-10-14T21-19-33.298Z"
+  },
+  "nativeUpdateResult": "ok",
+  "durationMs": 461504,
+  "exitCode": 0,
+  "commandFinishedAfterMs": 540140,
+  "fault": {
+    "kind": "real shared updater-ledger BEGIN IMMEDIATE; no payload writes",
+    "trigger": "Public native update status --json reports new run verifying/running and installed build-info commit matches candidate",
+    "verifyingStartedAfterMs": 374726,
+    "statusObservedAfterMs": 379797,
+    "acquiredAfterMs": 379842,
+    "releasedAfterMs": 424845,
+    "actualHeldMs": 45003,
+    "payloadWrites": 0,
+    "holderExitCode": 0
+  },
+  "durableReadback": {
+    "source": "separate native update status --json after CLI exit",
+    "sameRunAsUpdateOutput": true,
+    "phase": "finished",
+    "status": "succeeded",
+    "finishedAfterMs": 463971
+  },
+  "nativeSteps": [
+    {
+      "step": "update-driver-handoff",
+      "status": "completed",
+      "startedAtMs": 324417,
+      "endedAtMs": 330357,
+      "exitCode": 0
+    },
+    {
+      "step": "post-update verification",
+      "status": "completed",
+      "startedAtMs": 332346,
+      "endedAtMs": 363993
+    },
+    {
+      "step": "restarting",
+      "status": "completed",
+      "startedAtMs": 364337,
+      "endedAtMs": 374726
+    },
+    {
+      "step": "verifying",
+      "status": "completed",
+      "startedAtMs": 374726,
+      "endedAtMs": 463971
+    },
+    {
+      "step": "gateway verification",
+      "status": "completed",
+      "endedAtMs": 453754,
+      "exitCode": 0
+    }
+  ],
+  "nativeReadiness": {
+    "runningVersion": "2026.10.3",
+    "runningBuildId": "2026.10.3-a43613ac57cc-2026-10-14T21-19-33.298Z",
+    "serviceRunning": true,
+    "versionMatch": true,
+    "pluginErrors": [],
+    "channelsReady": true,
+    "readyz": true,
+    "settled": true
+  },
+  "afterHttp": {
+    "healthz": 200,
+    "readyz": 200
+  },
+  "service": {
+    "beforeActive": "active",
+    "afterActive": "active",
+    "pidChanged": true,
+    "sameOwnedUnit": true,
+    "candidatePrefixInAfterExecStart": true
+  },
+  "existingData": {
+    "nativeSessionReadExit": 0,
+    "sameSessionIdLabelThinkingLevel": true,
+    "workspaceMarkerShaPreserved": true,
+    "originalConfiguredValuesPreserved": true,
+    "nativeBookkeepingExcludedFromUserConfigComparison": [
+      "wizard",
+      "meta"
+    ],
+    "configSemanticallyIdentical": false
+  },
+  "cleanup": {
+    "survivingCommandGroup": [],
+    "outerSafetyTimeout": false,
+    "forcedSafetyKill": false
+  },
+  "limits": [
+    "Fault triggered by public verifying state; no private method replacement or writer interception. Timing overlap alone is not an isolated causal A/B; separate native terminal-owner A/B is linked.",
+    "Native Doctor advisory exit 1 had zero error/warning counts and one info; retained runtime because unrelated PID working directory unavailable. No unsafe cleanup performed.",
+    "Native CLI emitted durable success before natural exit; natural exit delay retained in commandFinishedAfterMs.",
+    "First full run did not trigger contention, and is a compatibility control only. An attempt to reuse migrated schema 22 with stock schema-20 driver correctly refused; separate fresh native profile used, no schema downgrade.",
+    "Synthetic QA session/workspace/config; no production Gateway, real user conversations or credentials copied."
+  ]
+}
