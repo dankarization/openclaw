@@ -3,6 +3,7 @@ import path from "node:path";
 import { normalizeLowercaseStringOrEmpty } from "@openclaw/normalization-core/string-coerce";
 import { writeExternalFileWithinRoot } from "../infra/fs-safe.js";
 import { runFfmpeg } from "../media/media-services.js";
+import { assertMediaExecutionCurrent, type MediaExecutionContext } from "./provider-execution.js";
 import type { MediaUnderstandingCapability } from "./types.js";
 
 export async function resolveCliMediaPath(params: {
@@ -11,6 +12,7 @@ export async function resolveCliMediaPath(params: {
   mediaPath: string;
   outputDir: string;
   assertCurrent?: () => void;
+  execution?: MediaExecutionContext;
 }): Promise<string> {
   const commandId = path.parse(params.command).name;
   if (params.capability !== "audio" || commandId !== "whisper-cli") {
@@ -29,6 +31,7 @@ export async function resolveCliMediaPath(params: {
     path: path.basename(wavPath),
     write: async (outputPath) => {
       params.assertCurrent?.();
+      assertMediaExecutionCurrent(params.execution);
       await runFfmpeg([
         "-y",
         "-i",

@@ -232,6 +232,27 @@ process.stdout.write(process.argv[3] === "empty" && name === "first.wav" ? "  \\
       markers: ["[Audio attachment could not be analyzed]"],
     },
     {
+      name: "empty selected attachment",
+      emptyFirst: true,
+      attachments: undefined,
+      expected: ["first.wav"],
+      markers: [
+        "[Audio attachment could not be analyzed]",
+        "[Audio attachment not processed: attachment limit reached]",
+      ],
+    },
+    {
+      name: "failed selected attachment",
+      emptyFirst: true,
+      failFirst: true,
+      attachments: undefined,
+      expected: ["first.wav"],
+      markers: [
+        "[Audio attachment could not be analyzed]",
+        "[Audio attachment not processed: attachment limit reached]",
+      ],
+    },
+    {
       name: "bounded dropped-attachment warnings",
       emptyFirst: false,
       attachments: undefined,
@@ -259,6 +280,7 @@ process.stdout.write(process.argv[3] === "empty" && name === "first.wav" ? "  \\
       attachments,
       expected,
       emptyFirst,
+      failFirst,
       markers,
       attachmentCount,
       previousImageFailure,
@@ -272,6 +294,9 @@ process.stdout.write(process.argv[3] === "empty" && name === "first.wav" ? "  \\
           }
           const name = path.basename(attachmentPath);
           calls.push(name);
+          if (failFirst && name === "first.wav") {
+            throw new Error("fixture transcription unavailable");
+          }
           return {
             stdout: emptyFirst && name === "first.wav" ? "  \n" : "heard " + name,
             stderr: "",
@@ -328,7 +353,9 @@ process.stdout.write(process.argv[3] === "empty" && name === "first.wav" ? "  \\
         const transcript = await transcribeAudioAttachments({ ctx, cfg });
         expect(transcript).toBe(
           emptyFirst
-            ? "heard second.wav"
+            ? expected.length === 1
+              ? undefined
+              : "heard second.wav"
             : expected.length === 1
               ? "heard " + expected[0]
               : "Audio 1:\nheard first.wav\n\nAudio 2:\nheard second.wav",
@@ -341,8 +368,9 @@ process.stdout.write(process.argv[3] === "empty" && name === "first.wav" ? "  \\
               expected.includes(path.basename(fact.path)),
           ),
         ]);
-        expect(transcript).toBeDefined();
-        const preparedText = formatAudioTranscriptForAgent(transcript ?? "");
+        const preparedText = transcript
+          ? formatAudioTranscriptForAgent(transcript)
+          : "typed caption";
         ctx.agentText = preparedText;
         ctx.BodyForAgent = preparedText;
         await applyMediaUnderstanding({

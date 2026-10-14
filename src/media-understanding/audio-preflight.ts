@@ -98,6 +98,14 @@ async function transcribeAudio(
     } finally {
       await cache.cleanup();
     }
+    if (!firstOnly) {
+      // Retain selected and dropped indexes even without usable speech: the
+      // later media pass must not repeat this completed selection budget.
+      ctx.MediaUnderstandingDecisions = [
+        ...(ctx.MediaUnderstandingDecisions ?? []),
+        result.decision,
+      ];
+    }
     const audioOutputs = result.outputs.filter(
       (entry) => entry.kind === "audio.transcription" && entry.text.trim(),
     );
@@ -126,14 +134,6 @@ async function transcribeAudio(
       }
     }
     ctx.media = facts;
-    if (!firstOnly) {
-      // Retain both selected and dropped indexes: consuming a successful result
-      // must not give a later pass a fresh attachment-selection budget.
-      ctx.MediaUnderstandingDecisions = [
-        ...(ctx.MediaUnderstandingDecisions ?? []),
-        result.decision,
-      ];
-    }
 
     if (shouldLogVerbose()) {
       logVerbose(`audio-preflight: transcribed ${transcript.length} chars`);

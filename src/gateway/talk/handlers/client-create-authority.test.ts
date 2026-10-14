@@ -1,7 +1,7 @@
 import { copyFileSync, readFileSync, renameSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync, StatementSync } from "node:sqlite";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { awaitGateBeforeSettlement, createDeferred } from "../../../../test/helpers/promise.js";
 import {
   isSessionEntryDataSql,
@@ -9,13 +9,14 @@ import {
   observeSqliteReadSql,
   trackSqliteStatementExecutions,
 } from "../../../../test/helpers/sqlite-statement-execution-counter.js";
-import { useAutoCleanupTempDirTracker } from "../../../../test/helpers/temp-dir.js";
+import { closeAuthProfileReadPool } from "../../../agents/auth-profiles/sqlite-read-pool.js";
 import {
   clearRuntimeConfigSnapshot,
   setRuntimeConfigSnapshot,
 } from "../../../config/runtime-snapshot.js";
 import {
   loadSessionEntry,
+  replaceSessionEntry,
   replaceSessionEntrySync,
 } from "../../../config/sessions/session-accessor.js";
 import { applySessionEntryOperation } from "../../../config/sessions/session-accessor.sqlite-entry.js";
@@ -49,7 +50,11 @@ import * as voiceKernel from "../../../talk/client-voice-session-write.kernel.js
 import * as voiceSessions from "../../../talk/client-voice-session.js";
 import { clientVoiceSessionTesting } from "../../../talk/client-voice-session.test-support.js";
 import { captureEnv, setTestEnvValue } from "../../../test-utils/env.js";
-import { cleanupSessionStateForTest } from "../../../test-utils/session-state-cleanup.js";
+import {
+  drainSessionStateForTest,
+  useSessionStoreTempDirs,
+} from "../../../test-utils/session-state-cleanup.js";
+import { useUserProfileCatalogForTest } from "../../../test-utils/user-profile-catalog.js";
 import { captureGatewayDeviceRevocation } from "../../device-revocation.js";
 import { prepareGatewayRecipientProfile } from "../../expected-profile.js";
 import { makeClient } from "../../server-broadcast.test-helpers.js";
@@ -79,6 +84,7 @@ import { registerClientCreateSourceAuthorityTests } from "./client-create-source
 import { createTalkClient } from "./client-create.js";
 import {
   browserSession,
+  observeTalkVoiceChangeRequest,
   createDelegatedBrowserProviderFixture,
   type BrowserRequest,
 } from "./client-fixtures.test-support.js";
@@ -133,43 +139,34 @@ async function invokeCreate(options: GatewayRequestHandlerOptions) {
     admission.authorization?.release?.();
   }
 }
-async function invokeClose(params: Record<string, unknown>) {
-  const respond = vi.fn();
-  await talkClientHandlers["talk.client.close"]?.({
-    params,
-    respond,
-    context: { getRuntimeConfig: () => ({}) },
-    client: { connId: "conn-close" },
-  } as never);
-  return respond;
-}
 
 describe("voice creation authority", () => {
-  const tempDirs = useAutoCleanupTempDirTracker((remove) =>
-    afterEach(async () => {
-      for (const authorization of authorizations.splice(0)) {
-        authorization.release?.();
-      }
-      if (ownedVoiceSessionId) {
-        await closeTalkClientGatewayControlSession({
-          voiceSessionId: ownedVoiceSessionId,
-          sessionKey: ownedVoiceSessionKey,
-          connId: "conn-close",
-        });
-      }
-      cleanupTalkConnection("conn-close", { warn: vi.fn() });
-      clientVoiceSessionTesting.reset();
-      try {
-        await cleanupSessionStateForTest({ stateDir: tempDir });
-        clearRuntimeConfigSnapshot();
-      } finally {
-        envSnapshot.restore();
-        remove();
-        vi.restoreAllMocks();
-      }
-      expect(forbiddenSnapshotStacks).toEqual([]);
-    }),
-  );
+  const prepareProfiles = useUserProfileCatalogForTest();
+  const tempDirs = useSessionStoreTempDirs(afterAll, "openclaw-voice-authority-");
+  afterEach(async () => {
+    for (const authorization of authorizations.splice(0)) {
+      authorization.release?.();
+    }
+    if (ownedVoiceSessionId) {
+      await closeTalkClientGatewayControlSession({
+        voiceSessionId: ownedVoiceSessionId,
+        sessionKey: ownedVoiceSessionKey,
+        connId: "conn-close",
+      });
+    }
+    cleanupTalkConnection("conn-close", { warn: vi.fn() });
+    clientVoiceSessionTesting.reset();
+    try {
+      await drainSessionStateForTest({ stateDir: tempDir });
+      closeAuthProfileReadPool({ kind: "root", rootPath: tempDir });
+      await closeOpenClawAgentDatabasesAsync(tempDir);
+      clearRuntimeConfigSnapshot();
+    } finally {
+      envSnapshot.restore();
+      vi.restoreAllMocks();
+    }
+    expect(forbiddenSnapshotStacks).toEqual([]);
+  });
   beforeEach(async () => {
     vi.clearAllMocks();
     forbiddenSnapshotStacks = [];
@@ -208,8 +205,9 @@ describe("voice creation authority", () => {
     );
     ownedVoiceSessionId = undefined;
     ownedVoiceSessionKey = sessionKey;
-    tempDir = tempDirs.make("openclaw-voice-authority-");
+    tempDir = tempDirs.make();
     setTestEnvValue("OPENCLAW_STATE_DIR", tempDir);
+    await prepareProfiles();
     setRuntimeConfigSnapshot({});
     const seedEntry = { sessionId, updatedAt: Date.now() };
     await applySessionEntryOperation(
@@ -492,11 +490,14 @@ describe("voice creation authority", () => {
       expect.objectContaining({ message: "A voice replacement requires a fresh voice session id" }),
     );
     expect(createBrowserSession).toHaveBeenCalledOnce();
-    expect(await invokeClose({ sessionKey, voiceSessionId: originalId })).toHaveBeenCalledWith(
-      true,
-      { ok: true },
-      undefined,
-    );
+    const closeRespond = vi.fn();
+    await talkClientHandlers["talk.client.close"]?.({
+      params: { sessionKey, voiceSessionId: originalId },
+      respond: closeRespond,
+      context: { getRuntimeConfig: () => ({}) },
+      client: { connId: "conn-close" },
+    } as never);
+    expect(closeRespond).toHaveBeenCalledWith(true, { ok: true }, undefined);
     await create({ voiceChangeId: changeId, model: "gpt-realtime-2.1", voice: "cove" });
     expect(respond).toHaveBeenLastCalledWith(
       true,
@@ -591,12 +592,7 @@ describe("voice creation authority", () => {
         original.sessionTarget.storePath,
       ).path;
       const changed = vi.fn();
-      const changeRequested = createDeferred();
-      fixture.context.broadcastToConnIds.mockImplementation((event) => {
-        if (event === "talk.voice.change") {
-          changeRequested.resolve();
-        }
-      });
+      const waitForVoiceChange = observeTalkVoiceChangeRequest(fixture.context.broadcastToConnIds);
       const change = Promise.resolve(
         talkVoiceHandlers["talk.voice.set"]!({
           req: { type: "req", id: "change", method: "talk.voice.set", params: {} },
@@ -607,11 +603,7 @@ describe("voice creation authority", () => {
           isWebchatConnect: () => false,
         } as never),
       );
-      await awaitGateBeforeSettlement(
-        changeRequested.promise,
-        change,
-        "Voice change settled before requesting a replacement",
-      );
+      await waitForVoiceChange(change);
       const changeId = fixture.context.broadcastToConnIds.mock.calls.find(
         ([event]) => event === "talk.voice.change",
       )?.[1]?.changeId;
@@ -660,13 +652,21 @@ describe("voice creation authority", () => {
       const createSpy = vi
         .spyOn(voiceSessions, "createOrResumeClientVoiceSession")
         .mockImplementation(async (params) => {
+          if (kind === "incognito" && revoked) {
+            await replaceSessionEntry(scope, {
+              sessionId: "reset-voice-source",
+              updatedAt: Date.now(),
+              incognito: true,
+            });
+            resetSource = true;
+          }
           if (kind !== "incognito") {
             const database = getOpenClawAgentDatabaseIfOpen({
               agentId: "main",
               path: sourcePath,
             });
             if (database) {
-              closeCachedOpenClawAgentDatabase(database, { eviction: true });
+              closeCachedOpenClawAgentDatabase(database);
             }
           }
           creatingVoice = true;
@@ -675,11 +675,10 @@ describe("voice creation authority", () => {
               ...params,
               assertCurrent: () => {
                 params.assertCurrent?.();
-                if (kind !== "same-store" && revoked && !resetSource) {
+                if (kind === "custom-store" && revoked && !resetSource) {
                   replaceSessionEntrySync(scope, {
                     sessionId: "reset-voice-source",
                     updatedAt: Date.now(),
-                    ...(kind === "incognito" ? { incognito: true } : {}),
                   });
                   resetSource = true;
                 }
@@ -763,16 +762,17 @@ describe("voice creation authority", () => {
             client,
           });
           expect(admitted.error).toBeNull();
-          if (admitted.authorization) {
-            authorizations.push(admitted.authorization);
+          try {
+            await createTalkClient(
+              bindGatewayRequestHandlerMutationAuthority(
+                options,
+                { ...options, sessionMutationAuthorization: admitted.authorization },
+                undefined,
+              ),
+            );
+          } finally {
+            admitted.authorization?.release?.();
           }
-          await createTalkClient(
-            bindGatewayRequestHandlerMutationAuthority(
-              options,
-              { ...options, sessionMutationAuthorization: admitted.authorization },
-              undefined,
-            ),
-          );
         } else {
           await invokeCreate(options);
         }
@@ -821,14 +821,10 @@ describe("voice creation authority", () => {
         renameSync(sourcePath, displacedPath);
         copyFileSync(displacedPath, sourcePath);
         replacementBytes = readFileSync(sourcePath);
-        const copied = new DatabaseSync(sourcePath, { readOnly: true });
-        try {
-          expect(readVoiceSessionRecordInTransaction({ db: copied }, voiceSessionId)?.status).toBe(
-            "open",
-          );
-        } finally {
-          copied.close();
-        }
+        using copied = new DatabaseSync(sourcePath, { readOnly: true });
+        expect(readVoiceSessionRecordInTransaction({ db: copied }, voiceSessionId)?.status).toBe(
+          "open",
+        );
       };
       const createVoice = voiceSessions.createOrResumeClientVoiceSession;
       const intercepted = vi

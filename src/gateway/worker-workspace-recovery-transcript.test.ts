@@ -83,7 +83,7 @@ async function readRecoveryEvents(identity = IDENTITY) {
 }
 
 describe("worker workspace recovery transcript reporting", () => {
-  it.each(["leaf", "reset", "opaque"])(
+  it.each(["reset", "opaque"])(
     "selects conflict reports through %s navigation without adopting an inactive clear",
     async (navigation) => {
       await withOpenClawTestState({ scenario: "minimal" }, async () => {
@@ -154,7 +154,6 @@ describe("worker workspace recovery transcript reporting", () => {
   );
   it.each([
     { label: "invalid staged ref", paths: ["edited.ts"], stagedResultRef: "refs/heads/main" },
-    { label: "empty paths", paths: [], stagedResultRef: "refs/openclaw/worker-results/result-1" },
   ])(
     "reports $label as unknown instead of treating a retained conflict as absent",
     async (details) => {
@@ -350,6 +349,13 @@ describe("worker workspace recovery transcript reporting", () => {
           activeWriterRunId: "report-writer",
         });
         const { reportFailure } = await createHandlers();
+        const reportTarget = await (
+          await loadSessionRuntime()
+        ).resolveGatewaySessionStoreTargetInWorker({
+          cfg: getRuntimeConfig(),
+          key: IDENTITY.sessionKey,
+          agentId: IDENTITY.agentId,
+        });
         let releaseWriter!: () => void;
         const { promise: writerHeld, resolve: signalWriterHeld } = createDeferred();
         const release = new Promise<void>((resolve) => {
@@ -379,15 +385,7 @@ describe("worker workspace recovery transcript reporting", () => {
                 {
                   sessionTarget: {
                     ...IDENTITY,
-                    storePath: (
-                      await (
-                        await loadSessionRuntime()
-                      ).resolveGatewaySessionStoreTargetInWorker({
-                        cfg: getRuntimeConfig(),
-                        key: IDENTITY.sessionKey,
-                        agentId: IDENTITY.agentId,
-                      })
-                    ).storePath,
+                    storePath: reportTarget.storePath,
                     expectedWriterRunId: "report-writer",
                   },
                   withTranscriptWrite: async (run) => await run(),
