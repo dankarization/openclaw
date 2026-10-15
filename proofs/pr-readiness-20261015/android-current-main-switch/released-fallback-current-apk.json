@@ -1,0 +1,231 @@
+{
+  "startedAt": 1792055421.4523609,
+  "before": {
+    "type": "res",
+    "id": "qa-negative-control-3",
+    "ok": true,
+    "payload": {
+      "groups": [
+        {
+          "name": "QA_RELEASED_KEEP",
+          "position": 0
+        },
+        {
+          "name": "QAFALLBACK",
+          "position": 1
+        },
+        {
+          "name": "QASWITCHPE",
+          "position": 2
+        }
+      ],
+      "sectionOrder": []
+    }
+  },
+  "after": {
+    "type": "res",
+    "id": "qa-negative-control-4",
+    "ok": true,
+    "payload": {
+      "groups": [
+        {
+          "name": "QA_RELEASED_KEEP",
+          "position": 0
+        },
+        {
+          "name": "QAFALLBACK",
+          "position": 1
+        },
+        {
+          "name": "QASWITCHPE",
+          "position": 2
+        },
+        {
+          "name": "QACURLEG",
+          "position": 3
+        }
+      ],
+      "sectionOrder": []
+    }
+  },
+  "finishedAt": 1792055423.7082372,
+  "trace": [
+    {
+      "ts": "2026-10-15T09:10:21.500Z",
+      "event": "injected-request",
+      "id": "qa-negative-control-3",
+      "method": "sessions.groups.list",
+      "grantedScopes": [
+        "operator.admin",
+        "operator.approvals",
+        "operator.questions",
+        "operator.read",
+        "operator.talk.secrets",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-15T09:10:21.727Z",
+      "event": "android-request",
+      "peerId": 5,
+      "id": "qa-request-3",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T09:10:21.729Z",
+      "event": "android-native-result",
+      "peerId": 5,
+      "id": "qa-request-3",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_RELEASED_KEEP",
+            "position": 0
+          },
+          {
+            "name": "QAFALLBACK",
+            "position": 1
+          },
+          {
+            "name": "QASWITCHPE",
+            "position": 2
+          }
+        ],
+        "sectionOrder": []
+      }
+    },
+    {
+      "ts": "2026-10-15T09:10:21.855Z",
+      "event": "android-request",
+      "peerId": 5,
+      "id": "qa-request-4",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T09:10:21.859Z",
+      "event": "android-native-result",
+      "peerId": 5,
+      "id": "qa-request-4",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_RELEASED_KEEP",
+            "position": 0
+          },
+          {
+            "name": "QAFALLBACK",
+            "position": 1
+          },
+          {
+            "name": "QASWITCHPE",
+            "position": 2
+          }
+        ],
+        "sectionOrder": []
+      }
+    },
+    {
+      "ts": "2026-10-15T09:10:21.919Z",
+      "event": "android-request",
+      "peerId": 5,
+      "id": "qa-request-5",
+      "method": "sessions.groups.put",
+      "params": {
+        "names": [
+          "QA_RELEASED_KEEP",
+          "QAFALLBACK",
+          "QASWITCHPE",
+          "QACURLEG"
+        ]
+      }
+    },
+    {
+      "ts": "2026-10-15T09:10:21.968Z",
+      "event": "android-native-result",
+      "peerId": 5,
+      "id": "qa-request-5",
+      "method": "sessions.groups.put",
+      "ok": true,
+      "payload": {
+        "ok": true,
+        "groups": [
+          {
+            "name": "QA_RELEASED_KEEP",
+            "position": 0
+          },
+          {
+            "name": "QAFALLBACK",
+            "position": 1
+          },
+          {
+            "name": "QASWITCHPE",
+            "position": 2
+          },
+          {
+            "name": "QACURLEG",
+            "position": 3
+          }
+        ],
+        "sectionOrder": []
+      }
+    },
+    {
+      "ts": "2026-10-15T09:10:22.121Z",
+      "event": "android-request",
+      "peerId": 5,
+      "id": "qa-request-6",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T09:10:22.123Z",
+      "event": "android-native-result",
+      "peerId": 5,
+      "id": "qa-request-6",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_RELEASED_KEEP",
+            "position": 0
+          },
+          {
+            "name": "QAFALLBACK",
+            "position": 1
+          },
+          {
+            "name": "QASWITCHPE",
+            "position": 2
+          },
+          {
+            "name": "QACURLEG",
+            "position": 3
+          }
+        ],
+        "sectionOrder": []
+      }
+    },
+    {
+      "ts": "2026-10-15T09:10:23.703Z",
+      "event": "injected-request",
+      "id": "qa-negative-control-4",
+      "method": "sessions.groups.list",
+      "grantedScopes": [
+        "operator.admin",
+        "operator.approvals",
+        "operator.questions",
+        "operator.read",
+        "operator.talk.secrets",
+        "operator.write"
+      ]
+    }
+  ],
+  "passed": true
+}

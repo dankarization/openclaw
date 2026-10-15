@@ -1,0 +1,197 @@
+{
+  "QA_A": [
+    {
+      "ts": "2026-10-15T09:05:15.443Z",
+      "event": "injected-request",
+      "id": "qa-negative-control-2",
+      "method": "sessions.groups.list",
+      "grantedScopes": [
+        "operator.admin",
+        "operator.approvals",
+        "operator.questions",
+        "operator.read",
+        "operator.talk.secrets",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-15T09:05:15.463Z",
+      "event": "native-response-hold-armed",
+      "method": "sessions.groups.list"
+    },
+    {
+      "ts": "2026-10-15T09:05:15.672Z",
+      "event": "android-request",
+      "peerId": 32,
+      "id": "qa-request-1",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T09:05:15.674Z",
+      "event": "android-native-result",
+      "peerId": 32,
+      "id": "qa-request-1",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_MAIN_KEEP",
+            "position": 0
+          }
+        ],
+        "sectionOrder": [],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T09:05:15.674Z",
+      "event": "native-response-held",
+      "peerId": 32,
+      "id": "qa-request-1",
+      "method": "sessions.groups.list",
+      "ok": true
+    },
+    {
+      "ts": "2026-10-15T09:05:21.009Z",
+      "event": "upstream-close",
+      "peerId": 32,
+      "role": "operator",
+      "code": 1005,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T09:05:21.018Z",
+      "event": "upstream-close",
+      "peerId": 33,
+      "role": "node",
+      "code": 1005,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T09:05:22.269Z",
+      "event": "authenticated",
+      "peerId": 34,
+      "role": "operator",
+      "grantedScopes": [
+        "operator.admin",
+        "operator.approvals",
+        "operator.questions",
+        "operator.read",
+        "operator.talk.secrets",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-15T09:05:25.481Z",
+      "event": "release"
+    },
+    {
+      "ts": "2026-10-15T09:05:27.065Z",
+      "event": "injected-request",
+      "id": "qa-negative-control-3",
+      "method": "sessions.groups.list",
+      "grantedScopes": [
+        "operator.admin",
+        "operator.approvals",
+        "operator.questions",
+        "operator.read",
+        "operator.talk.secrets",
+        "operator.write"
+      ]
+    }
+  ],
+  "QA_B": [
+    {
+      "ts": "2026-10-15T09:05:15.457Z",
+      "event": "injected-request",
+      "id": "qa-negative-control-1",
+      "method": "sessions.groups.list",
+      "grantedScopes": [
+        "operator.admin",
+        "operator.approvals",
+        "operator.questions",
+        "operator.read",
+        "operator.talk.secrets",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-15T09:05:21.043Z",
+      "event": "upstream-close",
+      "peerId": 4,
+      "role": "operator",
+      "code": 1005,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T09:05:22.331Z",
+      "event": "authenticated",
+      "peerId": 6,
+      "role": "node",
+      "grantedScopes": []
+    },
+    {
+      "ts": "2026-10-15T09:05:22.346Z",
+      "event": "authenticated",
+      "peerId": 5,
+      "role": "operator",
+      "grantedScopes": [
+        "operator.admin",
+        "operator.approvals",
+        "operator.questions",
+        "operator.read",
+        "operator.talk.secrets",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-15T09:05:22.634Z",
+      "event": "android-request",
+      "peerId": 5,
+      "id": "qa-request-2",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T09:05:22.637Z",
+      "event": "android-native-result",
+      "peerId": 5,
+      "id": "qa-request-2",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_RELEASED_KEEP",
+            "position": 0
+          },
+          {
+            "name": "QAFALLBACK",
+            "position": 1
+          },
+          {
+            "name": "QASWITCHPE",
+            "position": 2
+          }
+        ],
+        "sectionOrder": []
+      }
+    },
+    {
+      "ts": "2026-10-15T09:05:27.070Z",
+      "event": "injected-request",
+      "id": "qa-negative-control-2",
+      "method": "sessions.groups.list",
+      "grantedScopes": [
+        "operator.admin",
+        "operator.approvals",
+        "operator.questions",
+        "operator.read",
+        "operator.talk.secrets",
+        "operator.write"
+      ]
+    }
+  ]
+}

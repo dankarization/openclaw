@@ -1,0 +1,67 @@
+{
+  "fresh-live-create-typed": {
+    "originalXmlSha256": "8d898d4c96330ad08b73187ca20e21ab82cbde9e90bc349fd98259b09ee64db6",
+    "actualNodeExcerpts": [
+      {
+        "text": "New group",
+        "class": "android.widget.TextView",
+        "bounds": "[183,598][365,648]"
+      },
+      {
+        "text": "QALIVESW",
+        "class": "android.widget.EditText",
+        "bounds": "[183,690][897,858]"
+      },
+      {
+        "text": "Create",
+        "class": "android.widget.TextView",
+        "bounds": "[748,960][865,1010]"
+      }
+    ]
+  },
+  "live-switch-selector": {
+    "originalXmlSha256": "439cc0e1b36effda58630d8b6f3f530408bba54adce1345c84054e5c611fd418",
+    "actualNodeExcerpts": [
+      {
+        "text": "Gateways",
+        "class": "android.widget.TextView",
+        "bounds": "[53,720][259,781]"
+      },
+      {
+        "text": "QA_GATEWAY_A",
+        "class": "android.widget.TextView",
+        "bounds": "[149,866][393,916]"
+      },
+      {
+        "text": "Ready",
+        "class": "android.widget.TextView",
+        "bounds": "[181,975][272,1018]"
+      },
+      {
+        "text": "QA_GATEWAY_B",
+        "class": "android.widget.TextView",
+        "bounds": "[149,1088][395,1138]"
+      }
+    ]
+  },
+  "live-switch-selected-before-release": {
+    "originalXmlSha256": "326ba2a10f0c114a7be284ac4f516e3411bac0a8b2eb610ded12f2ee5c9502cc",
+    "actualNodeExcerpts": [
+      {
+        "text": "New group",
+        "class": "android.widget.TextView",
+        "bounds": "[169,1164][803,1214]"
+      },
+      {
+        "text": "QA_GATEWAY_B",
+        "class": "android.widget.TextView",
+        "bounds": "[148,2184][394,2234]"
+      },
+      {
+        "text": "Ready",
+        "class": "android.widget.TextView",
+        "bounds": "[180,2242][271,2285]"
+      }
+    ]
+  }
+}

@@ -1,0 +1,186 @@
+{
+  "startedAt": 1792055781.812594,
+  "before": {
+    "type": "res",
+    "id": "qa-negative-control-4",
+    "ok": true,
+    "payload": {
+      "groups": [
+        {
+          "name": "QA_MAIN_KEEP",
+          "position": 0
+        }
+      ],
+      "sectionOrder": [],
+      "appendOnly": true
+    }
+  },
+  "after": {
+    "type": "res",
+    "id": "qa-negative-control-5",
+    "ok": true,
+    "payload": {
+      "groups": [
+        {
+          "name": "QA_MAIN_KEEP",
+          "position": 0
+        },
+        {
+          "name": "QALIVEOK",
+          "position": 1
+        }
+      ],
+      "sectionOrder": [],
+      "appendOnly": true
+    }
+  },
+  "finishedAt": 1792055784.024548,
+  "trace": [
+    {
+      "ts": "2026-10-15T09:16:21.868Z",
+      "event": "injected-request",
+      "id": "qa-negative-control-4",
+      "method": "sessions.groups.list",
+      "grantedScopes": [
+        "operator.admin",
+        "operator.approvals",
+        "operator.questions",
+        "operator.read",
+        "operator.talk.secrets",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-15T09:16:22.019Z",
+      "event": "android-request",
+      "peerId": 36,
+      "id": "qa-positive-request-1",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T09:16:22.027Z",
+      "event": "android-native-result",
+      "peerId": 36,
+      "id": "qa-positive-request-1",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_MAIN_KEEP",
+            "position": 0
+          }
+        ],
+        "sectionOrder": [],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T09:16:22.237Z",
+      "event": "android-request",
+      "peerId": 36,
+      "id": "qa-positive-request-2",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T09:16:22.242Z",
+      "event": "android-native-result",
+      "peerId": 36,
+      "id": "qa-positive-request-2",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_MAIN_KEEP",
+            "position": 0
+          }
+        ],
+        "sectionOrder": [],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T09:16:22.311Z",
+      "event": "android-request",
+      "peerId": 36,
+      "id": "qa-positive-request-3",
+      "method": "sessions.groups.put",
+      "params": {
+        "names": [
+          "QALIVEOK"
+        ],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T09:16:22.322Z",
+      "event": "android-native-result",
+      "peerId": 36,
+      "id": "qa-positive-request-3",
+      "method": "sessions.groups.put",
+      "ok": true,
+      "payload": {
+        "ok": true,
+        "groups": [
+          {
+            "name": "QA_MAIN_KEEP",
+            "position": 0
+          },
+          {
+            "name": "QALIVEOK",
+            "position": 1
+          }
+        ],
+        "sectionOrder": []
+      }
+    },
+    {
+      "ts": "2026-10-15T09:16:22.524Z",
+      "event": "android-request",
+      "peerId": 36,
+      "id": "qa-positive-request-4",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T09:16:22.528Z",
+      "event": "android-native-result",
+      "peerId": 36,
+      "id": "qa-positive-request-4",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_MAIN_KEEP",
+            "position": 0
+          },
+          {
+            "name": "QALIVEOK",
+            "position": 1
+          }
+        ],
+        "sectionOrder": [],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T09:16:24.021Z",
+      "event": "injected-request",
+      "id": "qa-negative-control-5",
+      "method": "sessions.groups.list",
+      "grantedScopes": [
+        "operator.admin",
+        "operator.approvals",
+        "operator.questions",
+        "operator.read",
+        "operator.talk.secrets",
+        "operator.write"
+      ]
+    }
+  ],
+  "passed": true
+}
