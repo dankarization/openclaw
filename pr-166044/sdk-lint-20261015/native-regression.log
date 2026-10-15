@@ -1,0 +1,10 @@
+Selected real-native regression: prepares test-only SDK imports for selected package lint without compiling unrelated SDK roots
+
+Before owner fix: FAILED
+ENOENT: missing packages/plugin-sdk/dist/src/plugin-sdk/testing.d.ts in temporary fixture
+After owner fix: PASSED
+Covers SDK imports from a TypeScript test and JavaScript test; unrelated invalid SDK root is not compiled.
+
+Focused native preparation and lint selection run: 2 test files passed; 13 tests passed; 36 skipped by explicit test-name selection.
+Duration: 20.36 seconds; wrapper: 22.24 seconds.
+No full test suite run.

@@ -1,0 +1,13 @@
+Captured stdout and timing excerpts; private launch paths omitted.
+
+selected preparation: 156 SDK roots; plugin producers: none
+[plugin-sdk boundary dts] emitted 12548 files
+[oxlint] shard concurrency 1 (cpus=6, memGB=7)
+[oxlint:extensions:18] starting
+[oxlint:extensions:18] still running after 30s
+Found 0 warnings and 0 errors.
+Finished in 47.1s on 505 files with 291 rules using 1 threads.
+[oxlint:extensions:18] passed
+Elapsed wall time: 4:16.91
+Maximum resident set size: 5907504 KiB
+Exit status: 0
