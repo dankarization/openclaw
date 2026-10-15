@@ -1,0 +1,121 @@
+[
+  {
+    "ts": "2026-10-15T08:03:34.694Z",
+    "event": "android-request",
+    "method": "sessions.groups.list",
+    "params": {}
+  },
+  {
+    "ts": "2026-10-15T08:03:34.699Z",
+    "event": "android-native-result",
+    "method": "sessions.groups.list",
+    "ok": true,
+    "payload": {
+      "groups": [
+        {
+          "name": "QA_RELEASED_KEEP",
+          "position": 0
+        }
+      ],
+      "sectionOrder": []
+    }
+  },
+  {
+    "ts": "2026-10-15T08:04:31.272Z",
+    "event": "android-request",
+    "method": "sessions.groups.list",
+    "params": {}
+  },
+  {
+    "ts": "2026-10-15T08:04:31.275Z",
+    "event": "android-native-result",
+    "method": "sessions.groups.list",
+    "ok": true,
+    "payload": {
+      "groups": [
+        {
+          "name": "QA_RELEASED_KEEP",
+          "position": 0
+        }
+      ],
+      "sectionOrder": []
+    }
+  },
+  {
+    "ts": "2026-10-15T08:04:31.490Z",
+    "event": "android-request",
+    "method": "sessions.groups.list",
+    "params": {}
+  },
+  {
+    "ts": "2026-10-15T08:04:31.495Z",
+    "event": "android-native-result",
+    "method": "sessions.groups.list",
+    "ok": true,
+    "payload": {
+      "groups": [
+        {
+          "name": "QA_RELEASED_KEEP",
+          "position": 0
+        }
+      ],
+      "sectionOrder": []
+    }
+  },
+  {
+    "ts": "2026-10-15T08:04:31.645Z",
+    "event": "android-request",
+    "method": "sessions.groups.put",
+    "params": {
+      "names": [
+        "QA_RELEASED_KEEP",
+        "QAFALLBACK"
+      ]
+    }
+  },
+  {
+    "ts": "2026-10-15T08:04:31.679Z",
+    "event": "android-native-result",
+    "method": "sessions.groups.put",
+    "ok": true,
+    "payload": {
+      "ok": true,
+      "groups": [
+        {
+          "name": "QA_RELEASED_KEEP",
+          "position": 0
+        },
+        {
+          "name": "QAFALLBACK",
+          "position": 1
+        }
+      ],
+      "sectionOrder": []
+    }
+  },
+  {
+    "ts": "2026-10-15T08:04:31.828Z",
+    "event": "android-request",
+    "method": "sessions.groups.list",
+    "params": {}
+  },
+  {
+    "ts": "2026-10-15T08:04:31.830Z",
+    "event": "android-native-result",
+    "method": "sessions.groups.list",
+    "ok": true,
+    "payload": {
+      "groups": [
+        {
+          "name": "QA_RELEASED_KEEP",
+          "position": 0
+        },
+        {
+          "name": "QAFALLBACK",
+          "position": 1
+        }
+      ],
+      "sectionOrder": []
+    }
+  }
+]

@@ -1,0 +1,22 @@
+{
+  "method": "sessions.groups.list",
+  "grantedScopes": [
+    "operator.admin",
+    "operator.read",
+    "operator.write",
+    "operator.pairing"
+  ],
+  "result": {
+    "groups": [
+      {
+        "name": "QA_RELEASED_KEEP",
+        "position": 0
+      },
+      {
+        "name": "QAFALLBACK",
+        "position": 1
+      }
+    ],
+    "sectionOrder": []
+  }
+}
