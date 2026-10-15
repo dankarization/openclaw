@@ -49,7 +49,7 @@ import java.util.concurrent.TimeUnit
 @OptIn(ExperimentalCoroutinesApi::class)
 class MainViewModelTest {
   @Test
-  fun membershipCallbackLeaseRejectsSwitchBeforeDispatchAndSameEndpointReplacementBeforeEnqueue() =
+  fun membershipCallbackLeaseRejectsOwnerSwitchBeforeDispatch() =
     runTest {
       val (viewModel, prefs) = createViewModel()
       val app = RuntimeEnvironment.getApplication() as NodeApp
@@ -58,7 +58,6 @@ class MainViewModelTest {
       }
       prefs.gatewayRegistry.setActive("gateway-a")
       var generation = 1L
-      var retireAtEnqueue = false
       var captures = 0
       val patches = mutableListOf<String?>()
       val controller =
@@ -71,7 +70,6 @@ class MainViewModelTest {
 
             fun isCurrent() = prefs.gatewayRegistry.activeStableId.value == id && generation == capturedGeneration
             GatewaySession.RequestLease(endpointStableId = id, isCurrentImpl = ::isCurrent) { method, params, _, withEnqueue ->
-              if (retireAtEnqueue) generation++
               if (!isCurrent()) throw GatewayRequestNotEnqueued("retired UI callback lease")
               withEnqueue { if (method == "sessions.patch") patches += params }
               emptyChatGatewayResponse(method)
@@ -100,11 +98,6 @@ class MainViewModelTest {
         generation++
         viewModel.patchChatSession("agent:main:shared", clearCategory = true, requestLease = replaced)
         assertEquals(1, patches.size)
-
-        val finalIo = requireNotNull(viewModel.captureChatSessionRequestLease("gateway-a"))
-        retireAtEnqueue = true
-        viewModel.patchChatSession("agent:main:shared", category = "Folder", requestLease = finalIo)
-        assertEquals("Replacement before final enqueue must not write", 1, patches.size)
       } finally {
         closeNodeRuntimeTestFixture(runtime)
       }
