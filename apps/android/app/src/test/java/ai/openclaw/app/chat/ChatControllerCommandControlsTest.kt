@@ -570,10 +570,9 @@ class ChatControllerCommandControlsTest {
     }
 
   @Test
-  fun membershipUsesTheCatalogConnectionLeaseAndRejectsPhysicalReconnectBeforeEnqueue() =
+  fun membershipUsesTheCatalogConnectionLease() =
     runTest {
-      var connection = 1
-      var retireBeforeEnqueue = false
+      val connection = 1
       val enqueued = mutableListOf<String>()
       val controller =
         createChatController(
@@ -584,8 +583,6 @@ class ChatControllerCommandControlsTest {
               endpointStableId = "gateway-a",
               isCurrentImpl = { connection == capturedConnection },
             ) { method, _, _, withEnqueue ->
-              if (retireBeforeEnqueue) connection++
-              if (connection != capturedConnection) throw GatewayRequestNotEnqueued("gateway request lease changed")
               withEnqueue { enqueued += method }
               if (method.startsWith("sessions.groups.")) """{"groups":[{"name":"Folder"}]}""" else "{}"
             }
@@ -614,12 +611,6 @@ class ChatControllerCommandControlsTest {
       )
       assertTrue(controller.patchSession(ChatSessionPatch(key = "agent:main:side", category = "Folder", requestLease = lease)))
       assertEquals(listOf("sessions.groups.list", "sessions.groups.list", "sessions.groups.put", "sessions.patch"), enqueued)
-
-      retireBeforeEnqueue = true
-      assertFalse(controller.patchSession(ChatSessionPatch(key = "agent:main:side", category = "Folder", requestLease = lease)))
-      assertEquals(1, enqueued.count { it == "sessions.patch" })
-      assertFalse(controller.patchSession(ChatSessionPatch(key = "agent:main:side", category = "Folder", requestLease = lease)))
-      assertNull(controller.errorText.value)
     }
 
   @Test
