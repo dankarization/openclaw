@@ -16,6 +16,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Looper
 import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModelStore
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -48,6 +49,8 @@ import java.util.concurrent.TimeUnit
 @Config(sdk = [34])
 @OptIn(ExperimentalCoroutinesApi::class)
 class MainViewModelTest {
+  private val viewModelStore = ViewModelStore()
+
   @Test
   fun membershipCallbackLeaseRejectsOwnerSwitchBeforeDispatch() =
     runTest {
@@ -99,6 +102,7 @@ class MainViewModelTest {
         viewModel.patchChatSession("agent:main:shared", clearCategory = true, requestLease = replaced)
         assertEquals(1, patches.size)
       } finally {
+        viewModelStore.clear()
         closeNodeRuntimeTestFixture(runtime)
       }
     }
@@ -179,12 +183,14 @@ class MainViewModelTest {
         assertNull(runtime.observeSessionGroupCatalog(gatewayId).first())
         assertTrue("Retired folders must disappear without switching Gateway", waitUntil(5_000) { viewModel.sessionCustomGroups.value.isEmpty() })
       } finally {
+        viewModelStore.clear()
         closeNodeRuntimeTestFixture(runtime)
       }
     }
 
   @After
   fun resetNodeServiceStartSuppression() {
+    viewModelStore.clear()
     val app = RuntimeEnvironment.getApplication()
     NodeForegroundService.resume(app, startNow = false)
     (app as NodeApp).chatShareDraftQueue.clear()
@@ -621,7 +627,7 @@ class MainViewModelTest {
         savedStateHandle = SavedStateHandle(),
         resolveShareMimeType = resolveShareMimeType,
         shareLaunchCapacity = shareLaunchCapacity,
-      ) to
+      ).also { viewModelStore.put(UUID.randomUUID().toString(), it) } to
         prefs
     )
   }
