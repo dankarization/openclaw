@@ -1,0 +1,114 @@
+[
+  {
+    "ts": "2026-10-15T07:33:12.543Z",
+    "event": "native-worker-paused",
+    "sessionId": "9",
+    "stage": "commit",
+    "reason": "other",
+    "frames": [
+      {
+        "functionName": "requestSqliteWorkerOperationAdmission",
+        "file": "sqlite-writer-admission-client.ts",
+        "line": 0,
+        "column": 1515
+      },
+      {
+        "functionName": "runOpenClawStateWriteTransaction.database.database",
+        "file": "session-group-catalog.kernel.ts",
+        "line": 0,
+        "column": 7754
+      },
+      {
+        "functionName": "runManagedStateTransaction.databaseLabel",
+        "file": "openclaw-state-db.ts",
+        "line": 0,
+        "column": 18872
+      },
+      {
+        "functionName": "runSqliteReadOperationSync",
+        "file": "sqlite-schema-facts.ts",
+        "line": 0,
+        "column": 13089
+      },
+      {
+        "functionName": "settleSqliteTransactionSync",
+        "file": "sqlite-transaction.ts",
+        "line": 0,
+        "column": 10752
+      },
+      {
+        "functionName": "runSqliteTransactionSync",
+        "file": "sqlite-transaction.ts",
+        "line": 0,
+        "column": 9403
+      },
+      {
+        "functionName": "",
+        "file": "sqlite-transaction.ts",
+        "line": 0,
+        "column": 12751
+      }
+    ]
+  },
+  {
+    "ts": "2026-10-15T07:33:13.267Z",
+    "event": "native-worker-resumed",
+    "sessionId": "9"
+  },
+  {
+    "ts": "2026-10-15T07:37:17.420Z",
+    "event": "native-worker-paused",
+    "sessionId": "9",
+    "stage": "commit",
+    "reason": "other",
+    "frames": [
+      {
+        "functionName": "requestSqliteWorkerOperationAdmission",
+        "file": "sqlite-writer-admission-client.ts",
+        "line": 0,
+        "column": 1515
+      },
+      {
+        "functionName": "runOpenClawStateWriteTransaction.database.database",
+        "file": "session-group-catalog.kernel.ts",
+        "line": 0,
+        "column": 7754
+      },
+      {
+        "functionName": "runManagedStateTransaction.databaseLabel",
+        "file": "openclaw-state-db.ts",
+        "line": 0,
+        "column": 18872
+      },
+      {
+        "functionName": "runSqliteReadOperationSync",
+        "file": "sqlite-schema-facts.ts",
+        "line": 0,
+        "column": 13089
+      },
+      {
+        "functionName": "settleSqliteTransactionSync",
+        "file": "sqlite-transaction.ts",
+        "line": 0,
+        "column": 10752
+      },
+      {
+        "functionName": "runSqliteTransactionSync",
+        "file": "sqlite-transaction.ts",
+        "line": 0,
+        "column": 9403
+      },
+      {
+        "functionName": "",
+        "file": "sqlite-transaction.ts",
+        "line": 0,
+        "column": 12751
+      }
+    ]
+  },
+  {
+    "ts": "2026-10-15T07:37:18.547Z",
+    "event": "native-worker-resumed",
+    "sessionId": "9"
+  }
+]

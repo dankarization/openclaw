@@ -1,0 +1,144 @@
+{
+  "kind": "real-Android-process-retirement-same-endpoint-physical-replacement",
+  "startedAt": "2026-10-15T07:40:24.087Z",
+  "heldAt": "2026-10-15T07:40:24.309Z",
+  "oldOwnerStoppedAt": "2026-10-15T07:40:24.481Z",
+  "newPhysicalAuthenticatedAt": "2026-10-15T07:40:29.905Z",
+  "releasedAt": "2026-10-15T07:40:29.910Z",
+  "catalogUnchanged": true,
+  "newNameAbsent": true,
+  "actualMutationRequests": [],
+  "finishedAt": "2026-10-15T07:40:29.977Z",
+  "pass": true,
+  "before": {
+    "groups": [
+      {
+        "name": "QA_REMOTE_EXISTING",
+        "position": 0
+      },
+      {
+        "name": "QA_UI_RENAMEDA",
+        "position": 1
+      },
+      {
+        "name": "QA_CONCURRENT_APPEND",
+        "position": 2
+      },
+      {
+        "name": "QA_WRITE_ONLY",
+        "position": 3
+      },
+      {
+        "name": "QA_NATIVE_CONCURRENT_2",
+        "position": 4
+      },
+      {
+        "name": "QA_UI_CONCURRENT_2",
+        "position": 5
+      },
+      {
+        "name": "QA_STABL",
+        "position": 6
+      },
+      {
+        "name": "QAEMPTY",
+        "position": 7
+      },
+      {
+        "name": "QA_PAGE_FIRST",
+        "position": 8
+      },
+      {
+        "name": "QACOMMIT",
+        "position": 9
+      },
+      {
+        "name": "QAREVOKE",
+        "position": 10
+      }
+    ],
+    "sectionOrder": [
+      "category:QA_UI_RENAMEDA",
+      "category:QA_REMOTE_EXISTING",
+      "ungrouped",
+      "groups",
+      "work"
+    ],
+    "appendOnly": true
+  },
+  "after": {
+    "groups": [
+      {
+        "name": "QA_REMOTE_EXISTING",
+        "position": 0
+      },
+      {
+        "name": "QA_UI_RENAMEDA",
+        "position": 1
+      },
+      {
+        "name": "QA_CONCURRENT_APPEND",
+        "position": 2
+      },
+      {
+        "name": "QA_WRITE_ONLY",
+        "position": 3
+      },
+      {
+        "name": "QA_NATIVE_CONCURRENT_2",
+        "position": 4
+      },
+      {
+        "name": "QA_UI_CONCURRENT_2",
+        "position": 5
+      },
+      {
+        "name": "QA_STABL",
+        "position": 6
+      },
+      {
+        "name": "QAEMPTY",
+        "position": 7
+      },
+      {
+        "name": "QA_PAGE_FIRST",
+        "position": 8
+      },
+      {
+        "name": "QACOMMIT",
+        "position": 9
+      },
+      {
+        "name": "QAREVOKE",
+        "position": 10
+      }
+    ],
+    "sectionOrder": [
+      "category:QA_UI_RENAMEDA",
+      "category:QA_REMOTE_EXISTING",
+      "ungrouped",
+      "groups",
+      "work"
+    ],
+    "appendOnly": true
+  },
+  "oldOperator": {
+    "peerId": 7,
+    "role": "operator",
+    "scopes": [
+      "operator.read",
+      "operator.write"
+    ],
+    "connected": true
+  },
+  "newOperator": {
+    "peerId": 8,
+    "role": "operator",
+    "scopes": [
+      "operator.read",
+      "operator.write"
+    ],
+    "connected": true
+  },
+  "scope": "Process retirement and physical replacement at same endpoint, not injected in-process callback or final transport-lock pause"
+}

@@ -1,0 +1,280 @@
+{
+  "kind": "native-UI-reorder-races-native-second-client-append-reorder",
+  "before": {
+    "groups": [
+      {
+        "name": "QA_REMOTE_EXISTING",
+        "position": 0
+      },
+      {
+        "name": "QA_UI_RENAMEDA",
+        "position": 1
+      },
+      {
+        "name": "QA_CONCURRENT_APPEND",
+        "position": 2
+      },
+      {
+        "name": "QA_WRITE_ONLY",
+        "position": 3
+      },
+      {
+        "name": "QA_NATIVE_CONCURRENT_2",
+        "position": 4
+      },
+      {
+        "name": "QA_UI_CONCURRENT_2",
+        "position": 5
+      },
+      {
+        "name": "QA_STABL",
+        "position": 6
+      },
+      {
+        "name": "QAEMPTY",
+        "position": 7
+      },
+      {
+        "name": "QA_PAGE_FIRST",
+        "position": 8
+      },
+      {
+        "name": "QACOMMIT",
+        "position": 9
+      },
+      {
+        "name": "QAREVOKE",
+        "position": 10
+      }
+    ],
+    "sectionOrder": [
+      "category:QA_UI_RENAMEDA",
+      "category:QA_REMOTE_EXISTING",
+      "ungrouped",
+      "groups",
+      "work"
+    ],
+    "appendOnly": true
+  },
+  "second": {
+    "ok": true,
+    "groups": [
+      {
+        "name": "QA_REMOTE_EXISTING",
+        "position": 0
+      },
+      {
+        "name": "QA_UI_RENAMEDA",
+        "position": 1
+      },
+      {
+        "name": "QA_CONCURRENT_APPEND",
+        "position": 2
+      },
+      {
+        "name": "QA_WRITE_ONLY",
+        "position": 3
+      },
+      {
+        "name": "QA_NATIVE_CONCURRENT_2",
+        "position": 4
+      },
+      {
+        "name": "QA_UI_CONCURRENT_2",
+        "position": 5
+      },
+      {
+        "name": "QA_STABL",
+        "position": 6
+      },
+      {
+        "name": "QAEMPTY",
+        "position": 7
+      },
+      {
+        "name": "QA_PAGE_FIRST",
+        "position": 8
+      },
+      {
+        "name": "QACOMMIT",
+        "position": 9
+      },
+      {
+        "name": "QAREVOKE",
+        "position": 10
+      },
+      {
+        "name": "QA_CONCURRENT_ORDER",
+        "position": 11
+      }
+    ],
+    "sectionOrder": [
+      "category:QA_CONCURRENT_ORDER",
+      "category:QAREVOKE",
+      "category:QA_UI_RENAMEDA",
+      "category:QA_REMOTE_EXISTING",
+      "ungrouped",
+      "groups",
+      "work"
+    ]
+  },
+  "holdDurationUpperMs": 798,
+  "lastWriterOrderExplicit": true,
+  "earlyUnsettledObservation": {
+    "groups": [
+      {
+        "name": "QA_REMOTE_EXISTING",
+        "position": 0
+      },
+      {
+        "name": "QA_UI_RENAMEDA",
+        "position": 1
+      },
+      {
+        "name": "QA_CONCURRENT_APPEND",
+        "position": 2
+      },
+      {
+        "name": "QA_WRITE_ONLY",
+        "position": 3
+      },
+      {
+        "name": "QA_NATIVE_CONCURRENT_2",
+        "position": 4
+      },
+      {
+        "name": "QA_UI_CONCURRENT_2",
+        "position": 5
+      },
+      {
+        "name": "QA_STABL",
+        "position": 6
+      },
+      {
+        "name": "QAEMPTY",
+        "position": 7
+      },
+      {
+        "name": "QA_PAGE_FIRST",
+        "position": 8
+      },
+      {
+        "name": "QACOMMIT",
+        "position": 9
+      },
+      {
+        "name": "QAREVOKE",
+        "position": 10
+      },
+      {
+        "name": "QA_CONCURRENT_ORDER",
+        "position": 11
+      }
+    ],
+    "sectionOrder": [
+      "category:QA_CONCURRENT_ORDER",
+      "category:QAREVOKE",
+      "category:QA_UI_RENAMEDA",
+      "category:QA_REMOTE_EXISTING",
+      "ungrouped",
+      "groups",
+      "work"
+    ],
+    "appendOnly": true
+  },
+  "earlyAssertionNotCounted": true,
+  "settledActualNativeCatalog": {
+    "groups": [
+      {
+        "name": "QA_REMOTE_EXISTING",
+        "position": 0
+      },
+      {
+        "name": "QA_UI_RENAMEDA",
+        "position": 1
+      },
+      {
+        "name": "QA_CONCURRENT_APPEND",
+        "position": 2
+      },
+      {
+        "name": "QA_WRITE_ONLY",
+        "position": 3
+      },
+      {
+        "name": "QA_NATIVE_CONCURRENT_2",
+        "position": 4
+      },
+      {
+        "name": "QA_UI_CONCURRENT_2",
+        "position": 5
+      },
+      {
+        "name": "QA_STABL",
+        "position": 6
+      },
+      {
+        "name": "QAEMPTY",
+        "position": 7
+      },
+      {
+        "name": "QA_PAGE_FIRST",
+        "position": 8
+      },
+      {
+        "name": "QACOMMIT",
+        "position": 9
+      },
+      {
+        "name": "QAREVOKE",
+        "position": 10
+      },
+      {
+        "name": "QA_CONCURRENT_ORDER",
+        "position": 11
+      }
+    ],
+    "sectionOrder": [
+      "category:QA_REMOTE_EXISTING",
+      "category:QA_UI_RENAMEDA",
+      "category:QA_CONCURRENT_APPEND",
+      "category:QA_WRITE_ONLY",
+      "category:QA_NATIVE_CONCURRENT_2",
+      "category:QA_UI_CONCURRENT_2",
+      "category:QA_STABL",
+      "category:QAEMPTY",
+      "category:QA_PAGE_FIRST",
+      "category:QACOMMIT",
+      "category:QAREVOKE",
+      "ungrouped",
+      "groups",
+      "work",
+      "category:QA_CONCURRENT_ORDER"
+    ],
+    "appendOnly": true
+  },
+  "allCatalogNamesRetained": true,
+  "newConcurrentSectionRetained": true,
+  "actualUiOrderApplied": true,
+  "uiRequest": {
+    "names": [],
+    "appendOnly": true,
+    "sectionOrder": [
+      "category:QA_REMOTE_EXISTING",
+      "category:QA_UI_RENAMEDA",
+      "category:QA_CONCURRENT_APPEND",
+      "category:QA_WRITE_ONLY",
+      "category:QA_NATIVE_CONCURRENT_2",
+      "category:QA_UI_CONCURRENT_2",
+      "category:QA_STABL",
+      "category:QAEMPTY",
+      "category:QA_PAGE_FIRST",
+      "category:QACOMMIT",
+      "category:QAREVOKE",
+      "ungrouped",
+      "groups",
+      "work"
+    ]
+  },
+  "scope": "Last submitted order wins overlapping positions; concurrent new section retained, no arbitrary merge guarantee"
+}

@@ -1,0 +1,112 @@
+{
+  "kind": "actual-Android-put-physical-disconnect-before-native-worker-commit",
+  "startedAt": "2026-10-15T07:33:09.961Z",
+  "uiTapAt": "2026-10-15T07:33:10.487Z",
+  "forceStopAt": "2026-10-15T07:33:12.545Z",
+  "physicalSocketClosedAt": "2026-10-15T07:33:13.095Z",
+  "resumedAt": "2026-10-15T07:33:13.522Z",
+  "finishedAt": "2026-10-15T07:33:13.525Z",
+  "catalogUnchanged": false,
+  "newNameAbsent": false,
+  "before": {
+    "groups": [
+      {
+        "name": "QA_REMOTE_EXISTING",
+        "position": 0
+      },
+      {
+        "name": "QA_UI_RENAMEDA",
+        "position": 1
+      },
+      {
+        "name": "QA_CONCURRENT_APPEND",
+        "position": 2
+      },
+      {
+        "name": "QA_WRITE_ONLY",
+        "position": 3
+      },
+      {
+        "name": "QA_NATIVE_CONCURRENT_2",
+        "position": 4
+      },
+      {
+        "name": "QA_UI_CONCURRENT_2",
+        "position": 5
+      },
+      {
+        "name": "QA_STABL",
+        "position": 6
+      },
+      {
+        "name": "QAEMPTY",
+        "position": 7
+      },
+      {
+        "name": "QA_PAGE_FIRST",
+        "position": 8
+      }
+    ],
+    "sectionOrder": [
+      "category:QA_UI_RENAMEDA",
+      "category:QA_REMOTE_EXISTING",
+      "ungrouped",
+      "groups",
+      "work"
+    ],
+    "appendOnly": true
+  },
+  "after": {
+    "groups": [
+      {
+        "name": "QA_REMOTE_EXISTING",
+        "position": 0
+      },
+      {
+        "name": "QA_UI_RENAMEDA",
+        "position": 1
+      },
+      {
+        "name": "QA_CONCURRENT_APPEND",
+        "position": 2
+      },
+      {
+        "name": "QA_WRITE_ONLY",
+        "position": 3
+      },
+      {
+        "name": "QA_NATIVE_CONCURRENT_2",
+        "position": 4
+      },
+      {
+        "name": "QA_UI_CONCURRENT_2",
+        "position": 5
+      },
+      {
+        "name": "QA_STABL",
+        "position": 6
+      },
+      {
+        "name": "QAEMPTY",
+        "position": 7
+      },
+      {
+        "name": "QA_PAGE_FIRST",
+        "position": 8
+      },
+      {
+        "name": "QACOMMIT",
+        "position": 9
+      }
+    ],
+    "sectionOrder": [
+      "category:QA_UI_RENAMEDA",
+      "category:QA_REMOTE_EXISTING",
+      "ungrouped",
+      "groups",
+      "work"
+    ],
+    "appendOnly": true
+  },
+  "result": "OBSERVED commit persists after ordinary transport closure; not passing revocation-refusal proof"
+}

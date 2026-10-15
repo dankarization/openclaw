@@ -1,0 +1,122 @@
+{
+  "kind": "actual-Android-put-and-native-device-token-revoke-serialized-through-one-writer",
+  "startedAt": "2026-10-15T07:37:15.058Z",
+  "uiTapAt": "2026-10-15T07:37:15.504Z",
+  "revokeRequestedAt": "2026-10-15T07:37:17.411Z",
+  "revokeSettledWhileCatalogWorkerPaused": false,
+  "revokeCompletedAt": "2026-10-15T07:37:18.706Z",
+  "finishedAt": "2026-10-15T07:37:18.813Z",
+  "newNamePresent": true,
+  "serializedOutcome": true,
+  "before": {
+    "groups": [
+      {
+        "name": "QA_REMOTE_EXISTING",
+        "position": 0
+      },
+      {
+        "name": "QA_UI_RENAMEDA",
+        "position": 1
+      },
+      {
+        "name": "QA_CONCURRENT_APPEND",
+        "position": 2
+      },
+      {
+        "name": "QA_WRITE_ONLY",
+        "position": 3
+      },
+      {
+        "name": "QA_NATIVE_CONCURRENT_2",
+        "position": 4
+      },
+      {
+        "name": "QA_UI_CONCURRENT_2",
+        "position": 5
+      },
+      {
+        "name": "QA_STABL",
+        "position": 6
+      },
+      {
+        "name": "QAEMPTY",
+        "position": 7
+      },
+      {
+        "name": "QA_PAGE_FIRST",
+        "position": 8
+      },
+      {
+        "name": "QACOMMIT",
+        "position": 9
+      }
+    ],
+    "sectionOrder": [
+      "category:QA_UI_RENAMEDA",
+      "category:QA_REMOTE_EXISTING",
+      "ungrouped",
+      "groups",
+      "work"
+    ],
+    "appendOnly": true
+  },
+  "after": {
+    "groups": [
+      {
+        "name": "QA_REMOTE_EXISTING",
+        "position": 0
+      },
+      {
+        "name": "QA_UI_RENAMEDA",
+        "position": 1
+      },
+      {
+        "name": "QA_CONCURRENT_APPEND",
+        "position": 2
+      },
+      {
+        "name": "QA_WRITE_ONLY",
+        "position": 3
+      },
+      {
+        "name": "QA_NATIVE_CONCURRENT_2",
+        "position": 4
+      },
+      {
+        "name": "QA_UI_CONCURRENT_2",
+        "position": 5
+      },
+      {
+        "name": "QA_STABL",
+        "position": 6
+      },
+      {
+        "name": "QAEMPTY",
+        "position": 7
+      },
+      {
+        "name": "QA_PAGE_FIRST",
+        "position": 8
+      },
+      {
+        "name": "QACOMMIT",
+        "position": 9
+      },
+      {
+        "name": "QAREVOKE",
+        "position": 10
+      }
+    ],
+    "sectionOrder": [
+      "category:QA_UI_RENAMEDA",
+      "category:QA_REMOTE_EXISTING",
+      "ungrouped",
+      "groups",
+      "work"
+    ],
+    "appendOnly": true
+  },
+  "actualWorkerResumedAt": "2026-10-15T07:37:18.547Z",
+  "operatorPeersAfterRevoke": [],
+  "result": "Catalog commit precedes completed native device-token revoke through same SQLite writer"
+}
