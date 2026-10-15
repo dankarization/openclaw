@@ -1,0 +1,117 @@
+[
+  {
+    "text": "QA_UI_RENAMEDA",
+    "content-desc": "",
+    "bounds": "[189,457][761,507]"
+  },
+  {
+    "text": "",
+    "content-desc": "Group menu",
+    "bounds": "[812,460][859,507]"
+  },
+  {
+    "text": "QA_REMOTE_EXISTING",
+    "content-desc": "",
+    "bounds": "[189,599][761,649]"
+  },
+  {
+    "text": "",
+    "content-desc": "Group menu",
+    "bounds": "[812,602][859,649]"
+  },
+  {
+    "text": "QA_CONCURRENT_APPEND",
+    "content-desc": "",
+    "bounds": "[189,741][761,791]"
+  },
+  {
+    "text": "",
+    "content-desc": "Group menu",
+    "bounds": "[812,744][859,791]"
+  },
+  {
+    "text": "QA_WRITE_ONLY",
+    "content-desc": "",
+    "bounds": "[189,883][761,933]"
+  },
+  {
+    "text": "",
+    "content-desc": "Group menu",
+    "bounds": "[812,886][859,933]"
+  },
+  {
+    "text": "QA_NATIVE_CONCURRENT_2",
+    "content-desc": "",
+    "bounds": "[189,1025][761,1075]"
+  },
+  {
+    "text": "",
+    "content-desc": "Group menu",
+    "bounds": "[812,1028][859,1075]"
+  },
+  {
+    "text": "QA_UI_CONCURRENT_2",
+    "content-desc": "",
+    "bounds": "[189,1167][761,1217]"
+  },
+  {
+    "text": "",
+    "content-desc": "Group menu",
+    "bounds": "[812,1170][859,1217]"
+  },
+  {
+    "text": "QA_STABL",
+    "content-desc": "",
+    "bounds": "[189,1309][761,1359]"
+  },
+  {
+    "text": "",
+    "content-desc": "Group menu",
+    "bounds": "[812,1312][859,1359]"
+  },
+  {
+    "text": "QAEMPTY",
+    "content-desc": "",
+    "bounds": "[189,1451][761,1501]"
+  },
+  {
+    "text": "",
+    "content-desc": "Group menu",
+    "bounds": "[812,1454][859,1501]"
+  },
+  {
+    "text": "QA_PAGE_FIRST",
+    "content-desc": "",
+    "bounds": "[189,1593][684,1643]"
+  },
+  {
+    "text": "200",
+    "content-desc": "",
+    "bounds": "[705,1597][761,1640]"
+  },
+  {
+    "text": "",
+    "content-desc": "Group menu",
+    "bounds": "[812,1596][859,1643]"
+  },
+  {
+    "text": "QA_PAGE_TAIL",
+    "content-desc": "",
+    "bounds": "[189,1735][761,1785]"
+  },
+  {
+    "text": "",
+    "content-desc": "Group menu",
+    "bounds": "[812,1738][859,1785]"
+  },
+  {
+    "text": "Other",
+    "content-desc": "",
+    "bounds": "[126,1851][727,1901]"
+  },
+  {
+    "text": "Load more sessions",
+    "content-desc": "",
+    "bounds": "[169,1972][803,2022]"
+  }
+]

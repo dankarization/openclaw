@@ -1,0 +1,17 @@
+{
+  "source": "fd276434a19b2d59d6e86f07f50b79e0835f4de8",
+  "nativeCheckout": "4f5782b9ff339053d2b94ee4ceb8364116a9b143",
+  "identicalTree": "24f6ffd1a2ec676ac5f2eb2a35d583c60e36575e",
+  "apkSha256": "6261d369739833fbfdfa3c09192b3918bca96227aa0f3155fae80311ce1c0369",
+  "syntheticSessions": 202,
+  "existingQaRows": 3,
+  "totalRows": 205,
+  "initialNativePageRows": 200,
+  "nextNativePageRows": 5,
+  "realUiLoadMore": true,
+  "renameAssignmentDeletionRefreshPreserveAll205": true,
+  "nativeRefreshLimitAfterLoad": 400,
+  "assignedTail": "agent:main:qa-page-002 -> QAEMPTY",
+  "deletedGroup": "QARENAMED",
+  "otherTailRetained": "agent:main:qa-page-001 category=null"
+}

@@ -1,0 +1,127 @@
+[
+  {
+    "text": "QA_UI_RENAMEDA",
+    "content-desc": "",
+    "bounds": "[189,457][761,507]"
+  },
+  {
+    "text": "",
+    "content-desc": "Group menu",
+    "bounds": "[812,460][859,507]"
+  },
+  {
+    "text": "QA_REMOTE_EXISTING",
+    "content-desc": "",
+    "bounds": "[189,599][761,649]"
+  },
+  {
+    "text": "",
+    "content-desc": "Group menu",
+    "bounds": "[812,602][859,649]"
+  },
+  {
+    "text": "QA_CONCURRENT_APPEND",
+    "content-desc": "",
+    "bounds": "[189,741][761,791]"
+  },
+  {
+    "text": "",
+    "content-desc": "Group menu",
+    "bounds": "[812,744][859,791]"
+  },
+  {
+    "text": "QA_WRITE_ONLY",
+    "content-desc": "",
+    "bounds": "[189,883][761,933]"
+  },
+  {
+    "text": "",
+    "content-desc": "Group menu",
+    "bounds": "[812,886][859,933]"
+  },
+  {
+    "text": "QA_NATIVE_CONCURRENT_2",
+    "content-desc": "",
+    "bounds": "[189,1025][761,1075]"
+  },
+  {
+    "text": "",
+    "content-desc": "Group menu",
+    "bounds": "[812,1028][859,1075]"
+  },
+  {
+    "text": "QA_UI_CONCURRENT_2",
+    "content-desc": "",
+    "bounds": "[189,1167][761,1217]"
+  },
+  {
+    "text": "",
+    "content-desc": "Group menu",
+    "bounds": "[812,1170][859,1217]"
+  },
+  {
+    "text": "QA_STABL",
+    "content-desc": "",
+    "bounds": "[189,1309][761,1359]"
+  },
+  {
+    "text": "",
+    "content-desc": "Group menu",
+    "bounds": "[812,1312][859,1359]"
+  },
+  {
+    "text": "QA_STABLE_UPGRADE",
+    "content-desc": "",
+    "bounds": "[69,1414][460,1464]"
+  },
+  {
+    "text": "",
+    "content-desc": "Move to group",
+    "bounds": "[806,1438][853,1485]"
+  },
+  {
+    "text": "QAEMPTY",
+    "content-desc": "",
+    "bounds": "[189,1588][761,1638]"
+  },
+  {
+    "text": "",
+    "content-desc": "Group menu",
+    "bounds": "[812,1591][859,1638]"
+  },
+  {
+    "text": "QA_PAGE_002",
+    "content-desc": "",
+    "bounds": "[69,1693][322,1743]"
+  },
+  {
+    "text": "",
+    "content-desc": "Move to group",
+    "bounds": "[806,1717][853,1764]"
+  },
+  {
+    "text": "QA_PAGE_FIRST",
+    "content-desc": "",
+    "bounds": "[189,1867][684,1917]"
+  },
+  {
+    "text": "200",
+    "content-desc": "",
+    "bounds": "[705,1871][761,1914]"
+  },
+  {
+    "text": "",
+    "content-desc": "Group menu",
+    "bounds": "[812,1870][859,1917]"
+  },
+  {
+    "text": "Other",
+    "content-desc": "",
+    "bounds": "[126,1983][723,2033]"
+  },
+  {
+    "text": "3",
+    "content-desc": "",
+    "bounds": "[744,1987][761,2030]"
+  }
+]

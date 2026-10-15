@@ -1,0 +1,391 @@
+[
+  {
+    "ts": "2026-10-15T07:02:09.214Z",
+    "event": "android-request",
+    "peerId": 2,
+    "method": "sessions.list",
+    "params": {
+      "includeGlobal": true,
+      "includeUnknown": false,
+      "agentId": "main",
+      "limit": 200
+    }
+  },
+  {
+    "ts": "2026-10-15T07:02:09.677Z",
+    "event": "android-native-result",
+    "method": "sessions.list",
+    "ok": true,
+    "count": 200,
+    "hasMore": true,
+    "nextOffset": 200,
+    "qaPageRows": 200,
+    "hasFirst": true,
+    "hasTail": false,
+    "tailCategories": []
+  },
+  {
+    "ts": "2026-10-15T07:02:18.420Z",
+    "event": "android-request",
+    "peerId": 2,
+    "method": "sessions.list",
+    "params": {
+      "includeGlobal": true,
+      "includeUnknown": false,
+      "agentId": "main",
+      "limit": 200
+    }
+  },
+  {
+    "ts": "2026-10-15T07:02:18.465Z",
+    "event": "android-native-result",
+    "method": "sessions.list",
+    "ok": true,
+    "count": 200,
+    "hasMore": true,
+    "nextOffset": 200,
+    "qaPageRows": 200,
+    "hasFirst": true,
+    "hasTail": false,
+    "tailCategories": []
+  },
+  {
+    "ts": "2026-10-15T07:02:18.476Z",
+    "event": "android-request",
+    "peerId": 2,
+    "method": "sessions.list",
+    "params": {
+      "includeGlobal": false,
+      "includeUnknown": false,
+      "configuredAgentsOnly": true,
+      "spawnedBy": "agent:main:node-b5ad859d5c1a",
+      "limit": 10000,
+      "offset": 0
+    }
+  },
+  {
+    "ts": "2026-10-15T07:02:18.482Z",
+    "event": "android-native-result",
+    "method": "sessions.list",
+    "ok": true,
+    "count": 0,
+    "hasMore": false,
+    "nextOffset": null,
+    "qaPageRows": 0,
+    "hasFirst": false,
+    "hasTail": false,
+    "tailCategories": []
+  },
+  {
+    "ts": "2026-10-15T07:02:19.190Z",
+    "event": "android-request",
+    "peerId": 2,
+    "method": "sessions.list",
+    "params": {
+      "includeGlobal": false,
+      "includeUnknown": false,
+      "configuredAgentsOnly": true,
+      "spawnedBy": "agent:main:node-b5ad859d5c1a",
+      "limit": 10000,
+      "offset": 0
+    }
+  },
+  {
+    "ts": "2026-10-15T07:02:19.197Z",
+    "event": "android-native-result",
+    "method": "sessions.list",
+    "ok": true,
+    "count": 0,
+    "hasMore": false,
+    "nextOffset": null,
+    "qaPageRows": 0,
+    "hasFirst": false,
+    "hasTail": false,
+    "tailCategories": []
+  },
+  {
+    "ts": "2026-10-15T07:03:00.965Z",
+    "event": "android-request",
+    "peerId": 2,
+    "method": "sessions.list",
+    "params": {
+      "includeGlobal": true,
+      "includeUnknown": false,
+      "agentId": "main",
+      "limit": 200
+    }
+  },
+  {
+    "ts": "2026-10-15T07:03:00.998Z",
+    "event": "android-native-result",
+    "method": "sessions.list",
+    "ok": true,
+    "count": 200,
+    "hasMore": true,
+    "nextOffset": 200,
+    "qaPageRows": 200,
+    "hasFirst": true,
+    "hasTail": false,
+    "tailCategories": []
+  },
+  {
+    "ts": "2026-10-15T07:03:35.537Z",
+    "event": "android-request",
+    "peerId": 2,
+    "method": "sessions.list",
+    "params": {
+      "includeGlobal": true,
+      "includeUnknown": false,
+      "agentId": "main",
+      "limit": 200
+    }
+  },
+  {
+    "ts": "2026-10-15T07:03:35.571Z",
+    "event": "android-native-result",
+    "method": "sessions.list",
+    "ok": true,
+    "count": 200,
+    "hasMore": true,
+    "nextOffset": 200,
+    "qaPageRows": 200,
+    "hasFirst": true,
+    "hasTail": false,
+    "tailCategories": []
+  },
+  {
+    "ts": "2026-10-15T07:04:55.755Z",
+    "event": "android-request",
+    "peerId": 2,
+    "method": "sessions.list",
+    "params": {
+      "includeGlobal": true,
+      "includeUnknown": false,
+      "agentId": "main",
+      "limit": 200,
+      "offset": 200
+    }
+  },
+  {
+    "ts": "2026-10-15T07:04:55.763Z",
+    "event": "android-native-result",
+    "method": "sessions.list",
+    "ok": true,
+    "count": 5,
+    "hasMore": false,
+    "nextOffset": null,
+    "qaPageRows": 2,
+    "hasFirst": false,
+    "hasTail": true,
+    "tailCategories": [
+      {
+        "key": "agent:main:qa-page-002",
+        "category": "QA_PAGE_TAIL"
+      },
+      {
+        "key": "agent:main:qa-page-001",
+        "category": "QA_PAGE_TAIL"
+      }
+    ]
+  },
+  {
+    "ts": "2026-10-15T07:07:10.073Z",
+    "event": "android-request",
+    "peerId": 2,
+    "method": "sessions.groups.rename",
+    "params": {
+      "name": "QA_PAGE_TAIL",
+      "to": "QARENAMED"
+    }
+  },
+  {
+    "ts": "2026-10-15T07:07:11.045Z",
+    "event": "android-request",
+    "peerId": 2,
+    "method": "sessions.list",
+    "params": {
+      "includeGlobal": true,
+      "includeUnknown": false,
+      "agentId": "main",
+      "limit": 400
+    }
+  },
+  {
+    "ts": "2026-10-15T07:07:11.083Z",
+    "event": "android-native-result",
+    "method": "sessions.list",
+    "ok": true,
+    "count": 205,
+    "hasMore": false,
+    "nextOffset": null,
+    "qaPageRows": 202,
+    "hasFirst": true,
+    "hasTail": true,
+    "tailCategories": [
+      {
+        "key": "agent:main:qa-page-002",
+        "category": "QARENAMED"
+      },
+      {
+        "key": "agent:main:qa-page-001",
+        "category": "QARENAMED"
+      }
+    ]
+  },
+  {
+    "ts": "2026-10-15T07:07:11.956Z",
+    "event": "android-request",
+    "peerId": 2,
+    "method": "sessions.list",
+    "params": {
+      "includeGlobal": true,
+      "includeUnknown": false,
+      "agentId": "main",
+      "limit": 400
+    }
+  },
+  {
+    "ts": "2026-10-15T07:07:11.961Z",
+    "event": "android-native-result",
+    "method": "sessions.list",
+    "ok": true,
+    "count": 205,
+    "hasMore": false,
+    "nextOffset": null,
+    "qaPageRows": 202,
+    "hasFirst": true,
+    "hasTail": true,
+    "tailCategories": [
+      {
+        "key": "agent:main:qa-page-002",
+        "category": "QARENAMED"
+      },
+      {
+        "key": "agent:main:qa-page-001",
+        "category": "QARENAMED"
+      }
+    ]
+  },
+  {
+    "ts": "2026-10-15T07:08:01.172Z",
+    "event": "android-request",
+    "peerId": 2,
+    "method": "sessions.patch",
+    "params": {
+      "key": "agent:main:qa-page-002",
+      "agentId": "main",
+      "category": "QAEMPTY"
+    }
+  },
+  {
+    "ts": "2026-10-15T07:08:08.291Z",
+    "event": "android-request",
+    "peerId": 2,
+    "method": "sessions.list",
+    "params": {
+      "includeGlobal": true,
+      "includeUnknown": false,
+      "agentId": "main",
+      "limit": 400
+    }
+  },
+  {
+    "ts": "2026-10-15T07:08:08.338Z",
+    "event": "android-native-result",
+    "method": "sessions.list",
+    "ok": true,
+    "count": 205,
+    "hasMore": false,
+    "nextOffset": null,
+    "qaPageRows": 202,
+    "hasFirst": true,
+    "hasTail": true,
+    "tailCategories": [
+      {
+        "key": "agent:main:qa-page-002",
+        "category": "QAEMPTY"
+      },
+      {
+        "key": "agent:main:qa-page-001",
+        "category": "QARENAMED"
+      }
+    ]
+  },
+  {
+    "ts": "2026-10-15T07:09:00.954Z",
+    "event": "android-request",
+    "peerId": 2,
+    "method": "sessions.groups.delete",
+    "params": {
+      "name": "QARENAMED"
+    }
+  },
+  {
+    "ts": "2026-10-15T07:09:01.141Z",
+    "event": "android-request",
+    "peerId": 2,
+    "method": "sessions.list",
+    "params": {
+      "includeGlobal": true,
+      "includeUnknown": false,
+      "agentId": "main",
+      "limit": 400
+    }
+  },
+  {
+    "ts": "2026-10-15T07:09:01.193Z",
+    "event": "android-native-result",
+    "method": "sessions.list",
+    "ok": true,
+    "count": 205,
+    "hasMore": false,
+    "nextOffset": null,
+    "qaPageRows": 202,
+    "hasFirst": true,
+    "hasTail": true,
+    "tailCategories": [
+      {
+        "key": "agent:main:qa-page-002",
+        "category": "QAEMPTY"
+      },
+      {
+        "key": "agent:main:qa-page-001",
+        "category": null
+      }
+    ]
+  },
+  {
+    "ts": "2026-10-15T07:09:01.844Z",
+    "event": "android-request",
+    "peerId": 2,
+    "method": "sessions.list",
+    "params": {
+      "includeGlobal": true,
+      "includeUnknown": false,
+      "agentId": "main",
+      "limit": 400
+    }
+  },
+  {
+    "ts": "2026-10-15T07:09:01.861Z",
+    "event": "android-native-result",
+    "method": "sessions.list",
+    "ok": true,
+    "count": 205,
+    "hasMore": false,
+    "nextOffset": null,
+    "qaPageRows": 202,
+    "hasFirst": true,
+    "hasTail": true,
+    "tailCategories": [
+      {
+        "key": "agent:main:qa-page-002",
+        "category": "QAEMPTY"
+      },
+      {
+        "key": "agent:main:qa-page-001",
+        "category": null
+      }
+    ]
+  }
+]
