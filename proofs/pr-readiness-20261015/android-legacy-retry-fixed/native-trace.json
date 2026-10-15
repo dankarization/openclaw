@@ -1,0 +1,372 @@
+{
+  "readonly-import": [
+    {
+      "ts": "2026-10-15T10:19:06.944Z",
+      "event": "android-request",
+      "peerId": 68,
+      "id": "request-1",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T10:19:06.946Z",
+      "event": "android-native-result",
+      "peerId": 68,
+      "id": "request-1",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_MAIN_KEEP",
+            "position": 0
+          },
+          {
+            "name": "QALIVEOK",
+            "position": 1
+          },
+          {
+            "name": "QASEED",
+            "position": 2
+          },
+          {
+            "name": "QA_RETRY",
+            "position": 3
+          },
+          {
+            "name": "QAFIXSEED",
+            "position": 4
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_MAIN_KEEP",
+          "ungrouped"
+        ],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T10:19:07.074Z",
+      "event": "android-request",
+      "peerId": 68,
+      "id": "request-2",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T10:19:07.080Z",
+      "event": "android-native-result",
+      "peerId": 68,
+      "id": "request-2",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_MAIN_KEEP",
+            "position": 0
+          },
+          {
+            "name": "QALIVEOK",
+            "position": 1
+          },
+          {
+            "name": "QASEED",
+            "position": 2
+          },
+          {
+            "name": "QA_RETRY",
+            "position": 3
+          },
+          {
+            "name": "QAFIXSEED",
+            "position": 4
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_MAIN_KEEP",
+          "ungrouped"
+        ],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T10:19:07.152Z",
+      "event": "android-request",
+      "peerId": 68,
+      "id": "request-3",
+      "method": "sessions.groups.put",
+      "params": {
+        "names": [
+          "QAFIX_RETRY"
+        ],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T10:19:07.154Z",
+      "event": "android-native-result",
+      "peerId": 68,
+      "id": "request-3",
+      "method": "sessions.groups.put",
+      "ok": false,
+      "error": {
+        "code": "FORBIDDEN",
+        "message": "missing scope: operator.write",
+        "details": {
+          "code": "MISSING_SCOPE",
+          "missingScope": "operator.write",
+          "requiredScopes": [
+            "operator.write"
+          ]
+        }
+      }
+    }
+  ],
+  "write-retry": [
+    {
+      "ts": "2026-10-15T10:20:33.284Z",
+      "event": "android-request",
+      "peerId": 69,
+      "id": "request-4",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T10:20:33.299Z",
+      "event": "android-native-result",
+      "peerId": 69,
+      "id": "request-4",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_MAIN_KEEP",
+            "position": 0
+          },
+          {
+            "name": "QALIVEOK",
+            "position": 1
+          },
+          {
+            "name": "QASEED",
+            "position": 2
+          },
+          {
+            "name": "QA_RETRY",
+            "position": 3
+          },
+          {
+            "name": "QAFIXSEED",
+            "position": 4
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_MAIN_KEEP",
+          "ungrouped"
+        ],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T10:20:33.506Z",
+      "event": "android-request",
+      "peerId": 69,
+      "id": "request-5",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T10:20:33.508Z",
+      "event": "android-native-result",
+      "peerId": 69,
+      "id": "request-5",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_MAIN_KEEP",
+            "position": 0
+          },
+          {
+            "name": "QALIVEOK",
+            "position": 1
+          },
+          {
+            "name": "QASEED",
+            "position": 2
+          },
+          {
+            "name": "QA_RETRY",
+            "position": 3
+          },
+          {
+            "name": "QAFIXSEED",
+            "position": 4
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_MAIN_KEEP",
+          "ungrouped"
+        ],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T10:20:33.610Z",
+      "event": "android-request",
+      "peerId": 69,
+      "id": "request-6",
+      "method": "sessions.groups.put",
+      "params": {
+        "names": [
+          "QAFIX_RETRY"
+        ],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T10:20:34.015Z",
+      "event": "android-native-result",
+      "peerId": 69,
+      "id": "request-6",
+      "method": "sessions.groups.put",
+      "ok": true,
+      "payload": {
+        "ok": true,
+        "groups": [
+          {
+            "name": "QA_MAIN_KEEP",
+            "position": 0
+          },
+          {
+            "name": "QALIVEOK",
+            "position": 1
+          },
+          {
+            "name": "QASEED",
+            "position": 2
+          },
+          {
+            "name": "QA_RETRY",
+            "position": 3
+          },
+          {
+            "name": "QAFIXSEED",
+            "position": 4
+          },
+          {
+            "name": "QAFIX_RETRY",
+            "position": 5
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_MAIN_KEEP",
+          "ungrouped"
+        ]
+      }
+    },
+    {
+      "ts": "2026-10-15T10:20:34.118Z",
+      "event": "android-request",
+      "peerId": 69,
+      "id": "request-7",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T10:20:34.928Z",
+      "event": "android-native-result",
+      "peerId": 69,
+      "id": "request-7",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_MAIN_KEEP",
+            "position": 0
+          },
+          {
+            "name": "QALIVEOK",
+            "position": 1
+          },
+          {
+            "name": "QASEED",
+            "position": 2
+          },
+          {
+            "name": "QA_RETRY",
+            "position": 3
+          },
+          {
+            "name": "QAFIXSEED",
+            "position": 4
+          },
+          {
+            "name": "QAFIX_RETRY",
+            "position": 5
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_MAIN_KEEP",
+          "ungrouped"
+        ],
+        "appendOnly": true
+      }
+    }
+  ],
+  "post-consumption-relaunch": [
+    {
+      "ts": "2026-10-15T10:20:51.839Z",
+      "event": "android-request",
+      "peerId": 72,
+      "id": "request-8",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T10:20:51.842Z",
+      "event": "android-native-result",
+      "peerId": 72,
+      "id": "request-8",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_MAIN_KEEP",
+            "position": 0
+          },
+          {
+            "name": "QALIVEOK",
+            "position": 1
+          },
+          {
+            "name": "QASEED",
+            "position": 2
+          },
+          {
+            "name": "QA_RETRY",
+            "position": 3
+          },
+          {
+            "name": "QAFIXSEED",
+            "position": 4
+          },
+          {
+            "name": "QAFIX_RETRY",
+            "position": 5
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_MAIN_KEEP",
+          "ungrouped"
+        ],
+        "appendOnly": true
+      }
+    }
+  ]
+}

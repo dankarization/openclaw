@@ -1,0 +1,62 @@
+{
+  "publicHead": "019f6ada87425d5d35c456f40c424167f87185f1",
+  "nativeHead": "17551257ed532cc11b8ae64ed4a5713ee18b108c",
+  "cleanAndroidBuildHead": "27f8b99d44a85ffa483834fa382e21f88281b356",
+  "identicalFullTree": "088db658114734ecd036e7939a187140e2ab714e",
+  "actualApkSha256": "500360da44a0bb0ba9eda3c00fc3c5e4a1f7b34b271ae18ac57c6136d90b746e",
+  "stableInputSource": "59cb44796b0f1f0daa0e37af8b1495abb45d9bc1",
+  "sources": {
+    "OpenClawNativeCredentialFixture.java": {
+      "originalSha256": "bebf64b4a3f92ca8d48c934342175847dbc6f66b1b60f189cc09c90edae60678",
+      "publishedAs": "OpenClawNativeCredentialFixture.sanitized.java",
+      "sanitization": "QA root/endpoint literals only; no native outcomes replaced"
+    },
+    "init-native-owners.py": {
+      "originalSha256": "67480348fdb47338092ea9fa755d660a92e470c160128d86e60180750237d305",
+      "publishedAs": "init-native-owners.py",
+      "sanitization": "QA root/endpoint literals only; no native outcomes replaced"
+    },
+    "native-owner-step.py": {
+      "originalSha256": "0e99ea432d5136a7c5edadf6d593826968df6f8ade6d901f560e4305975e1253",
+      "publishedAs": "native-owner-step.py",
+      "sanitization": "QA root/endpoint literals only; no native outcomes replaced"
+    },
+    "grant-native.mjs": {
+      "originalSha256": "d2d4fe1dd2c802f85361858b7e1c40c22aa363150224a625afd0f101e96aca9c",
+      "publishedAs": "grant-native.sanitized.mjs",
+      "sanitization": "QA root/endpoint literals only; no native outcomes replaced"
+    },
+    "ui-action.py": {
+      "originalSha256": "a9e292d6176e6ebd6569b6cf3a069c30bf344179db188f530d44bdcd205c7422",
+      "publishedAs": "ui-action.py",
+      "sanitization": "QA root/endpoint literals only; no native outcomes replaced"
+    },
+    "collect-phase.py": {
+      "originalSha256": "98f30dc6ea20074a503c05ed9b991733e0a6cf25dbc150064f096ef59010d782",
+      "publishedAs": "collect-phase.py",
+      "sanitization": "QA root/endpoint literals only; no native outcomes replaced"
+    },
+    "executed-stock-producer.private.py": {
+      "originalSha256": "63e1072554fda9566381976e961dceccfe7b00b588f458d03c61d53f2e280373",
+      "publishedAs": "executed-stock-producer.py",
+      "sanitization": "QA root/endpoint literals only; no native outcomes replaced"
+    }
+  },
+  "tests": {
+    "MainViewModelTest": {
+      "tests": 18,
+      "failures": 0,
+      "errors": 0
+    },
+    "ktlintCheck": "passed",
+    "assemblePlayDebug": "passed from clean source",
+    "sharingGroupsTests": {
+      "tests": 11,
+      "failures": 0,
+      "runtimeSource": "01599e42206908b65d89b8f023b8511b258b2fb6",
+      "gatewayFilesIdenticalOnCurrentHead": true
+    }
+  },
+  "productionTouched": false,
+  "authFixture": "Own synthetic identity; native-issued read-only/write device grants. No production credentials, local names, migration flags, RPC errors or server results injected."
+}

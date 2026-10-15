@@ -1,0 +1,100 @@
+[
+  {
+    "mode": "desc",
+    "value": "Show Sidebar",
+    "observedBounds": "[82,189][129,236]",
+    "observedXmlSha256": "ee0e4eaee77c474dbcfd89c83f3a4f0cf155d9ddbfefdc49453f26f3af068cb4",
+    "at": 1792059315.8142018
+  },
+  {
+    "mode": "text",
+    "value": "Threads",
+    "observedBounds": "[164,592][845,642]",
+    "observedXmlSha256": "b29446b6ae09d63c52babc2aa3548cd54a584bd320d6f396ecb5fb0a3d3a6abd",
+    "at": 1792059320.805391
+  },
+  {
+    "mode": "long",
+    "value": "[synthetic Android session row; exact text retained privately]",
+    "observedBounds": "[294,1059][953,1109]",
+    "observedXmlSha256": "e4a203414fae97f0c8cb0f99a0bbdb0872bd31ffea840a523c7e682ec456193f",
+    "at": 1792059404.0601897
+  },
+  {
+    "mode": "text",
+    "value": "Move to group",
+    "observedBounds": "[74,1336][316,1386]",
+    "observedXmlSha256": "935618f938b84c63f6abe997d0b10516ea1cc21e443c91970e8292885d146023",
+    "at": 1792059406.3855288
+  },
+  {
+    "mode": "text",
+    "value": "New group\u2026",
+    "observedBounds": "[74,1546][279,1596]",
+    "observedXmlSha256": "05987888d9aa05115a348ac865206c245f318e4b10b616f4c9b48d0b786cd8b2",
+    "at": 1792059408.7139924
+  },
+  {
+    "mode": "input",
+    "value": "QAFIXSEED",
+    "observedBounds": "[183,1100][897,1268]",
+    "observedXmlSha256": "37cf869281745c81ab362f2a29915ce03f5121f2de532b80ea0fd44688295233",
+    "at": 1792059415.1692238
+  },
+  {
+    "mode": "text",
+    "value": "Create",
+    "observedBounds": "[748,1370][865,1420]",
+    "observedXmlSha256": "44ce59d85fb13a628984351d68c940b7f98d620f636d2e89dd875e02e55f6342",
+    "at": 1792059418.010422
+  },
+  {
+    "mode": "long",
+    "value": "QAFIXSEED",
+    "observedBounds": "[42,937][234,1046]",
+    "observedXmlSha256": "a31af72b38b5240d345b425f0d3048cccd1c6579d8a8a5ce7a65a07e72f62cb2",
+    "at": 1792059421.303019
+  },
+  {
+    "mode": "text",
+    "value": "New group\u2026",
+    "observedBounds": "[74,1210][279,1260]",
+    "observedXmlSha256": "ec5744c6a67c376c69135120d8f67dd4b85f600a60af97da7589841c584cfc3a",
+    "at": 1792059423.8309968
+  },
+  {
+    "mode": "input",
+    "value": "QAFIX_RETRY",
+    "observedBounds": "[183,1100][897,1268]",
+    "observedXmlSha256": "37cf869281745c81ab362f2a29915ce03f5121f2de532b80ea0fd44688295233",
+    "at": 1792059428.95157
+  },
+  {
+    "mode": "text",
+    "value": "Create",
+    "observedBounds": "[748,1370][865,1420]",
+    "observedXmlSha256": "d17680c9a2a054adcec773e4f34bcb4c55b7fc75663dc2e78782d4c5e608e35c",
+    "at": 1792059431.7194948
+  },
+  {
+    "mode": "desc",
+    "value": "Show Sidebar",
+    "observedBounds": "[82,189][129,236]",
+    "observedXmlSha256": "a91a0a8ffbf250e6758601086508df50fd412cdba5794caed8163b3c03ec9438",
+    "at": 1792059546.8935523
+  },
+  {
+    "mode": "desc",
+    "value": "Show Sidebar",
+    "observedBounds": "[82,189][129,236]",
+    "observedXmlSha256": "61542d01d043c40531769d05ef9bb96fa88a3f7eeea63d96b94afd9873cb1c9d",
+    "at": 1792059633.2575634
+  },
+  {
+    "mode": "desc",
+    "value": "Show Sidebar",
+    "observedBounds": "[82,189][129,236]",
+    "observedXmlSha256": "15b826c60dd65d0864ac54f50188074e431e33a10c0243eabd7df823979cad2b",
+    "at": 1792059651.7995431
+  }
+]

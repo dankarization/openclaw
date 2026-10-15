@@ -1,0 +1,257 @@
+{
+  "fixed-stock-authored": {
+    "originalXmlSha256": "0f1d3d5b9ee8a3062a4bd143672227b708cd73ccbf74c6b17ef24b497e846533",
+    "actualNativeNodes": [
+      {
+        "text": "Threads",
+        "bounds": "[189,173][891,252]",
+        "enabled": "true"
+      },
+      {
+        "text": "QAFIX_RETRY",
+        "bounds": "[42,937][278,1063]",
+        "enabled": "true"
+      },
+      {
+        "text": "QAFIXSEED",
+        "bounds": "[42,1024][234,1133]",
+        "enabled": "true"
+      }
+    ],
+    "excerptOnly": true,
+    "footerAndSyntheticDeviceRowsOmitted": true,
+    "privateOriginalScreenshotSha256": "756f8dd72359f3e22a6a6d613d311599d0df7430b456b5e04cc55e0a30397752"
+  },
+  "readonly-fixed-visible": {
+    "originalXmlSha256": "8bd1b915eb63f3c175c24be35a9f7bb9370ea914fe841f4fcb5911cd0a6648c1",
+    "actualNativeNodes": [
+      {
+        "text": "Threads",
+        "bounds": "[164,592][845,642]",
+        "enabled": "true"
+      },
+      {
+        "text": "Pinned",
+        "bounds": "[126,1043][887,1093]",
+        "enabled": "true"
+      },
+      {
+        "text": "QA_MAIN_KEEP",
+        "bounds": "[189,1185][887,1235]",
+        "enabled": "true"
+      },
+      {
+        "text": "QALIVEOK",
+        "bounds": "[189,1327][887,1377]",
+        "enabled": "true"
+      },
+      {
+        "text": "QASEED",
+        "bounds": "[189,1469][887,1519]",
+        "enabled": "true"
+      },
+      {
+        "text": "QA_RETRY",
+        "bounds": "[189,1611][887,1661]",
+        "enabled": "true"
+      },
+      {
+        "text": "QAFIXSEED",
+        "bounds": "[189,1753][887,1803]",
+        "enabled": "true"
+      },
+      {
+        "text": "QAFIX_RETRY",
+        "bounds": "[189,2030][887,2080]",
+        "enabled": "true"
+      },
+      {
+        "text": "Other",
+        "bounds": "[126,2146][848,2155]",
+        "enabled": "true"
+      }
+    ],
+    "excerptOnly": true,
+    "footerAndSyntheticDeviceRowsOmitted": true,
+    "privateOriginalScreenshotSha256": "eef7041d8061af044d5654debbddce9770d509f9ce890837aaa6ebc246726f6d"
+  },
+  "fixed-successful-retry-visible": {
+    "originalXmlSha256": "487f97effad20e42e34bfac03060c67faec389a2bf1f3e0ee8b79caeba0b2904",
+    "actualNativeNodes": [
+      {
+        "text": "Threads",
+        "bounds": "[164,592][845,642]",
+        "enabled": "true"
+      },
+      {
+        "text": "Pinned",
+        "bounds": "[126,1043][887,1093]",
+        "enabled": "true"
+      },
+      {
+        "text": "New group",
+        "bounds": "[169,1164][803,1214]",
+        "enabled": "true"
+      },
+      {
+        "text": "QA_MAIN_KEEP",
+        "bounds": "[189,1311][761,1361]",
+        "enabled": "true"
+      },
+      {
+        "text": "",
+        "bounds": "[812,1314][859,1361]",
+        "enabled": "true"
+      },
+      {
+        "text": "QALIVEOK",
+        "bounds": "[189,1453][761,1503]",
+        "enabled": "true"
+      },
+      {
+        "text": "",
+        "bounds": "[812,1456][859,1503]",
+        "enabled": "true"
+      },
+      {
+        "text": "QASEED",
+        "bounds": "[189,1595][761,1645]",
+        "enabled": "true"
+      },
+      {
+        "text": "",
+        "bounds": "[812,1598][859,1645]",
+        "enabled": "true"
+      },
+      {
+        "text": "QA_RETRY",
+        "bounds": "[189,1737][761,1787]",
+        "enabled": "true"
+      },
+      {
+        "text": "",
+        "bounds": "[812,1740][859,1787]",
+        "enabled": "true"
+      },
+      {
+        "text": "QAFIXSEED",
+        "bounds": "[189,1879][761,1929]",
+        "enabled": "true"
+      },
+      {
+        "text": "",
+        "bounds": "[812,1882][859,1929]",
+        "enabled": "true"
+      }
+    ],
+    "excerptOnly": true,
+    "footerAndSyntheticDeviceRowsOmitted": true,
+    "privateOriginalScreenshotSha256": "619be21ea26f3b81f29affeb5713488775958dbf0977975b9317b38a226ab66a"
+  },
+  "fixed-post-consumption-visible": {
+    "originalXmlSha256": "487f97effad20e42e34bfac03060c67faec389a2bf1f3e0ee8b79caeba0b2904",
+    "actualNativeNodes": [
+      {
+        "text": "Threads",
+        "bounds": "[164,592][845,642]",
+        "enabled": "true"
+      },
+      {
+        "text": "Pinned",
+        "bounds": "[126,1043][887,1093]",
+        "enabled": "true"
+      },
+      {
+        "text": "New group",
+        "bounds": "[169,1164][803,1214]",
+        "enabled": "true"
+      },
+      {
+        "text": "QA_MAIN_KEEP",
+        "bounds": "[189,1311][761,1361]",
+        "enabled": "true"
+      },
+      {
+        "text": "",
+        "bounds": "[812,1314][859,1361]",
+        "enabled": "true"
+      },
+      {
+        "text": "QALIVEOK",
+        "bounds": "[189,1453][761,1503]",
+        "enabled": "true"
+      },
+      {
+        "text": "",
+        "bounds": "[812,1456][859,1503]",
+        "enabled": "true"
+      },
+      {
+        "text": "QASEED",
+        "bounds": "[189,1595][761,1645]",
+        "enabled": "true"
+      },
+      {
+        "text": "",
+        "bounds": "[812,1598][859,1645]",
+        "enabled": "true"
+      },
+      {
+        "text": "QA_RETRY",
+        "bounds": "[189,1737][761,1787]",
+        "enabled": "true"
+      },
+      {
+        "text": "",
+        "bounds": "[812,1740][859,1787]",
+        "enabled": "true"
+      },
+      {
+        "text": "QAFIXSEED",
+        "bounds": "[189,1879][761,1929]",
+        "enabled": "true"
+      },
+      {
+        "text": "",
+        "bounds": "[812,1882][859,1929]",
+        "enabled": "true"
+      }
+    ],
+    "excerptOnly": true,
+    "footerAndSyntheticDeviceRowsOmitted": true,
+    "privateOriginalScreenshotSha256": "4e39e5a40e5d06198fd5180e7195479d7febd1a1b95d410ea8def5605aad51d0"
+  },
+  "readonly-import-visible": {
+    "originalXmlSha256": "f14d6643f5b8bee30706819767636790e92f7b74a1015c8d70d65f1c5a9a8937",
+    "actualNativeNodes": [
+      {
+        "text": "Threads",
+        "bounds": "[164,592][845,642]",
+        "enabled": "true"
+      },
+      {
+        "text": "Pinned",
+        "bounds": "[126,1043][887,1093]",
+        "enabled": "true"
+      },
+      {
+        "text": "QASEED",
+        "bounds": "[189,1185][887,1235]",
+        "enabled": "true"
+      },
+      {
+        "text": "QA_RETRY",
+        "bounds": "[189,1462][887,1512]",
+        "enabled": "true"
+      },
+      {
+        "text": "Other",
+        "bounds": "[126,1578][853,1628]",
+        "enabled": "true"
+      }
+    ],
+    "excerptOnly": true,
+    "footerAndSyntheticDeviceRowsOmitted": true,
+    "privateOriginalScreenshotSha256": "3de03a7b9abd4793e92550aa9337a1de44371c9d8d35288690e3f9f09c93bf12"
+  }
+}

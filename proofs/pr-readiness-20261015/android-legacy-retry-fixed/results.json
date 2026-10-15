@@ -1,0 +1,197 @@
+{
+  "phases": {
+    "readonly-import": {
+      "startedAt": 1792059505.2036238,
+      "before": {
+        "groups": [
+          {
+            "name": "QA_MAIN_KEEP",
+            "position": 0
+          },
+          {
+            "name": "QALIVEOK",
+            "position": 1
+          },
+          {
+            "name": "QASEED",
+            "position": 2
+          },
+          {
+            "name": "QA_RETRY",
+            "position": 3
+          },
+          {
+            "name": "QAFIXSEED",
+            "position": 4
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_MAIN_KEEP",
+          "ungrouped"
+        ],
+        "appendOnly": true
+      },
+      "legacyAuthored": {
+        "localNames": [
+          "QAFIXSEED",
+          "QAFIX_RETRY"
+        ],
+        "legacyConsumed": null,
+        "catalogMigrated": null
+      },
+      "publicHead": "019f6ada87425d5d35c456f40c424167f87185f1",
+      "nativeHead": "17551257ed532cc11b8ae64ed4a5713ee18b108c",
+      "apkSource": "27f8b99d44a85ffa483834fa382e21f88281b356",
+      "tree": "088db658114734ecd036e7939a187140e2ab714e",
+      "apkSha256": "500360da44a0bb0ba9eda3c00fc3c5e4a1f7b34b271ae18ac57c6136d90b746e",
+      "finishedAt": 1792059552.0030882,
+      "after": {
+        "groups": [
+          {
+            "name": "QA_MAIN_KEEP",
+            "position": 0
+          },
+          {
+            "name": "QALIVEOK",
+            "position": 1
+          },
+          {
+            "name": "QASEED",
+            "position": 2
+          },
+          {
+            "name": "QA_RETRY",
+            "position": 3
+          },
+          {
+            "name": "QAFIXSEED",
+            "position": 4
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_MAIN_KEEP",
+          "ungrouped"
+        ],
+        "appendOnly": true
+      },
+      "passed": true
+    },
+    "write-retry": {
+      "startedAt": 1792059625.4765267,
+      "retainedNativeState": {
+        "localNames": [
+          "QAFIXSEED",
+          "QAFIX_RETRY"
+        ],
+        "legacyConsumed": false,
+        "catalogMigrated": false
+      },
+      "finishedAt": 1792059639.0918896,
+      "after": {
+        "groups": [
+          {
+            "name": "QA_MAIN_KEEP",
+            "position": 0
+          },
+          {
+            "name": "QALIVEOK",
+            "position": 1
+          },
+          {
+            "name": "QASEED",
+            "position": 2
+          },
+          {
+            "name": "QA_RETRY",
+            "position": 3
+          },
+          {
+            "name": "QAFIXSEED",
+            "position": 4
+          },
+          {
+            "name": "QAFIX_RETRY",
+            "position": 5
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_MAIN_KEEP",
+          "ungrouped"
+        ],
+        "appendOnly": true
+      },
+      "passed": true
+    },
+    "post-consumption-relaunch": {
+      "startedAt": 1792059643.5272079,
+      "retainedNativeState": {
+        "localNames": [],
+        "legacyConsumed": true,
+        "catalogMigrated": true
+      },
+      "finishedAt": 1792059657.0441504,
+      "after": {
+        "groups": [
+          {
+            "name": "QA_MAIN_KEEP",
+            "position": 0
+          },
+          {
+            "name": "QALIVEOK",
+            "position": 1
+          },
+          {
+            "name": "QASEED",
+            "position": 2
+          },
+          {
+            "name": "QA_RETRY",
+            "position": 3
+          },
+          {
+            "name": "QAFIXSEED",
+            "position": 4
+          },
+          {
+            "name": "QAFIX_RETRY",
+            "position": 5
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_MAIN_KEEP",
+          "ungrouped"
+        ],
+        "appendOnly": true
+      },
+      "passed": true
+    }
+  },
+  "nativePreferences": {
+    "stable-authored-native-state.json": {
+      "localNames": [
+        "QAFIXSEED",
+        "QAFIX_RETRY"
+      ],
+      "legacyConsumed": null,
+      "catalogMigrated": null
+    },
+    "rejected-persisted-native-state.json": {
+      "localNames": [
+        "QAFIXSEED",
+        "QAFIX_RETRY"
+      ],
+      "legacyConsumed": false,
+      "catalogMigrated": false
+    },
+    "accepted-persisted-native-state.json": {
+      "localNames": [],
+      "legacyConsumed": true,
+      "catalogMigrated": true
+    },
+    "relaunch-persisted-native-state.json": {
+      "localNames": [],
+      "legacyConsumed": true,
+      "catalogMigrated": true
+    }
+  }
+}
