@@ -119,12 +119,17 @@ class MainViewModelTest {
       prefs.markSessionGroupCatalogMigrated(gatewayId)
       var names = listOf("Work")
       var acceptsLegacy = false
+      var rejectNextImport = true
       val controller =
         backgroundScope.createChatController(
           cacheScope = { ChatCacheScope(gatewayId, 1) },
           requestGateway = { method, params ->
             when (method) {
               "sessions.groups.put" -> {
+                if (rejectNextImport) {
+                  rejectNextImport = false
+                  error("simulated rejected legacy import")
+                }
                 names =
                   (
                     names +
@@ -158,6 +163,11 @@ class MainViewModelTest {
           assertFalse("A partial catalog must not complete migration", prefs.isSessionGroupCatalogMigrated(gatewayId))
           assertTrue("Pending legacy remains visible", "Legacy" in viewModel.sessionCustomGroups.value)
         }
+        assertNull(runtime.observeSessionGroupCatalog(gatewayId).first())
+        viewModel.refreshSessionGroups()
+        assertPending()
+        assertEquals(listOf("Work"), runtime.observeSessionGroupCatalog(gatewayId).first()?.names)
+        assertTrue("Read catalog remains visible after rejected import", "Work" in viewModel.sessionCustomGroups.value)
         viewModel.refreshSessionGroups()
         assertPending()
         viewModel.renameChatSessionGroup("Work", "Renamed", gatewayId)

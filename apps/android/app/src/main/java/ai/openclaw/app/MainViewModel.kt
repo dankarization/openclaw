@@ -1776,13 +1776,13 @@ class MainViewModel internal constructor(
         canPut = lease.canPutSessionGroups(),
       )
     if (decision.putLegacy) {
-      val migrated = chat.putSessionGroups(legacy.filter { it !in listedNames }, lease) ?: return
+      val catalog = chat.putSessionGroups(legacy.filter { it !in listedNames }, lease) ?: listed
       if (!ownsSessionGroupLease(lease, gatewayId)) return
       publishSessionGroupCatalog(
         lease,
         gatewayId,
-        migrated.groups.map { it.name },
-        migrated.sectionOrder,
+        catalog.groups.map { it.name },
+        catalog.sectionOrder,
       )
       return
     }
