@@ -1,0 +1,98 @@
+{
+  "schema": 1,
+  "PR": 170200,
+  "observedDate": "2026-10-15 Asia/Tbilisi",
+  "officialStableCommit": "59cb44796b0f1f0daa0e37af8b1495abb45d9bc1",
+  "officialPackageSha256": "761685d010d96645d1deabe19299ecde263eac3f2489a17322f48c461a1130a5",
+  "candidateHead": "b6e89d0ee6988565f74bc1b82778f8df65196f32",
+  "candidateTree": "596e9f727453cd8a4d05d69b0fbf3768d6a8ff30",
+  "candidateTrackedClean": true,
+  "scope": "Latest-stable stored-data compatibility through native Doctor migration and same-profile native Gateway runtime handoff; not npm installer proof",
+  "stableAgentSchema": 24,
+  "candidateAgentSchema": 26,
+  "nativeDoctorExitCode": 0,
+  "sameStateConfigWorkspace": true,
+  "noDatabaseSeedingOrReferenceRewrite": true,
+  "actualTelegramDocument": {
+    "bytes": 2097152,
+    "sha256": "6c271fe09a14e49b324127028d58a8df3061ae6ddc4ebf93fdbb690c9abc56f0",
+    "name": "qa-stable-compat-2MiB.bin",
+    "actualLocalBotApiFileMirroredToSameAllowlistedQaPath": true
+  },
+  "nativeStockExec": {
+    "bytes": 2097152,
+    "sha256": "6c271fe09a14e49b324127028d58a8df3061ae6ddc4ebf93fdbb690c9abc56f0",
+    "pairedResult": true
+  },
+  "nativeCandidateExec": {
+    "bytes": 2097152,
+    "sha256": "6c271fe09a14e49b324127028d58a8df3061ae6ddc4ebf93fdbb690c9abc56f0",
+    "pairedResult": true,
+    "currentRequestPlainNoAttachment": true,
+    "pathSource": "Previous completed native exec result paired to retained native exec call in actual model request history"
+  },
+  "readback": {
+    "sessionIdPreserved": true,
+    "sessionKeyPreserved": true,
+    "nativeStatus": "done",
+    "hasActiveRun": false,
+    "bothAcknowledgementsInNativeHistory": true,
+    "newNativeHistoryMessageCount": 10,
+    "configuredLimits": {
+      "account": 64,
+      "channel": 128
+    },
+    "originalConfiguredValuesPreserved": true,
+    "nativeBookkeepingExcluded": [
+      "meta",
+      "wizard"
+    ],
+    "originalConfigBaselineHashMatchedNativeLastGood": true,
+    "configSemanticallyIdentical": false,
+    "nativeAdditions": [
+      "wizard",
+      "skills"
+    ],
+    "files": [
+      {
+        "bytes": 2097152,
+        "sha256": "6c271fe09a14e49b324127028d58a8df3061ae6ddc4ebf93fdbb690c9abc56f0",
+        "sameRelativePath": true
+      }
+    ],
+    "http": {
+      "healthz": 200,
+      "readyz": 200
+    }
+  },
+  "cleanup": {
+    "ownedGatewayAndFixtureExited": true,
+    "ownedPortsClosed": true
+  },
+  "limits": [
+    "Deterministic model orchestration only; actual Telegram polling/getFile/intake/staging/native exec/history/Doctor owners unchanged.",
+    "Existing synthetic file was really downloaded on local BotAPI host and mirrored byte-identically to its allowlisted path on separate QA host; no source-media metadata fabricated.",
+    "Direct startup before native Doctor correctly refused schema24; native migration, not schema bypass or product patch, resolved it.",
+    "First candidate followup fixture incorrectly required transient attachment marker. Preserved native history actually retained the old paired exec reference; fixture revision7 reads that real history. Its emitted pathSource label still names an earlier marker; exact executed source and this corrected explanation identify actual paired-result parser.",
+    "Candidate package manifest reports 2026.10.2 while its agent schema is26; source is exact unchanged reviewed b6 head, not relabeled latest-stable or falsely rebased.",
+    "Doctor initially could not capture original state because QA ancestor permissions, but wrote native pre-migration database backups; native last-good matches original config semantic hash. Native wizard/meta/bookkeeping and additive fields changed; byte-identical config not claimed.",
+    "Convex-leased Test Server policy remains an external maintainer-exception question; this artifact does not claim that lane."
+  ],
+  "fixtureSources": [
+    {
+      "path": "provider-stock.mjs",
+      "originalSha256": "1e14d62759f3ced7117c22bef67ed8229d72f8978e3b86b38cdfec9fad208f32",
+      "redaction": "Only absolute QA task root replaced; program logic and emitted labels preserved"
+    },
+    {
+      "path": "provider-candidate-v7.mjs",
+      "originalSha256": "fd0e3eb71d604a48e8cf5a9840b84baed4e8bfa1de2e7311a1d542868b959d8a",
+      "redaction": "Only absolute QA task root replaced; program logic and emitted labels preserved"
+    },
+    {
+      "path": "gateway-candidate.mjs",
+      "originalSha256": "729be55e78e36bfff21bd97cf3aa4fb4ccbc1f970c6fd46cbf8cc904a164a4f5",
+      "redaction": "Only absolute QA task root replaced; program logic and emitted labels preserved"
+    }
+  ]
+}
