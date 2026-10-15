@@ -1,0 +1,34 @@
+{
+  "gateway-cache.db": {
+    "userVersion": 4,
+    "rowCounts": {
+      "android_metadata": 1,
+      "cached_sessions": 0,
+      "cached_messages": 0,
+      "cached_gateway_owners": 0,
+      "cached_session_group_catalogs": 0,
+      "room_master_table": 1
+    }
+  },
+  "client-state.db": {
+    "userVersion": 1,
+    "rowCounts": {
+      "android_metadata": 1,
+      "outbox_commands": 1,
+      "outbox_attachments": 1,
+      "outbox_attachment_chunks": 1,
+      "composer_send_admissions": 1,
+      "client_state_metadata": 1,
+      "gateway_removals": 0,
+      "room_master_table": 1,
+      "outbox_branch_scopes": 2,
+      "outbox_delivery_state": 1
+    }
+  },
+  "durableRowsExactlyEqual": true,
+  "originalWavSha256": "59460d5690616336b990fc7b1629428e3bd825e422da84469d2c8c8ecfaff43b",
+  "queueText": "QAQUEUE",
+  "attachmentName": "QA-UPGRADE.wav",
+  "chunkSha256": "59460d5690616336b990fc7b1629428e3bd825e422da84469d2c8c8ecfaff43b",
+  "fileBytesExactlyPreserved": true
+}

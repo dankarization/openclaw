@@ -1,0 +1,13 @@
+{
+  "name": "openclaw-stable-native-generator-qa",
+  "private": true,
+  "version": "1.0.0",
+  "dependencies": {
+    "esbuild": "0.28.2",
+    "typebox": "1.3.34",
+    "libphonenumber-js": "1.13.13",
+    "dompurify": "3.4.16",
+    "mermaid": "12.0.0",
+    "vite": "8.3.1"
+  }
+}

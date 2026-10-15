@@ -1,0 +1,55 @@
+{
+  "gateway-cache.db": {
+    "userVersion": 3,
+    "rowCounts": {
+      "android_metadata": 1,
+      "cached_sessions": 3,
+      "cached_messages": 0,
+      "cached_gateway_owners": 1,
+      "room_master_table": 1
+    }
+  },
+  "client-state.db": {
+    "userVersion": 1,
+    "rowCounts": {
+      "android_metadata": 1,
+      "outbox_commands": 1,
+      "outbox_attachments": 1,
+      "outbox_attachment_chunks": 1,
+      "composer_send_admissions": 1,
+      "client_state_metadata": 1,
+      "gateway_removals": 0,
+      "room_master_table": 1,
+      "outbox_branch_scopes": 2,
+      "outbox_delivery_state": 1
+    },
+    "outboxColumns": [
+      "id",
+      "gatewayId",
+      "sessionKey",
+      "text",
+      "thinkingLevel",
+      "createdAtMs",
+      "status",
+      "retryCount",
+      "lastError",
+      "gatedEpoch",
+      "ownerAgentId"
+    ],
+    "attachmentColumns": [
+      "id",
+      "commandId",
+      "position",
+      "type",
+      "mimeType",
+      "fileName",
+      "durationMs",
+      "byteLength"
+    ],
+    "chunkColumns": [
+      "attachmentId",
+      "chunkIndex",
+      "bytes"
+    ]
+  }
+}

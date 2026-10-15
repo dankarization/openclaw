@@ -1,0 +1,28 @@
+{
+  "gateway-cache.db": {
+    "userVersion": 4,
+    "rowCounts": {
+      "android_metadata": 1,
+      "cached_sessions": 3,
+      "cached_messages": 2,
+      "cached_gateway_owners": 1,
+      "cached_session_group_catalogs": 1,
+      "room_master_table": 1
+    }
+  },
+  "client-state.db": {
+    "userVersion": 1,
+    "rowCounts": {
+      "android_metadata": 1,
+      "outbox_commands": 0,
+      "outbox_attachments": 0,
+      "outbox_attachment_chunks": 0,
+      "composer_send_admissions": 1,
+      "client_state_metadata": 1,
+      "gateway_removals": 0,
+      "room_master_table": 1,
+      "outbox_branch_scopes": 2,
+      "outbox_delivery_state": 0
+    }
+  }
+}

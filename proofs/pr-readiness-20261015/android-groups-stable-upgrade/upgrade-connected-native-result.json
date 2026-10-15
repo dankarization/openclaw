@@ -1,0 +1,13 @@
+{
+  "migrationPutCountBeforeRelaunch": 1,
+  "legacyConsumed": true,
+  "legacyNamesKeyRemoved": true,
+  "gatewayMarkedMigrated": true,
+  "nativeQueueSendCount": 1,
+  "nativeQueueAttachmentBytes": 8044,
+  "nativeQueueAttachmentSha256": "59460d5690616336b990fc7b1629428e3bd825e422da84469d2c8c8ecfaff43b",
+  "nativeQueueText": "QAQUEUE",
+  "providerAckObserved": true,
+  "ephemeralDraftRestoredAfterUpdate": false,
+  "ephemeralDraftScope": "SavedStateHandle, not durable Room; no success claimed for QADRAFT"
+}

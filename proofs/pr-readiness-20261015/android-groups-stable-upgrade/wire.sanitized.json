@@ -1,0 +1,822 @@
+{
+  "fullPrivateTraceSha256": "7ac41574b85c1a00df5fcf23c5975be74867d2650d032f9a439c7d126fbb46e0",
+  "events": [
+    {
+      "ts": "2026-10-15T06:20:20.860Z",
+      "event": "connect-request",
+      "role": "operator",
+      "requestedScopes": [
+        "operator.read",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-15T06:20:20.865Z",
+      "event": "connect-request",
+      "role": "node"
+    },
+    {
+      "ts": "2026-10-15T06:20:20.885Z",
+      "event": "upstream-close",
+      "peerId": 2,
+      "role": "node",
+      "code": 1008,
+      "reason": "unauthorized: gateway token missing (provide gateway auth token)"
+    },
+    {
+      "ts": "2026-10-15T06:20:20.937Z",
+      "event": "authenticated",
+      "peerId": 1,
+      "role": "operator",
+      "grantedScopes": [
+        "operator.read",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-15T06:20:36.042Z",
+      "event": "connect-request",
+      "role": "operator",
+      "requestedScopes": [
+        "operator.read",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-15T06:20:36.125Z",
+      "event": "authenticated",
+      "peerId": 3,
+      "role": "operator",
+      "grantedScopes": [
+        "operator.read",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-15T06:20:40.379Z",
+      "event": "upstream-close",
+      "peerId": 1,
+      "role": "operator",
+      "code": 1005,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:21:19.416Z",
+      "event": "upstream-close",
+      "peerId": 3,
+      "role": "operator",
+      "code": 1005,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:21:19.731Z",
+      "event": "connect-request",
+      "role": "operator",
+      "requestedScopes": [
+        "operator.read",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-15T06:21:19.814Z",
+      "event": "authenticated",
+      "peerId": 6,
+      "role": "operator",
+      "grantedScopes": [
+        "operator.read",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-15T06:21:49.463Z",
+      "event": "upstream-close",
+      "peerId": 4,
+      "role": null,
+      "code": 1000,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:21:49.479Z",
+      "event": "upstream-close",
+      "peerId": 5,
+      "role": null,
+      "code": 1000,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:34:02.025Z",
+      "event": "upstream-close",
+      "peerId": 6,
+      "role": "operator",
+      "code": 1012,
+      "reason": "service restart"
+    },
+    {
+      "ts": "2026-10-15T06:34:02.567Z",
+      "event": "upstream-close",
+      "peerId": 7,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:34:04.072Z",
+      "event": "upstream-close",
+      "peerId": 8,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:34:06.075Z",
+      "event": "upstream-close",
+      "peerId": 9,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:34:08.603Z",
+      "event": "upstream-close",
+      "peerId": 10,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:34:12.624Z",
+      "event": "upstream-close",
+      "peerId": 11,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:34:18.639Z",
+      "event": "upstream-close",
+      "peerId": 12,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:34:27.665Z",
+      "event": "upstream-close",
+      "peerId": 13,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:34:43.187Z",
+      "event": "upstream-close",
+      "peerId": 14,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:35:10.085Z",
+      "event": "upstream-close",
+      "peerId": 15,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:35:52.563Z",
+      "event": "upstream-close",
+      "peerId": 16,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:36:36.377Z",
+      "event": "upstream-close",
+      "peerId": 17,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:36:36.382Z",
+      "event": "upstream-close",
+      "peerId": 18,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:36:37.893Z",
+      "event": "upstream-close",
+      "peerId": 19,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:36:37.893Z",
+      "event": "upstream-close",
+      "peerId": 20,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:36:39.922Z",
+      "event": "upstream-close",
+      "peerId": 21,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:36:39.927Z",
+      "event": "upstream-close",
+      "peerId": 22,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:36:42.488Z",
+      "event": "upstream-close",
+      "peerId": 23,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:36:42.489Z",
+      "event": "upstream-close",
+      "peerId": 24,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:36:46.018Z",
+      "event": "upstream-close",
+      "peerId": 25,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:36:46.019Z",
+      "event": "upstream-close",
+      "peerId": 26,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:36:51.538Z",
+      "event": "upstream-close",
+      "peerId": 27,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:36:52.044Z",
+      "event": "upstream-close",
+      "peerId": 28,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:37:00.232Z",
+      "event": "upstream-close",
+      "peerId": 29,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:37:00.234Z",
+      "event": "upstream-close",
+      "peerId": 30,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:37:15.241Z",
+      "event": "upstream-close",
+      "peerId": 31,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:37:15.243Z",
+      "event": "upstream-close",
+      "peerId": 32,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:37:40.281Z",
+      "event": "upstream-close",
+      "peerId": 33,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:37:40.298Z",
+      "event": "upstream-close",
+      "peerId": 34,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:38:22.701Z",
+      "event": "upstream-close",
+      "peerId": 35,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:38:22.710Z",
+      "event": "upstream-close",
+      "peerId": 36,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:39:08.711Z",
+      "event": "upstream-close",
+      "peerId": 37,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:39:17.760Z",
+      "event": "upstream-close",
+      "peerId": 38,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:39:51.266Z",
+      "event": "upstream-close",
+      "peerId": 39,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:39:51.267Z",
+      "event": "upstream-close",
+      "peerId": 40,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:40:25.820Z",
+      "event": "upstream-close",
+      "peerId": 41,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:40:45.834Z",
+      "event": "upstream-close",
+      "peerId": 42,
+      "role": null,
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:41:20.202Z",
+      "event": "connect-request",
+      "role": "node"
+    },
+    {
+      "ts": "2026-10-15T06:41:20.261Z",
+      "event": "upstream-close",
+      "peerId": 43,
+      "role": "node",
+      "code": 1008,
+      "reason": "unauthorized: gateway token missing (provide gateway auth token)"
+    },
+    {
+      "ts": "2026-10-15T06:42:12.306Z",
+      "event": "upstream-close",
+      "peerId": 44,
+      "role": null,
+      "code": 1000,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:42:33.900Z",
+      "event": "connect-request",
+      "role": "operator",
+      "requestedScopes": [
+        "operator.read",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-15T06:42:34.131Z",
+      "event": "authenticated",
+      "peerId": 45,
+      "role": "operator",
+      "grantedScopes": [
+        "operator.read",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-15T06:42:41.705Z",
+      "event": "android-request",
+      "peerId": 45,
+      "id": "id-2464c742a3fca357",
+      "method": "chat.send",
+      "params": {
+        "sessionKey": "agent:main:qa-stable-upgrade",
+        "agentId": "main",
+        "message": "QAQUEUE",
+        "thinking": "medium",
+        "idempotencyKey": "id-a7618b269be4af76",
+        "attachments": [
+          {
+            "type": "audio",
+            "mimeType": "audio/x-wav",
+            "fileName": "QA-UPGRADE.wav",
+            "content": {
+              "redactedBinaryPayloadSha256": "afdac7ad53b5b43e8459c6b2090a9a0c3bf29b43594660c303130eca39058b6a"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "ts": "2026-10-15T06:43:37.701Z",
+      "event": "android-request",
+      "peerId": 45,
+      "id": "id-f2a4d5d1d855e9b3",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T06:43:37.704Z",
+      "event": "android-native-result",
+      "peerId": 45,
+      "id": "id-f2a4d5d1d855e9b3",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          },
+          {
+            "name": "QA_UI_RENAMEDA",
+            "position": 1
+          },
+          {
+            "name": "QA_CONCURRENT_APPEND",
+            "position": 2
+          },
+          {
+            "name": "QA_WRITE_ONLY",
+            "position": 3
+          },
+          {
+            "name": "QA_NATIVE_CONCURRENT_2",
+            "position": 4
+          },
+          {
+            "name": "QA_UI_CONCURRENT_2",
+            "position": 5
+          },
+          {
+            "name": "QA_STABL",
+            "position": 6
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_UI_RENAMEDA",
+          "category:QA_REMOTE_EXISTING",
+          "ungrouped",
+          "groups",
+          "work"
+        ],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T06:43:37.738Z",
+      "event": "android-request",
+      "peerId": 45,
+      "id": "id-52ed7ed9a87c9b38",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T06:43:38.028Z",
+      "event": "android-native-result",
+      "peerId": 45,
+      "id": "id-52ed7ed9a87c9b38",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          },
+          {
+            "name": "QA_UI_RENAMEDA",
+            "position": 1
+          },
+          {
+            "name": "QA_CONCURRENT_APPEND",
+            "position": 2
+          },
+          {
+            "name": "QA_WRITE_ONLY",
+            "position": 3
+          },
+          {
+            "name": "QA_NATIVE_CONCURRENT_2",
+            "position": 4
+          },
+          {
+            "name": "QA_UI_CONCURRENT_2",
+            "position": 5
+          },
+          {
+            "name": "QA_STABL",
+            "position": 6
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_UI_RENAMEDA",
+          "category:QA_REMOTE_EXISTING",
+          "ungrouped",
+          "groups",
+          "work"
+        ],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T06:43:38.064Z",
+      "event": "android-request",
+      "peerId": 45,
+      "id": "id-2ca8e45dcc649afb",
+      "method": "sessions.groups.put",
+      "params": {
+        "names": [
+          "QAEMPTY"
+        ],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T06:43:38.089Z",
+      "event": "android-native-result",
+      "peerId": 45,
+      "id": "id-2ca8e45dcc649afb",
+      "method": "sessions.groups.put",
+      "ok": true,
+      "payload": {
+        "ok": true,
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          },
+          {
+            "name": "QA_UI_RENAMEDA",
+            "position": 1
+          },
+          {
+            "name": "QA_CONCURRENT_APPEND",
+            "position": 2
+          },
+          {
+            "name": "QA_WRITE_ONLY",
+            "position": 3
+          },
+          {
+            "name": "QA_NATIVE_CONCURRENT_2",
+            "position": 4
+          },
+          {
+            "name": "QA_UI_CONCURRENT_2",
+            "position": 5
+          },
+          {
+            "name": "QA_STABL",
+            "position": 6
+          },
+          {
+            "name": "QAEMPTY",
+            "position": 7
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_UI_RENAMEDA",
+          "category:QA_REMOTE_EXISTING",
+          "ungrouped",
+          "groups",
+          "work"
+        ]
+      }
+    },
+    {
+      "ts": "2026-10-15T06:43:38.394Z",
+      "event": "android-request",
+      "peerId": 45,
+      "id": "id-e60c6810a40fef0f",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T06:43:38.406Z",
+      "event": "android-native-result",
+      "peerId": 45,
+      "id": "id-e60c6810a40fef0f",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          },
+          {
+            "name": "QA_UI_RENAMEDA",
+            "position": 1
+          },
+          {
+            "name": "QA_CONCURRENT_APPEND",
+            "position": 2
+          },
+          {
+            "name": "QA_WRITE_ONLY",
+            "position": 3
+          },
+          {
+            "name": "QA_NATIVE_CONCURRENT_2",
+            "position": 4
+          },
+          {
+            "name": "QA_UI_CONCURRENT_2",
+            "position": 5
+          },
+          {
+            "name": "QA_STABL",
+            "position": 6
+          },
+          {
+            "name": "QAEMPTY",
+            "position": 7
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_UI_RENAMEDA",
+          "category:QA_REMOTE_EXISTING",
+          "ungrouped",
+          "groups",
+          "work"
+        ],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T06:44:45.465Z",
+      "event": "injected-request",
+      "id": "id-51bac847db9af13d",
+      "method": "sessions.groups.list",
+      "grantedScopes": [
+        "operator.read",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-15T06:47:46.864Z",
+      "event": "upstream-close",
+      "peerId": 45,
+      "role": "operator",
+      "code": 1005,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T06:47:53.444Z",
+      "event": "connect-request",
+      "role": "operator",
+      "requestedScopes": [
+        "operator.read",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-15T06:47:53.444Z",
+      "event": "connect-request",
+      "role": "node"
+    },
+    {
+      "ts": "2026-10-15T06:47:53.455Z",
+      "event": "upstream-close",
+      "peerId": 46,
+      "role": "node",
+      "code": 1008,
+      "reason": "unauthorized: gateway token missing (provide gateway auth token)"
+    },
+    {
+      "ts": "2026-10-15T06:47:53.511Z",
+      "event": "authenticated",
+      "peerId": 47,
+      "role": "operator",
+      "grantedScopes": [
+        "operator.read",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-15T06:48:25.786Z",
+      "event": "android-request",
+      "peerId": 47,
+      "id": "id-3b1165cccf17b5ac",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T06:48:25.788Z",
+      "event": "android-native-result",
+      "peerId": 47,
+      "id": "id-3b1165cccf17b5ac",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          },
+          {
+            "name": "QA_UI_RENAMEDA",
+            "position": 1
+          },
+          {
+            "name": "QA_CONCURRENT_APPEND",
+            "position": 2
+          },
+          {
+            "name": "QA_WRITE_ONLY",
+            "position": 3
+          },
+          {
+            "name": "QA_NATIVE_CONCURRENT_2",
+            "position": 4
+          },
+          {
+            "name": "QA_UI_CONCURRENT_2",
+            "position": 5
+          },
+          {
+            "name": "QA_STABL",
+            "position": 6
+          },
+          {
+            "name": "QAEMPTY",
+            "position": 7
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_UI_RENAMEDA",
+          "category:QA_REMOTE_EXISTING",
+          "ungrouped",
+          "groups",
+          "work"
+        ],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T06:49:39.087Z",
+      "event": "upstream-close",
+      "peerId": 47,
+      "role": "operator",
+      "code": 1005,
+      "reason": ""
+    }
+  ]
+}

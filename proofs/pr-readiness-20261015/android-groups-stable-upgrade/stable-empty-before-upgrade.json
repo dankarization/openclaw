@@ -1,0 +1,49 @@
+{
+  "method": "sessions.groups.list",
+  "grantedScopes": [
+    "operator.admin",
+    "operator.read",
+    "operator.write",
+    "operator.pairing"
+  ],
+  "result": {
+    "groups": [
+      {
+        "name": "QA_REMOTE_EXISTING",
+        "position": 0
+      },
+      {
+        "name": "QA_UI_RENAMEDA",
+        "position": 1
+      },
+      {
+        "name": "QA_CONCURRENT_APPEND",
+        "position": 2
+      },
+      {
+        "name": "QA_WRITE_ONLY",
+        "position": 3
+      },
+      {
+        "name": "QA_NATIVE_CONCURRENT_2",
+        "position": 4
+      },
+      {
+        "name": "QA_UI_CONCURRENT_2",
+        "position": 5
+      },
+      {
+        "name": "QA_STABL",
+        "position": 6
+      }
+    ],
+    "sectionOrder": [
+      "category:QA_UI_RENAMEDA",
+      "category:QA_REMOTE_EXISTING",
+      "ungrouped",
+      "groups",
+      "work"
+    ],
+    "appendOnly": true
+  }
+}

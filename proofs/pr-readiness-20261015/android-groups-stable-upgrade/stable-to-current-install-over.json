@@ -1,0 +1,8 @@
+{
+  "stableInstalledApkSha256": "fd942a045f877ca47b0833ba653c7bcac75e7275772160d27dd1cf8fd86128ad",
+  "candidateInstalledApkSha256": "6261d369739833fbfdfa3c09192b3918bca96227aa0f3155fae80311ce1c0369",
+  "command": "adb install -r current-unmodified-APK",
+  "result": "Performing Streamed Install\nSuccess",
+  "clearDataBetweenStableInputsAndCandidate": false,
+  "offlineGatewayPreserved": true
+}
