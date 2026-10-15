@@ -1,0 +1,85 @@
+{
+  "publishedHead": "fd276434a19b2d59d6e86f07f50b79e0835f4de8",
+  "nativeEquivalentHead": "4f5782b9ff339053d2b94ee4ceb8364116a9b143",
+  "tree": "24f6ffd1a2ec676ac5f2eb2a35d583c60e36575e",
+  "installedApkSha256": "6261d369739833fbfdfa3c09192b3918bca96227aa0f3155fae80311ce1c0369",
+  "captures": {
+    "readonly": {
+      "originalSha256": "ba0e59cd41b75b673a29c5a3b25d9e71bd584eadb192a5814f526da7ed1c43cc",
+      "crop": [
+        0,
+        0,
+        1080,
+        2080
+      ],
+      "retainedPixelDifference": 0
+    },
+    "write-concurrent": {
+      "originalSha256": "4cf43b9938489b26c2cec3adef90e965a3907339e450d52cee2c432aceda2cb3",
+      "crop": [
+        0,
+        0,
+        1080,
+        2080
+      ],
+      "retainedPixelDifference": 0
+    },
+    "retired-relaunch": {
+      "originalSha256": "fcef0e0ab044092a33bbe58617e75fc2360399f55330de785976ea03982feb6b",
+      "crop": [
+        0,
+        0,
+        1080,
+        2080
+      ],
+      "retainedPixelDifference": 0
+    }
+  },
+  "readonlyUi": {
+    "peer": 8,
+    "actualScopes": [
+      "operator.read"
+    ],
+    "mutatorControlsVisible": false,
+    "longpressCreatedMutator": false,
+    "supplementarySamePhysicalSocketWrite": "FORBIDDEN missing operator.write"
+  },
+  "writeOnlyUi": {
+    "peer": 10,
+    "actualScopes": [
+      "operator.read",
+      "operator.write"
+    ],
+    "actualCreateSucceeded": true,
+    "adminRequired": false
+  },
+  "concurrentAppend": {
+    "realSecondNativeWriter": true,
+    "unchangedNativeListResponseHeld": true,
+    "bothEntriesRetained": true,
+    "windowUpperMs": 928
+  },
+  "pendingRevocation": {
+    "nativeDeviceTokenRevoke": true,
+    "physicalSocketClosed": true,
+    "pendingGroupCommitted": false,
+    "androidGroupPutEnqueuedAfterHeldList": false,
+    "windowUpperMs": 834
+  },
+  "nativeForget": {
+    "actualUiConfirmation": true,
+    "catalogSessionsMessagesOwnersCounts": 0,
+    "relaunchResurrection": false,
+    "differentGatewayPreservationNotTested": true
+  },
+  "limits": [
+    "Pending response boundary, not a debugger-paused final transport enqueue or SQLite worker commit race",
+    "No stable APK upgrade or loaded-roster pagination result in this bundle",
+    "No legacy server append fallback or concurrent reorder qualification in this bundle",
+    "No manual security approval or product-policy acceptance implied"
+  ],
+  "excluded": [
+    "Initial QA credential helper cleared a bootstrap token with asynchronous apply then exited early; corrected helper initializes native registry, waits for native persistence, and verifies native scopes. Product APK unchanged.",
+    "First concurrent attempt released held response after its deadline; second started a new helper inside a seven-second window and timed out. Neither is counted as concurrent proof. Accepted third native writer connects before hold, completes928ms and verifies both real entries."
+  ]
+}

@@ -1,0 +1,989 @@
+{
+  "privateTraceSha256": "451c4a653e73442fb4ab04970015d7e49198794f729d30f8704cfacf1313dfa8",
+  "events": [
+    {
+      "ts": "2026-10-15T05:42:12.975Z",
+      "event": "connect-request",
+      "role": "operator",
+      "requestedScopes": [
+        "operator.admin",
+        "operator.approvals",
+        "operator.questions",
+        "operator.read",
+        "operator.talk.secrets",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-15T05:42:13.018Z",
+      "event": "connect-request",
+      "role": "node"
+    },
+    {
+      "ts": "2026-10-15T05:42:13.384Z",
+      "event": "authenticated",
+      "peerId": 2,
+      "role": "operator",
+      "grantedScopes": [
+        "operator.admin",
+        "operator.approvals",
+        "operator.questions",
+        "operator.read",
+        "operator.talk.secrets",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-15T05:42:13.473Z",
+      "event": "authenticated",
+      "peerId": 1,
+      "role": "node",
+      "grantedScopes": []
+    },
+    {
+      "ts": "2026-10-15T05:42:38.536Z",
+      "event": "upstream-close",
+      "peerId": 1,
+      "role": "node",
+      "code": 1005,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T05:42:38.538Z",
+      "event": "upstream-close",
+      "peerId": 2,
+      "role": "operator",
+      "code": 1005,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T05:42:44.347Z",
+      "event": "connect-request",
+      "role": "operator",
+      "requestedScopes": [
+        "operator.admin",
+        "operator.approvals",
+        "operator.questions",
+        "operator.read",
+        "operator.talk.secrets",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-15T05:42:44.362Z",
+      "event": "connect-request",
+      "role": "node"
+    },
+    {
+      "ts": "2026-10-15T05:42:44.430Z",
+      "event": "authenticated",
+      "peerId": 3,
+      "role": "operator",
+      "grantedScopes": [
+        "operator.admin",
+        "operator.approvals",
+        "operator.questions",
+        "operator.read",
+        "operator.talk.secrets",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-15T05:42:44.488Z",
+      "event": "authenticated",
+      "peerId": 4,
+      "role": "node",
+      "grantedScopes": []
+    },
+    {
+      "ts": "2026-10-15T05:43:49.769Z",
+      "event": "upstream-close",
+      "peerId": 3,
+      "role": "operator",
+      "code": 1005,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T05:43:49.770Z",
+      "event": "upstream-close",
+      "peerId": 4,
+      "role": "node",
+      "code": 1005,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T05:44:49.135Z",
+      "event": "connect-request",
+      "role": "node"
+    },
+    {
+      "ts": "2026-10-15T05:44:49.137Z",
+      "event": "connect-request",
+      "role": "operator",
+      "requestedScopes": [
+        "operator.admin",
+        "operator.approvals",
+        "operator.questions",
+        "operator.read",
+        "operator.talk.secrets",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-15T05:44:49.176Z",
+      "event": "authenticated",
+      "peerId": 6,
+      "role": "node",
+      "grantedScopes": []
+    },
+    {
+      "ts": "2026-10-15T05:44:55.686Z",
+      "event": "authenticated",
+      "peerId": 5,
+      "role": "operator",
+      "grantedScopes": [
+        "operator.admin",
+        "operator.approvals",
+        "operator.questions",
+        "operator.read",
+        "operator.talk.secrets",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-15T05:52:29.020Z",
+      "event": "upstream-close",
+      "peerId": 5,
+      "role": "operator",
+      "code": 1005,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T05:52:29.020Z",
+      "event": "upstream-close",
+      "peerId": 6,
+      "role": "node",
+      "code": 1005,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T05:52:41.231Z",
+      "event": "connect-request",
+      "role": "node"
+    },
+    {
+      "ts": "2026-10-15T05:52:41.232Z",
+      "event": "connect-request",
+      "role": "operator",
+      "requestedScopes": [
+        "operator.read"
+      ]
+    },
+    {
+      "ts": "2026-10-15T05:52:41.309Z",
+      "event": "authenticated",
+      "peerId": 7,
+      "role": "node",
+      "grantedScopes": []
+    },
+    {
+      "ts": "2026-10-15T05:52:47.287Z",
+      "event": "authenticated",
+      "peerId": 8,
+      "role": "operator",
+      "grantedScopes": [
+        "operator.read"
+      ]
+    },
+    {
+      "ts": "2026-10-15T05:53:12.830Z",
+      "event": "android-request",
+      "peerId": 8,
+      "id": "request-c926ad5a0fdba88f",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T05:53:12.833Z",
+      "event": "android-native-result",
+      "peerId": 8,
+      "id": "request-c926ad5a0fdba88f",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          },
+          {
+            "name": "QA_UI_RENAMEDA",
+            "position": 1
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_UI_RENAMEDA",
+          "category:QA_REMOTE_EXISTING",
+          "ungrouped",
+          "groups",
+          "work"
+        ],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T05:53:37.093Z",
+      "event": "injected-request",
+      "id": "request-51bac847db9af13d",
+      "method": "sessions.groups.put",
+      "grantedScopes": [
+        "operator.read"
+      ]
+    },
+    {
+      "ts": "2026-10-15T05:53:37.095Z",
+      "event": "injected-response",
+      "id": "request-51bac847db9af13d",
+      "ok": false,
+      "error": "missing scope: operator.write"
+    },
+    {
+      "ts": "2026-10-15T05:54:05.551Z",
+      "event": "upstream-close",
+      "peerId": 8,
+      "role": "operator",
+      "code": 1005,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T05:54:05.553Z",
+      "event": "upstream-close",
+      "peerId": 7,
+      "role": "node",
+      "code": 1005,
+      "reason": ""
+    },
+    {
+      "ts": "2026-10-15T05:54:17.153Z",
+      "event": "connect-request",
+      "role": "operator",
+      "requestedScopes": [
+        "operator.read",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-15T05:54:17.157Z",
+      "event": "connect-request",
+      "role": "node"
+    },
+    {
+      "ts": "2026-10-15T05:54:17.204Z",
+      "event": "authenticated",
+      "peerId": 10,
+      "role": "operator",
+      "grantedScopes": [
+        "operator.read",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-15T05:54:24.091Z",
+      "event": "authenticated",
+      "peerId": 9,
+      "role": "node",
+      "grantedScopes": []
+    },
+    {
+      "ts": "2026-10-15T05:54:42.652Z",
+      "event": "android-request",
+      "peerId": 10,
+      "id": "request-9de45355bd591176",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T05:54:42.657Z",
+      "event": "android-native-result",
+      "peerId": 10,
+      "id": "request-9de45355bd591176",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          },
+          {
+            "name": "QA_UI_RENAMEDA",
+            "position": 1
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_UI_RENAMEDA",
+          "category:QA_REMOTE_EXISTING",
+          "ungrouped",
+          "groups",
+          "work"
+        ],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T05:55:40.362Z",
+      "event": "native-response-hold-armed",
+      "method": "sessions.groups.list"
+    },
+    {
+      "ts": "2026-10-15T05:55:40.546Z",
+      "event": "android-request",
+      "peerId": 10,
+      "id": "request-cc54e300d3536bfd",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T05:55:40.549Z",
+      "event": "android-native-result",
+      "peerId": 10,
+      "id": "request-cc54e300d3536bfd",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          },
+          {
+            "name": "QA_UI_RENAMEDA",
+            "position": 1
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_UI_RENAMEDA",
+          "category:QA_REMOTE_EXISTING",
+          "ungrouped",
+          "groups",
+          "work"
+        ],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T05:55:40.549Z",
+      "event": "native-response-held",
+      "peerId": 10,
+      "id": "request-cc54e300d3536bfd",
+      "method": "sessions.groups.list",
+      "ok": true
+    },
+    {
+      "ts": "2026-10-15T05:56:05.166Z",
+      "event": "android-request",
+      "peerId": 10,
+      "id": "request-9fe5185a76836122",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T05:56:05.170Z",
+      "event": "android-native-result",
+      "peerId": 10,
+      "id": "request-9fe5185a76836122",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          },
+          {
+            "name": "QA_UI_RENAMEDA",
+            "position": 1
+          },
+          {
+            "name": "QA_CONCURRENT_APPEND",
+            "position": 2
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_UI_RENAMEDA",
+          "category:QA_REMOTE_EXISTING",
+          "ungrouped",
+          "groups",
+          "work"
+        ],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T05:56:05.226Z",
+      "event": "release"
+    },
+    {
+      "ts": "2026-10-15T05:57:07.629Z",
+      "event": "native-response-hold-armed",
+      "method": "sessions.groups.list"
+    },
+    {
+      "ts": "2026-10-15T05:57:07.758Z",
+      "event": "android-request",
+      "peerId": 10,
+      "id": "request-b5ebc62a63d27801",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T05:57:07.760Z",
+      "event": "android-native-result",
+      "peerId": 10,
+      "id": "request-b5ebc62a63d27801",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          },
+          {
+            "name": "QA_UI_RENAMEDA",
+            "position": 1
+          },
+          {
+            "name": "QA_CONCURRENT_APPEND",
+            "position": 2
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_UI_RENAMEDA",
+          "category:QA_REMOTE_EXISTING",
+          "ungrouped",
+          "groups",
+          "work"
+        ],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T05:57:07.760Z",
+      "event": "native-response-held",
+      "peerId": 10,
+      "id": "request-b5ebc62a63d27801",
+      "method": "sessions.groups.list",
+      "ok": true
+    },
+    {
+      "ts": "2026-10-15T05:57:14.845Z",
+      "event": "release"
+    },
+    {
+      "ts": "2026-10-15T05:57:14.878Z",
+      "event": "android-request",
+      "peerId": 10,
+      "id": "request-3ae98e389d3f38b8",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T05:57:14.886Z",
+      "event": "android-native-result",
+      "peerId": 10,
+      "id": "request-3ae98e389d3f38b8",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          },
+          {
+            "name": "QA_UI_RENAMEDA",
+            "position": 1
+          },
+          {
+            "name": "QA_CONCURRENT_APPEND",
+            "position": 2
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_UI_RENAMEDA",
+          "category:QA_REMOTE_EXISTING",
+          "ungrouped",
+          "groups",
+          "work"
+        ],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T05:57:14.927Z",
+      "event": "android-request",
+      "peerId": 10,
+      "id": "request-aeb8107ac5b3d8bb",
+      "method": "sessions.groups.put",
+      "params": {
+        "names": [
+          "QA_WRITE_ONLY"
+        ],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T05:57:14.949Z",
+      "event": "android-native-result",
+      "peerId": 10,
+      "id": "request-aeb8107ac5b3d8bb",
+      "method": "sessions.groups.put",
+      "ok": true,
+      "payload": {
+        "ok": true,
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          },
+          {
+            "name": "QA_UI_RENAMEDA",
+            "position": 1
+          },
+          {
+            "name": "QA_CONCURRENT_APPEND",
+            "position": 2
+          },
+          {
+            "name": "QA_WRITE_ONLY",
+            "position": 3
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_UI_RENAMEDA",
+          "category:QA_REMOTE_EXISTING",
+          "ungrouped",
+          "groups",
+          "work"
+        ]
+      }
+    },
+    {
+      "ts": "2026-10-15T05:57:15.036Z",
+      "event": "android-request",
+      "peerId": 10,
+      "id": "request-c1ecc84daeaaea51",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T05:57:15.041Z",
+      "event": "android-native-result",
+      "peerId": 10,
+      "id": "request-c1ecc84daeaaea51",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          },
+          {
+            "name": "QA_UI_RENAMEDA",
+            "position": 1
+          },
+          {
+            "name": "QA_CONCURRENT_APPEND",
+            "position": 2
+          },
+          {
+            "name": "QA_WRITE_ONLY",
+            "position": 3
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_UI_RENAMEDA",
+          "category:QA_REMOTE_EXISTING",
+          "ungrouped",
+          "groups",
+          "work"
+        ],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T05:58:27.759Z",
+      "event": "native-response-hold-armed",
+      "method": "sessions.groups.list"
+    },
+    {
+      "ts": "2026-10-15T05:58:28.003Z",
+      "event": "android-request",
+      "peerId": 10,
+      "id": "request-018db16853accc3f",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T05:58:28.009Z",
+      "event": "android-native-result",
+      "peerId": 10,
+      "id": "request-018db16853accc3f",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          },
+          {
+            "name": "QA_UI_RENAMEDA",
+            "position": 1
+          },
+          {
+            "name": "QA_CONCURRENT_APPEND",
+            "position": 2
+          },
+          {
+            "name": "QA_WRITE_ONLY",
+            "position": 3
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_UI_RENAMEDA",
+          "category:QA_REMOTE_EXISTING",
+          "ungrouped",
+          "groups",
+          "work"
+        ],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T05:58:28.009Z",
+      "event": "native-response-held",
+      "peerId": 10,
+      "id": "request-018db16853accc3f",
+      "method": "sessions.groups.list",
+      "ok": true
+    },
+    {
+      "ts": "2026-10-15T05:58:28.088Z",
+      "event": "release"
+    },
+    {
+      "ts": "2026-10-15T05:58:28.177Z",
+      "event": "android-request",
+      "peerId": 10,
+      "id": "request-621227e187268d29",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T05:58:28.185Z",
+      "event": "android-native-result",
+      "peerId": 10,
+      "id": "request-621227e187268d29",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          },
+          {
+            "name": "QA_UI_RENAMEDA",
+            "position": 1
+          },
+          {
+            "name": "QA_CONCURRENT_APPEND",
+            "position": 2
+          },
+          {
+            "name": "QA_WRITE_ONLY",
+            "position": 3
+          },
+          {
+            "name": "QA_NATIVE_CONCURRENT_2",
+            "position": 4
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_UI_RENAMEDA",
+          "category:QA_REMOTE_EXISTING",
+          "ungrouped",
+          "groups",
+          "work"
+        ],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T05:58:28.384Z",
+      "event": "android-request",
+      "peerId": 10,
+      "id": "request-22772579c1654402",
+      "method": "sessions.groups.put",
+      "params": {
+        "names": [
+          "QA_UI_CONCURRENT_2"
+        ],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T05:58:28.397Z",
+      "event": "android-native-result",
+      "peerId": 10,
+      "id": "request-22772579c1654402",
+      "method": "sessions.groups.put",
+      "ok": true,
+      "payload": {
+        "ok": true,
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          },
+          {
+            "name": "QA_UI_RENAMEDA",
+            "position": 1
+          },
+          {
+            "name": "QA_CONCURRENT_APPEND",
+            "position": 2
+          },
+          {
+            "name": "QA_WRITE_ONLY",
+            "position": 3
+          },
+          {
+            "name": "QA_NATIVE_CONCURRENT_2",
+            "position": 4
+          },
+          {
+            "name": "QA_UI_CONCURRENT_2",
+            "position": 5
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_UI_RENAMEDA",
+          "category:QA_REMOTE_EXISTING",
+          "ungrouped",
+          "groups",
+          "work"
+        ]
+      }
+    },
+    {
+      "ts": "2026-10-15T05:58:28.479Z",
+      "event": "android-request",
+      "peerId": 10,
+      "id": "request-4cb5254f18e21717",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T05:58:28.482Z",
+      "event": "android-native-result",
+      "peerId": 10,
+      "id": "request-4cb5254f18e21717",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          },
+          {
+            "name": "QA_UI_RENAMEDA",
+            "position": 1
+          },
+          {
+            "name": "QA_CONCURRENT_APPEND",
+            "position": 2
+          },
+          {
+            "name": "QA_WRITE_ONLY",
+            "position": 3
+          },
+          {
+            "name": "QA_NATIVE_CONCURRENT_2",
+            "position": 4
+          },
+          {
+            "name": "QA_UI_CONCURRENT_2",
+            "position": 5
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_UI_RENAMEDA",
+          "category:QA_REMOTE_EXISTING",
+          "ungrouped",
+          "groups",
+          "work"
+        ],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T05:58:28.665Z",
+      "event": "android-request",
+      "peerId": 10,
+      "id": "request-692e15bd7cb9d868",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T05:58:28.668Z",
+      "event": "android-native-result",
+      "peerId": 10,
+      "id": "request-692e15bd7cb9d868",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          },
+          {
+            "name": "QA_UI_RENAMEDA",
+            "position": 1
+          },
+          {
+            "name": "QA_CONCURRENT_APPEND",
+            "position": 2
+          },
+          {
+            "name": "QA_WRITE_ONLY",
+            "position": 3
+          },
+          {
+            "name": "QA_NATIVE_CONCURRENT_2",
+            "position": 4
+          },
+          {
+            "name": "QA_UI_CONCURRENT_2",
+            "position": 5
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_UI_RENAMEDA",
+          "category:QA_REMOTE_EXISTING",
+          "ungrouped",
+          "groups",
+          "work"
+        ],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T06:00:07.416Z",
+      "event": "native-response-hold-armed",
+      "method": "sessions.groups.list"
+    },
+    {
+      "ts": "2026-10-15T06:00:07.576Z",
+      "event": "android-request",
+      "peerId": 10,
+      "id": "request-061443e3699875d5",
+      "method": "sessions.groups.list",
+      "params": {}
+    },
+    {
+      "ts": "2026-10-15T06:00:07.584Z",
+      "event": "android-native-result",
+      "peerId": 10,
+      "id": "request-061443e3699875d5",
+      "method": "sessions.groups.list",
+      "ok": true,
+      "payload": {
+        "groups": [
+          {
+            "name": "QA_REMOTE_EXISTING",
+            "position": 0
+          },
+          {
+            "name": "QA_UI_RENAMEDA",
+            "position": 1
+          },
+          {
+            "name": "QA_CONCURRENT_APPEND",
+            "position": 2
+          },
+          {
+            "name": "QA_WRITE_ONLY",
+            "position": 3
+          },
+          {
+            "name": "QA_NATIVE_CONCURRENT_2",
+            "position": 4
+          },
+          {
+            "name": "QA_UI_CONCURRENT_2",
+            "position": 5
+          }
+        ],
+        "sectionOrder": [
+          "category:QA_UI_RENAMEDA",
+          "category:QA_REMOTE_EXISTING",
+          "ungrouped",
+          "groups",
+          "work"
+        ],
+        "appendOnly": true
+      }
+    },
+    {
+      "ts": "2026-10-15T06:00:07.584Z",
+      "event": "native-response-held",
+      "peerId": 10,
+      "id": "request-061443e3699875d5",
+      "method": "sessions.groups.list",
+      "ok": true
+    },
+    {
+      "ts": "2026-10-15T06:00:07.699Z",
+      "event": "release"
+    },
+    {
+      "ts": "2026-10-15T06:00:07.708Z",
+      "event": "upstream-close",
+      "peerId": 10,
+      "role": "operator",
+      "code": 4001,
+      "reason": "device removed"
+    },
+    {
+      "ts": "2026-10-15T06:00:08.875Z",
+      "event": "connect-request",
+      "role": "operator",
+      "requestedScopes": [
+        "operator.read",
+        "operator.write"
+      ]
+    },
+    {
+      "ts": "2026-10-15T06:00:09.145Z",
+      "event": "upstream-close",
+      "peerId": 11,
+      "role": "operator",
+      "code": 1008,
+      "reason": "unauthorized: gateway token mismatch (provide gateway auth token)"
+    },
+    {
+      "ts": "2026-10-15T06:02:27.544Z",
+      "event": "upstream-close",
+      "peerId": 9,
+      "role": "node",
+      "code": 1005,
+      "reason": ""
+    }
+  ]
+}

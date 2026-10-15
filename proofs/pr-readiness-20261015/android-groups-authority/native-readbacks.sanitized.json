@@ -1,0 +1,286 @@
+{
+  "groups-readonly-native-rpc": {
+    "profile": "readonly",
+    "grantedScopes": [
+      "operator.read"
+    ],
+    "authMethod": "device-token",
+    "health": true,
+    "before": {
+      "groups": [
+        {
+          "name": "QA_REMOTE_EXISTING",
+          "position": 0
+        },
+        {
+          "name": "QA_UI_RENAMEDA",
+          "position": 1
+        }
+      ],
+      "sectionOrder": [
+        "category:QA_UI_RENAMEDA",
+        "category:QA_REMOTE_EXISTING",
+        "ungrouped",
+        "groups",
+        "work"
+      ],
+      "appendOnly": true
+    },
+    "mutation": {
+      "accepted": false,
+      "error": "GatewayClientRequestError: missing scope: operator.write"
+    },
+    "after": {
+      "groups": [
+        {
+          "name": "QA_REMOTE_EXISTING",
+          "position": 0
+        },
+        {
+          "name": "QA_UI_RENAMEDA",
+          "position": 1
+        }
+      ],
+      "sectionOrder": [
+        "category:QA_UI_RENAMEDA",
+        "category:QA_REMOTE_EXISTING",
+        "ungrouped",
+        "groups",
+        "work"
+      ],
+      "appendOnly": true
+    }
+  },
+  "groups-write-profile-receipt": {
+    "profile": "write",
+    "nativeCredentialLog": "Bootstrap shared-token present before clear=false\nNative stored operator scopes=[operator.read, operator.write]\nNative DeviceAuthStore committed synthetic operator grant; scopes=[operator.read, operator.write]\n",
+    "actualOperator": {
+      "peerId": 10,
+      "role": "operator",
+      "scopes": [
+        "operator.read",
+        "operator.write"
+      ],
+      "connected": true
+    },
+    "completedAt": 1792043657.4694643
+  },
+  "concurrent-v3-native-receipt": {
+    "before": {
+      "groups": [
+        {
+          "name": "QA_REMOTE_EXISTING",
+          "position": 0
+        },
+        {
+          "name": "QA_UI_RENAMEDA",
+          "position": 1
+        },
+        {
+          "name": "QA_CONCURRENT_APPEND",
+          "position": 2
+        },
+        {
+          "name": "QA_WRITE_ONLY",
+          "position": 3
+        }
+      ],
+      "sectionOrder": [
+        "category:QA_UI_RENAMEDA",
+        "category:QA_REMOTE_EXISTING",
+        "ungrouped",
+        "groups",
+        "work"
+      ],
+      "appendOnly": true
+    },
+    "second": {
+      "ok": true,
+      "groups": [
+        {
+          "name": "QA_REMOTE_EXISTING",
+          "position": 0
+        },
+        {
+          "name": "QA_UI_RENAMEDA",
+          "position": 1
+        },
+        {
+          "name": "QA_CONCURRENT_APPEND",
+          "position": 2
+        },
+        {
+          "name": "QA_WRITE_ONLY",
+          "position": 3
+        },
+        {
+          "name": "QA_NATIVE_CONCURRENT_2",
+          "position": 4
+        }
+      ],
+      "sectionOrder": [
+        "category:QA_UI_RENAMEDA",
+        "category:QA_REMOTE_EXISTING",
+        "ungrouped",
+        "groups",
+        "work"
+      ]
+    },
+    "after": {
+      "groups": [
+        {
+          "name": "QA_REMOTE_EXISTING",
+          "position": 0
+        },
+        {
+          "name": "QA_UI_RENAMEDA",
+          "position": 1
+        },
+        {
+          "name": "QA_CONCURRENT_APPEND",
+          "position": 2
+        },
+        {
+          "name": "QA_WRITE_ONLY",
+          "position": 3
+        },
+        {
+          "name": "QA_NATIVE_CONCURRENT_2",
+          "position": 4
+        },
+        {
+          "name": "QA_UI_CONCURRENT_2",
+          "position": 5
+        }
+      ],
+      "sectionOrder": [
+        "category:QA_UI_RENAMEDA",
+        "category:QA_REMOTE_EXISTING",
+        "ungrouped",
+        "groups",
+        "work"
+      ],
+      "appendOnly": true
+    },
+    "holdDurationUpperMs": 928,
+    "bothWritersRetained": true
+  },
+  "revocation-native-receipt": {
+    "before": {
+      "groups": [
+        {
+          "name": "QA_REMOTE_EXISTING",
+          "position": 0
+        },
+        {
+          "name": "QA_UI_RENAMEDA",
+          "position": 1
+        },
+        {
+          "name": "QA_CONCURRENT_APPEND",
+          "position": 2
+        },
+        {
+          "name": "QA_WRITE_ONLY",
+          "position": 3
+        },
+        {
+          "name": "QA_NATIVE_CONCURRENT_2",
+          "position": 4
+        },
+        {
+          "name": "QA_UI_CONCURRENT_2",
+          "position": 5
+        }
+      ],
+      "sectionOrder": [
+        "category:QA_UI_RENAMEDA",
+        "category:QA_REMOTE_EXISTING",
+        "ungrouped",
+        "groups",
+        "work"
+      ],
+      "appendOnly": true
+    },
+    "second": {
+      "deviceId": "QA_ANDROID_DEVICE",
+      "role": "operator",
+      "revokedAtMs": 1792044007659
+    },
+    "after": {
+      "groups": [
+        {
+          "name": "QA_REMOTE_EXISTING",
+          "position": 0
+        },
+        {
+          "name": "QA_UI_RENAMEDA",
+          "position": 1
+        },
+        {
+          "name": "QA_CONCURRENT_APPEND",
+          "position": 2
+        },
+        {
+          "name": "QA_WRITE_ONLY",
+          "position": 3
+        },
+        {
+          "name": "QA_NATIVE_CONCURRENT_2",
+          "position": 4
+        },
+        {
+          "name": "QA_UI_CONCURRENT_2",
+          "position": 5
+        }
+      ],
+      "sectionOrder": [
+        "category:QA_UI_RENAMEDA",
+        "category:QA_REMOTE_EXISTING",
+        "ungrouped",
+        "groups",
+        "work"
+      ],
+      "appendOnly": true
+    },
+    "holdDurationUpperMs": 834,
+    "revokedPendingGroupAbsent": true
+  },
+  "catalog-retired-room-readback": {
+    "gateway-cache.db": {
+      "userVersion": 4,
+      "rowCounts": {
+        "android_metadata": 1,
+        "cached_sessions": 0,
+        "cached_messages": 0,
+        "cached_gateway_owners": 0,
+        "cached_session_group_catalogs": 0,
+        "room_master_table": 1
+      }
+    },
+    "client-state.db": {
+      "userVersion": 1,
+      "rowCounts": {
+        "android_metadata": 1,
+        "outbox_commands": 0,
+        "outbox_attachments": 0,
+        "outbox_attachment_chunks": 0,
+        "composer_send_admissions": 0,
+        "client_state_metadata": 1,
+        "gateway_removals": 0,
+        "room_master_table": 1,
+        "outbox_branch_scopes": 0,
+        "outbox_delivery_state": 0
+      }
+    }
+  },
+  "negative-cells-clean-stop": {
+    "nativeAppForceStopped": true,
+    "ownedProcessesExited": [
+      "gateway",
+      "relay",
+      "emulator"
+    ],
+    "noProductionChanges": true
+  }
+}
