@@ -137,13 +137,14 @@ describe("session companion embedded invocation", () => {
     });
   });
 
-  it.each(["embedded", "cli", "denied-primary"] as const)(
-    "answers with the utility fallback when the primary is unavailable: %s",
+  it.each(["embedded", "cli", "denied-primary", "embedded-cleanup", "cli-cleanup"] as const)(
+    "preserves or recovers the utility answer across %s failure",
     async (runtime) => {
-      const primary =
-        runtime === "cli"
-          ? { provider: "anthropic", modelId: "claude-haiku-4-5" }
-          : { provider: "test", modelId: "model-a" };
+      const isCli = runtime === "cli" || runtime === "cli-cleanup";
+      const cleanupFails = runtime === "embedded-cleanup" || runtime === "cli-cleanup";
+      const primary = isCli
+        ? { provider: "anthropic", modelId: "claude-haiku-4-5" }
+        : { provider: "test", modelId: "model-a" };
       const cfg: OpenClawConfig = {
         agents: {
           defaults: {
@@ -152,7 +153,7 @@ describe("session companion embedded invocation", () => {
               primary: `${primary.provider}/${primary.modelId}`,
               fallbacks: ["test/model-b"],
             },
-            ...(runtime === "cli"
+            ...(isCli
               ? {
                   models: { "anthropic/claude-haiku-4-5": { agentRuntime: { id: "claude-cli" } } },
                 }
@@ -168,7 +169,10 @@ describe("session companion embedded invocation", () => {
         provider: primary.provider,
         model: primary.modelId,
       });
-      if (runtime === "cli") {
+      const cleanup = vi.fn(async () => {
+        throw new Error("Synthetic cleanup failure");
+      });
+      if (isCli) {
         cliBackendsTesting.setDepsForTest({
           resolvePluginSetupCliBackend: () => undefined,
           resolveRuntimeCliBackends: () => [
@@ -180,9 +184,21 @@ describe("session companion embedded invocation", () => {
             },
           ],
         });
-        executePreparedCliRun.mockRejectedValueOnce(failure);
+        if (cleanupFails) {
+          prepareCliRunContext.mockImplementationOnce(async (params) => ({
+            params,
+            preparedBackend: { cleanup },
+          }));
+        } else {
+          executePreparedCliRun.mockRejectedValueOnce(failure);
+        }
       } else if (runtime === "embedded") {
         runEmbeddedAgent.mockRejectedValueOnce(failure);
+      } else if (runtime === "embedded-cleanup") {
+        removeSession.mockImplementationOnce(cleanup);
+        runEmbeddedAgent.mockResolvedValueOnce({
+          meta: { durationMs: 1, finalAssistantVisibleText: "The original answer is preserved." },
+        });
       }
       const operatorAuthority =
         runtime === "denied-primary"
@@ -198,23 +214,39 @@ describe("session companion embedded invocation", () => {
             })
           : undefined;
       const companion = createCompanion(cfg);
+      const answer =
+        runtime === "cli-cleanup"
+          ? "The session is fixing a bug."
+          : runtime === "embedded-cleanup"
+            ? "The original answer is preserved."
+            : "The session is reading a file.";
       try {
         await expect(companion.ask({ ...question, operatorAuthority })).resolves.toMatchObject({
-          answer: "The session is reading a file.",
+          answer,
         });
         expect(runEmbeddedAgent.mock.calls.map(([params]) => params.model)).toEqual(
-          runtime === "embedded" ? ["model-a", "model-b"] : ["model-b"],
+          cleanupFails
+            ? isCli
+              ? []
+              : ["model-a"]
+            : runtime === "embedded"
+              ? ["model-a", "model-b"]
+              : ["model-b"],
         );
         for (const [params] of runEmbeddedAgent.mock.calls) {
           expect(params.modelFallbacksOverride).toEqual([]);
           expect(params.toolsAllow).toEqual(["read", "sessions_history", "sessions_search"]);
           expect(params.requireWorkspaceOnly).toBe(true);
         }
-        expect(executePreparedCliRun).toHaveBeenCalledTimes(runtime === "cli" ? 1 : 0);
+        expect(executePreparedCliRun).toHaveBeenCalledTimes(isCli ? 1 : 0);
+        if (cleanupFails) {
+          expect(cleanup).toHaveBeenCalledOnce();
+          expect(removeSession).toHaveBeenCalledOnce();
+        }
         expect(companion.state(question).exchanges).toEqual([
           {
             question: question.question,
-            answer: "The session is reading a file.",
+            answer,
             ts: expect.any(Number),
           },
         ]);

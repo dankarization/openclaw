@@ -242,6 +242,32 @@ describe("generateConversationLabelWithFallback", () => {
     preferredProfile: "work",
   };
 
+  it("does not repeat a regular model already attempted by the utility chain", async () => {
+    runIsolatedCompletion.mockRejectedValue(
+      new FailoverError("Fixture server unavailable", { reason: "server_error" }),
+    );
+    await expect(
+      generateConversationLabelWithFallback({
+        ...params,
+        cfg: {
+          agents: {
+            defaults: {
+              utilityModel: {
+                primary: "openai/gpt-mini",
+                fallbacks: ["openai/gpt-main"],
+              },
+            },
+          },
+          plugins: { enabled: false },
+        },
+      }),
+    ).rejects.toThrow("conversation label generation failed");
+    expect(runIsolatedCompletion.mock.calls.map(([request]) => request.model)).toEqual([
+      "gpt-mini",
+      "gpt-main",
+    ]);
+  });
+
   it.each(["utility backup", "regular model", "exhausted"] as const)(
     "uses the utility chain before the existing label recovery: %s",
     async (outcome) => {

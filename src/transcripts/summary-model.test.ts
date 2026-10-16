@@ -66,6 +66,32 @@ afterEach(() => {
 });
 
 describe("model-backed transcript summaries", () => {
+  it("does not repeat the primary after the utility chain already attempted it", async () => {
+    runIsolatedCompletion.mockRejectedValue(
+      new FailoverError("Fixture server unavailable", { reason: "server_error" }),
+    );
+    const summary = await summarizeTranscriptsWithModel({
+      ...params,
+      cfg: {
+        agents: {
+          defaults: {
+            model: "openai/primary-test-model",
+            utilityModel: {
+              primary: "openai/utility-test-model",
+              fallbacks: ["openai/primary-test-model"],
+            },
+          },
+        },
+        plugins: { enabled: false },
+      },
+    });
+    expect(summary).toBeUndefined();
+    expect(runIsolatedCompletion.mock.calls.map(([request]) => request.model)).toEqual([
+      "utility-test-model",
+      "primary-test-model",
+    ]);
+  });
+
   it.each(["utility backup", "primary", "exhausted"] as const)(
     "tries utility fallbacks before existing transcript recovery: %s",
     async (outcome) => {

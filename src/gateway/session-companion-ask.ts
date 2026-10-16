@@ -232,7 +232,11 @@ async function defaultRun(params: SessionCompanionRunParams): Promise<string> {
         params.assertSourceCurrent?.();
         answer = (await executePreparedCliRun(prepared)).text;
       } finally {
-        await prepared?.preparedBackend.cleanup?.();
+        try {
+          await prepared?.preparedBackend.cleanup?.();
+        } catch (error) {
+          companionLog.warn("Side chat backend cleanup failed", { error });
+        }
       }
       modelExecution?.assertCurrent();
       return answer;
@@ -325,7 +329,10 @@ async function defaultRun(params: SessionCompanionRunParams): Promise<string> {
       await removeInternalSessionEffectsSession(
         target,
         executionStarted ? undefined : expectedSeedOwner,
-      );
+      ).catch((error) => {
+        // Cleanup must not replace a completed answer or replay it through fallback.
+        companionLog.warn("Side chat internal session cleanup failed", { error });
+      });
     } finally {
       modelExecution?.release();
     }

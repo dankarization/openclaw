@@ -15,6 +15,11 @@ import { resolveSimpleCompletionSelectionForAgent } from "./simple-completion-ru
 import { readUtilityModelSetting } from "./utility-model-setting.js";
 import { resolveAutomaticUtilityRuntimeOverride } from "./utility-model.js";
 
+export type UtilityCompletionAttempt = Pick<
+  Parameters<typeof runIsolatedCompletion>[0],
+  "provider" | "model" | "authProfileId"
+>;
+
 function resolveUtilityCompletionForAgent(
   params: Parameters<typeof resolveSimpleCompletionSelectionForAgent>[0] & {
     preferredProfile?: string;
@@ -58,10 +63,16 @@ function resolveUtilityCompletionForAgent(
 export async function runUtilityCompletion(
   params: Parameters<typeof runIsolatedCompletion>[0] & {
     useUtilityModel?: boolean;
+    onAttempt?: (attempt: UtilityCompletionAttempt) => void;
   },
   run?: typeof runIsolatedCompletion,
 ) {
+  const { onAttempt, ...request } = params;
   const complete = run ?? (await import("./isolated-completion.js")).runIsolatedCompletion;
+  const attempt = (candidate: Parameters<typeof runIsolatedCompletion>[0]) => {
+    onAttempt?.(candidate);
+    return complete(candidate);
+  };
   const utility = params.useUtilityModel
     ? readUtilityModelSetting(params.config ?? {}, params.agentId)
     : undefined;
@@ -73,7 +84,7 @@ export async function runUtilityCompletion(
         model: params.model,
       });
     }
-    return await complete(params);
+    return await attempt(request);
   }
   const { runWithModelFallback } = await import("./model-fallback-runner.js");
   const result = await runWithModelFallback({
@@ -93,8 +104,8 @@ export async function runUtilityCompletion(
     // Isolated completion already owns credential selection and profile rotation.
     skipAuthProfileRuntime: true,
     run: (provider, model, options) =>
-      complete({
-        ...params,
+      attempt({
+        ...request,
         provider,
         model,
         ...(options?.modelRoutingProvenance.stage === "fallback"

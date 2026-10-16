@@ -159,6 +159,15 @@ async function runLabelAttempts(
         agentId: params.agentId,
         agentDir: params.agentDir ?? selection.agentDir,
         useUtilityModel: attempt.phase === "utility",
+        onAttempt: ({ provider, model, authProfileId }) => {
+          seen.add(
+            resolveAttemptKey(params, {
+              modelRef: `${provider}/${model}`,
+              preferredProfile: authProfileId,
+              phase: attempt.phase,
+            }),
+          );
+        },
         ...(agentHarnessRuntimeOverride ? { agentHarnessRuntimeOverride } : {}),
         systemPrompt: [
           params.prompt,
