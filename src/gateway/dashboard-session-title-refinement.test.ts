@@ -6,7 +6,9 @@ const readSessionTitleFieldsFromTranscript = vi.hoisted(() => vi.fn());
 const updateSessionEntry = vi.hoisted(() => vi.fn());
 const loadSessionEntry = vi.hoisted(() => vi.fn());
 
+// mock-isolation: Utility model resolution is stubbed to keep the refinement test hermetic.
 vi.mock("../agents/utility-model.js", () => ({ resolveUtilityModelRefForAgent }));
+// mock-isolation: Label generation is stubbed so refinement tests control naming output directly.
 vi.mock("../auto-reply/reply/conversation-label-generator.js", () => ({
   generateConversationLabelWithFallback,
 }));
@@ -27,7 +29,7 @@ vi.mock("./session-transcript-title-reader.js", () => ({
   readSessionTitleFieldsFromTranscriptAsync: readSessionTitleFieldsFromTranscript,
 }));
 
-import type { SessionEntry } from "../config/sessions/types.js";
+import type { InternalSessionEntry as SessionEntry } from "../config/sessions/types.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { maybeRefineDashboardSessionTitle } from "./dashboard-session-title-refinement.js";
 
