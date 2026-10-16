@@ -72,7 +72,7 @@ describe("progress narration completion cancellation", () => {
       });
 
       expect(result.text).toBe(exhausted ? null : "Checking the requested fix.");
-      expect(result.error).toBe(exhausted ? expect.any(String) : undefined);
+      expect(result.error).toEqual(exhausted ? expect.any(String) : undefined);
       expect(complete.mock.calls.map(([request]) => request.model)).toEqual(["primary", "backup"]);
       expect(vi.getTimerCount()).toBe(0);
     },

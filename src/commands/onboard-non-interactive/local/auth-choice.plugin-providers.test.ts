@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OpenClawConfig } from "../../../config/config.js";
 import type { ModelProviderConfig } from "../../../config/types.models.js";
 import * as pluginEnable from "../../../plugins/enable.js";
+import "../../../system-agent/setup-inference-credentials.js";
 import { migrateLegacyConfig } from "../../doctor/shared/legacy-config-migrate.js";
 import { applyNonInteractivePluginProviderChoice } from "./auth-choice.plugin-providers.js";
 
