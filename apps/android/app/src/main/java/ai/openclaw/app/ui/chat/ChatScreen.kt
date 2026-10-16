@@ -4777,8 +4777,10 @@ internal fun AttachmentStrip(
           Box(modifier = Modifier.width(minOf(160.dp, chipMaxWidth))) {
             ChatBase64Image(base64 = attachment.base64, mimeType = attachment.mimeType, source = Base64ImageSource.Composer)
             Box(Modifier.align(Alignment.TopEnd).padding(4.dp)) {
-              ChatRoundButton({ onRemoveAttachment(attachment.id) }, contentColor = ClawTheme.colors.text, background = ClawTheme.colors.canvas) {
-                Icon(imageVector = Icons.Default.Close, contentDescription = nativeString("Remove attachment"), modifier = Modifier.size(13.dp))
+              Surface(onClick = { onRemoveAttachment(attachment.id) }, modifier = Modifier.size(ClawTheme.spacing.touchTarget), shape = CircleShape, color = Color.Transparent, contentColor = ClawTheme.colors.text) {
+                Box(modifier = Modifier.padding(8.dp).background(ClawTheme.colors.canvas, CircleShape), contentAlignment = Alignment.Center) {
+                  Icon(imageVector = Icons.Default.Close, contentDescription = nativeString("Remove attachment"), modifier = Modifier.size(13.dp))
+                }
               }
             }
           }
