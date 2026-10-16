@@ -595,6 +595,7 @@ export function createSessionCompanionAskRuntime(params: SessionCompanionAskRunt
           abortSignal: controller.signal,
           operatorAuthority: request.operatorAuthority,
           skipAuthProfileRuntime: true,
+          resolveAgentHarnessRuntimeOverride: () => "openclaw",
           run: (provider, model, options) => {
             controller.signal.throwIfAborted();
             assertSourceCurrent?.();

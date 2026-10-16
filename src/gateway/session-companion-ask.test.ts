@@ -191,7 +191,7 @@ describe("session companion embedded invocation", () => {
               assertCurrent() {},
               modelPolicy: prepareOperatorModelPolicy({
                 cfg,
-                policy: { sourceAgent: "main", deny: ["test/model-a"] },
+                policy: { sourceAgent: "main", allow: ["test/*"], deny: ["test/model-a"] },
                 manifestPlugins: [],
               }),
             })

@@ -62,7 +62,7 @@ describe("utility fallback execution", () => {
       assertCurrent() {},
       modelPolicy: prepareOperatorModelPolicy({
         cfg,
-        policy: { deny: ["other/backup"] },
+        policy: { allow: ["local/*", "other/*"], deny: ["other/backup"] },
         manifestPlugins: [],
       }),
     });

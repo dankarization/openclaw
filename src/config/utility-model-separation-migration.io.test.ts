@@ -73,7 +73,10 @@ describe("utility model separation persistence", () => {
         disabled: { utilityModel: "" },
       },
     };
-    await io.writeConfigFile({ agents, plugins: { enabled: false } });
+    await fs.writeFile(
+      path.join(home, "openclaw.json"),
+      JSON.stringify({ agents, plugins: { enabled: false } }),
+    );
     const first = await io.readConfigFileSnapshot();
     expect(first.valid).toBe(true);
     expect(first.sourceConfig.agents).toEqual(agents);

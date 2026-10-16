@@ -276,7 +276,11 @@ describe("generateConversationLabelWithFallback", () => {
         assertCurrent: () => {},
         modelPolicy: prepareOperatorModelPolicy({
           cfg,
-          policy: { sourceAgent: "main", deny: ["label-test/utility"] },
+          policy: {
+            sourceAgent: "main",
+            allow: ["label-test/*"],
+            deny: ["label-test/utility"],
+          },
           manifestPlugins: [],
         }),
       });

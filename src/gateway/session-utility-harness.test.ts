@@ -15,6 +15,7 @@ import { prewarmSessionHistoryWorker } from "../config/sessions/session-transcri
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { createEmptyPluginMetadataSnapshot } from "../plugins/plugin-metadata-empty.test-support.js";
 import { createEmptyPluginRegistry } from "../plugins/registry-empty.js";
+import { withPluginRuntimeGenerationScope } from "../plugins/runtime/generation-scope.js";
 import { createTestGatewayScheduler } from "../test-utils/gateway-scheduler-clock.js";
 import {
   createOpenClawTestState,
@@ -276,6 +277,78 @@ describe("utility completion with an unavailable implicit harness", () => {
       }
     },
   );
+
+  it("admits the utility harness from its run-owned registry before validating registration", async () => {
+    config.agents!.defaults!.utilityModel = {
+      primary: "utility-fixture/small",
+      fallbacks: ["utility-fixture/backup"],
+    };
+    config.agents!.entries!.main!.models!["utility-fixture/small"] = {
+      agentRuntime: { id: "admitted-utility" },
+    };
+    const metadataSnapshot = createEmptyPluginMetadataSnapshot(state.workspaceDir);
+    const registry = createEmptyPluginRegistry();
+    const dispatch = vi.fn(async () => ({
+      assistant: makeAssistantMessageFixture({
+        provider: "utility-fixture",
+        model: "small",
+        content: [{ type: "text", text: "The admitted utility harness answered." }],
+      }),
+    }));
+    registry.agentHarnesses.push({
+      pluginId: "utility-fixture",
+      source: "fixture",
+      harness: {
+        id: "admitted-utility",
+        label: "Admitted utility fixture",
+        supports: () => ({ supported: true }),
+        runAttempt: async () => {
+          throw new Error("The utility fixture only supports isolated completion");
+        },
+        runIsolatedCompletionV2: dispatch,
+      },
+    });
+    const release = vi.fn(async () => {});
+    runtimeMocks.acquire.mockResolvedValue({
+      snapshot: {
+        config,
+        agentDir: state.agentDir(),
+        workspaceDir: state.workspaceDir,
+        metadataSnapshot,
+        pluginRegistry: registry,
+      },
+      [Symbol.asyncDispose]: release,
+    });
+    const builtInTransport = vi
+      .spyOn(simpleCompletionExecution, "completeWithPreparedSimpleCompletionModel")
+      .mockRejectedValue(new Error("Unexpected built-in utility completion"));
+    const prepared = await defaultPrepareModel({
+      cfg: config,
+      agentId: "main",
+      useUtilityModel: true,
+    });
+
+    await expect(
+      withPluginRuntimeGenerationScope(
+        { metadataSnapshot, pluginRegistry: createEmptyPluginRegistry() },
+        () =>
+          defaultCompleteModel({
+            ...prepared,
+            systemPrompt: "Return a short reply.",
+            prompt: "Check the fix.",
+            timeoutMs: 1000,
+          }),
+      ),
+    ).resolves.toMatchObject({
+      text: "The admitted utility harness answered.",
+      owner: { kind: "harness", id: "admitted-utility" },
+    });
+    expect(runtimeMocks.acquire).toHaveBeenCalledOnce();
+    expect(release).toHaveBeenCalledOnce();
+    expect(dispatch).toHaveBeenCalledOnce();
+    expect(builtInTransport).not.toHaveBeenCalled();
+    expect(runtimeMocks.runEmbeddedAttempt).not.toHaveBeenCalled();
+  });
 
   it.each(["model policy", "request override"])(
     "rejects an unavailable explicit Codex %s before preparing credentials",

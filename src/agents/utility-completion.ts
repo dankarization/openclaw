@@ -86,6 +86,10 @@ export async function runUtilityCompletion(
     fallbacksOverride: fallbacks,
     abortSignal: params.abortSignal,
     operatorAuthority: params.operatorAuthority,
+    resolveAgentHarnessRuntimeOverride: (provider, model) =>
+      provider === params.provider && model === params.model
+        ? params.agentHarnessRuntimeOverride
+        : undefined,
     // Isolated completion already owns credential selection and profile rotation.
     skipAuthProfileRuntime: true,
     run: (provider, model, options) =>
