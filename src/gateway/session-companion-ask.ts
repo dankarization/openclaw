@@ -584,36 +584,48 @@ export function createSessionCompanionAskRuntime(params: SessionCompanionAskRunt
           ...runParams,
           operatorAuthority: undefined,
         });
-        const { runWithModelFallback } = await import("../agents/model-fallback-runner.js");
-        const result = await runWithModelFallback({
+        const [{ runWithModelFallback }, { resolveModelCandidateChain }] = await Promise.all([
+          import("../agents/model-fallback-runner.js"),
+          import("../agents/model-fallback-candidates.js"),
+        ]);
+        const candidateParams = {
           cfg,
           agentId,
           provider: selection.provider,
           model: selection.modelId,
-          requestedRouteResolution: "resolved",
+          requestedRouteResolution: "resolved" as const,
           fallbacksOverride: fallbacks,
-          abortSignal: controller.signal,
-          operatorAuthority: request.operatorAuthority,
-          skipAuthProfileRuntime: true,
-          resolveAgentHarnessRuntimeOverride: () => "openclaw",
-          run: (provider, model, options) => {
-            controller.signal.throwIfAborted();
-            assertSourceCurrent?.();
-            request.assertInputCurrent?.();
-            return run({
-              ...runParams,
-              modelRef:
-                options?.modelRoutingProvenance.stage === "fallback"
-                  ? `${provider}/${model}${
-                      provider === selection.provider && selection.profileId
-                        ? `@${selection.profileId}`
-                        : ""
-                    }`
-                  : utilityModelRef,
-            });
-          },
-        });
-        rawAnswer = result.result;
+        };
+        const modelPolicy = request.operatorAuthority?.modelPolicy;
+        if (modelPolicy && !resolveModelCandidateChain(candidateParams).some(modelPolicy.allows)) {
+          // Preserve Side chat's permitted-model recovery when the entire utility chain is denied.
+          rawAnswer = await run(runParams);
+        } else {
+          const result = await runWithModelFallback({
+            ...candidateParams,
+            abortSignal: controller.signal,
+            operatorAuthority: request.operatorAuthority,
+            skipAuthProfileRuntime: true,
+            resolveAgentHarnessRuntimeOverride: () => "openclaw",
+            run: (provider, model, options) => {
+              controller.signal.throwIfAborted();
+              assertSourceCurrent?.();
+              request.assertInputCurrent?.();
+              return run({
+                ...runParams,
+                modelRef:
+                  options?.modelRoutingProvenance.stage === "fallback"
+                    ? `${provider}/${model}${
+                        provider === selection.provider && selection.profileId
+                          ? `@${selection.profileId}`
+                          : ""
+                      }`
+                    : utilityModelRef,
+              });
+            },
+          });
+          rawAnswer = result.result;
+        }
       } else {
         rawAnswer = await run(runParams);
       }

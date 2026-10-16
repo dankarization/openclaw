@@ -8,6 +8,7 @@ import type { RunEmbeddedAgentInternalParams } from "../agents/embedded-agent-ru
 import { FailoverError } from "../agents/failover-error.js";
 import { createAgentHarnessToolSurfaceRuntimeCore } from "../agents/harness/tool-surface-bridge.js";
 import { ProviderAuthError } from "../agents/model-auth-runtime-shared.js";
+import "../agents/model-fallback-runner.js";
 import { prepareOperatorModelPolicy } from "../agents/operator-model-policy.js";
 import { createStubTool } from "../agents/test-helpers/agent-tool-stubs.js";
 import type { InternalSessionEntry } from "../config/sessions/types.js";
@@ -223,6 +224,46 @@ describe("session companion embedded invocation", () => {
       }
     },
   );
+
+  it("uses the permitted default when every configured utility candidate is denied", async () => {
+    const cfg: OpenClawConfig = {
+      agents: {
+        defaults: {
+          model: "test/main",
+          utilityModel: { primary: "test/model-a", fallbacks: ["test/model-b"] },
+        },
+      },
+    };
+    resolveSelection.mockImplementation(({ modelRef }) => ({
+      provider: "test",
+      modelId: modelRef?.split("/")[1] ?? "model-a",
+    }));
+    const operatorAuthority = createAdmittedRunOperatorAuthority({
+      profileId: "companion-reader",
+      scopes: ["operator.read"],
+      assertCurrent() {},
+      modelPolicy: prepareOperatorModelPolicy({
+        cfg,
+        policy: { sourceAgent: "main", allow: ["test/main"] },
+        manifestPlugins: [],
+      }),
+    });
+    const companion = createCompanion(cfg);
+    try {
+      await expect(companion.ask({ ...question, operatorAuthority })).resolves.toMatchObject({
+        answer: "The session is reading a file.",
+      });
+      expect(runEmbeddedAgent.mock.calls.map(([params]) => params.model)).toEqual(["main"]);
+      expect(companion.state(question).exchanges).toEqual([
+        expect.objectContaining({
+          question: question.question,
+          answer: "The session is reading a file.",
+        }),
+      ]);
+    } finally {
+      companion.dispose();
+    }
+  });
 
   it("passes a selected-text comment to the model without persisting it as a file", async () => {
     const companion = createCompanion();
