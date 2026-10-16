@@ -159,10 +159,10 @@ async function runLabelAttempts(
         agentId: params.agentId,
         agentDir: params.agentDir ?? selection.agentDir,
         useUtilityModel: attempt.phase === "utility",
-        onAttempt: ({ provider, model, authProfileId }) => {
+        onAttempt: ({ provider, model: modelId, authProfileId }) => {
           seen.add(
             resolveAttemptKey(params, {
-              modelRef: `${provider}/${model}`,
+              modelRef: `${provider}/${modelId}`,
               preferredProfile: authProfileId,
               phase: attempt.phase,
             }),

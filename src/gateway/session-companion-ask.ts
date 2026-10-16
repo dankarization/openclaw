@@ -127,12 +127,7 @@ function toRunnerHistoryMessage(
 async function defaultRun(params: SessionCompanionRunParams): Promise<string> {
   params.assertSourceCurrent?.();
   params.assertInputCurrent?.();
-  const selectedModel = resolveSessionCompanionModel({
-    cfg: params.cfg,
-    agentId: params.agentId,
-    modelRef: params.modelRef,
-    operatorAuthority: params.operatorAuthority,
-  });
+  const selectedModel = resolveSessionCompanionModel(params);
   const current = params.messages.at(-1);
   if (!current || current.role !== "user") {
     throw new Error("Session companion has no current question.");
@@ -329,7 +324,7 @@ async function defaultRun(params: SessionCompanionRunParams): Promise<string> {
       await removeInternalSessionEffectsSession(
         target,
         executionStarted ? undefined : expectedSeedOwner,
-      ).catch((error) => {
+      ).catch((error: unknown) => {
         // Cleanup must not replace a completed answer or replay it through fallback.
         companionLog.warn("Side chat internal session cleanup failed", { error });
       });
