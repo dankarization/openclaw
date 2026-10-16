@@ -220,10 +220,10 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -336,15 +336,13 @@ internal fun shouldUseUserMessageDisclosure(
 internal fun rememberAdaptiveCollapsedPreview(text: String): String? {
   val measurer = rememberTextMeasurer()
   val density = LocalDensity.current
-  val viewportHeightPx =
-    with(density) {
-      LocalConfiguration.current.screenHeightDp.dp
-        .roundToPx()
-    }
+  // Window container size, not the deprecated Configuration screen size (lint ConfigurationScreenWidthHeight).
+  val window = LocalWindowInfo.current.containerSize
+  val viewportHeightPx = window.height
   val bubbleWidthPx =
     with(density) {
-      (LocalConfiguration.current.screenWidthDp.dp * chatBubbleWidthFraction(isUser = true) - (CHAT_MESSAGE_TEXT_INSET_DP * 2).dp)
-        .roundToPx()
+      (window.width * chatBubbleWidthFraction(isUser = true) - (CHAT_MESSAGE_TEXT_INSET_DP * 2).dp.toPx())
+        .toInt()
         .coerceAtLeast(1)
     }
   val style = ClawTheme.type.body.copy(fontWeight = FontWeight.Normal)
