@@ -13,6 +13,8 @@ export const SessionTitleRefinementStateSchema = z.strictObject({
   refinementDone: z.boolean(),
   /** Session generation the state was captured against. */
   sessionId: z.string(),
+  /** Generated title this state owns; refinement writes must still match it. */
+  generatedName: z.string(),
 });
 
 export type SessionTitleRefinementState = z.infer<typeof SessionTitleRefinementStateSchema>;
@@ -45,6 +47,7 @@ export function resolveSessionTitleRefineConfig(params: {
 export function countTitleRefinementMessage(
   state: SessionTitleRefinementState | undefined,
   sessionId: string,
+  generatedName: string,
 ): SessionTitleRefinementState {
   if (state && state.sessionId !== sessionId) {
     state = undefined;
@@ -53,6 +56,7 @@ export function countTitleRefinementMessage(
     taskMessagesSinceTitle: (state?.taskMessagesSinceTitle ?? 0) + 1,
     refinementDone: state?.refinementDone ?? false,
     sessionId,
+    generatedName,
   };
 }
 

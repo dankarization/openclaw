@@ -8,7 +8,7 @@ const h = vi.hoisted(() => {
       register: async (key: string, value: Record<string, unknown>) => {
         storeState.set(key, structuredClone(value));
       },
-      get: async (key: string) => storeState.get(key),
+      lookup: async (key: string) => storeState.get(key),
       delete: async (key: string) => {
         storeState.delete(key);
       },

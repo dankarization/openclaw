@@ -202,30 +202,18 @@ function scheduleDmTopicLabel(params: {
   const { context } = params;
   const isDmTopic =
     !context.isGroup && context.threadSpec.scope === "dm" && context.threadSpec.id != null;
-  if (!isDmTopic || !params.isFirstTurnInSession) {
-    return;
-  }
-  const userMessage = truncateUtf16Safe(
-    context.ctxPayload.RawBody ?? context.ctxPayload.Body ?? "",
-    500,
-  );
-  if (!userMessage.trim()) {
+  if (!isDmTopic) {
     return;
   }
   const directAutoTopicLabel =
     context.groupConfig && "autoTopicLabel" in context.groupConfig
       ? context.groupConfig.autoTopicLabel
       : undefined;
-  const autoTopicConfig = resolveAutoTopicLabelConfig(
-    directAutoTopicLabel,
-    params.telegramCfg.autoTopicLabel,
-  );
-  if (!autoTopicConfig) {
-    return;
-  }
   const topicThreadId = context.threadSpec.id!;
   if (!params.isFirstTurnInSession) {
     // Later turns: opt-in one-time bounded refinement of the auto label.
+    // This must run before any first-turn-only early return so that later
+    // turns can actually reach the refinement state machine.
     const refineCfg = resolveAutoTopicLabelRefineConfig({
       directConfig: directAutoTopicLabel,
       accountConfig: params.telegramCfg.autoTopicLabel,
@@ -243,6 +231,20 @@ function scheduleDmTopicLabel(params: {
       afterMessages: refineCfg.afterMessages,
       logVerbose,
     });
+    return;
+  }
+  const userMessage = truncateUtf16Safe(
+    context.ctxPayload.RawBody ?? context.ctxPayload.Body ?? "",
+    500,
+  );
+  if (!userMessage.trim()) {
+    return;
+  }
+  const autoTopicConfig = resolveAutoTopicLabelConfig(
+    directAutoTopicLabel,
+    params.telegramCfg.autoTopicLabel,
+  );
+  if (!autoTopicConfig) {
     return;
   }
   void (async () => {

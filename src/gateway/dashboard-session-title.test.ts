@@ -42,6 +42,7 @@ import {
   generateWorktreeSessionTitle,
   maybeGenerateDashboardSessionTitle,
   maybeGenerateSessionTitle,
+  maybeRefineDashboardSessionTitle,
   prepareDashboardSessionTitle,
 } from "./dashboard-session-title.js";
 import { deriveGoalSessionTitle } from "./derive-goal-session-title.js";
@@ -884,4 +885,168 @@ describe("worktree title source lifecycle", () => {
       }
     },
   );
+});
+
+describe("maybeRefineDashboardSessionTitle", () => {
+  const generatedEntry: SessionEntry = {
+    ...baseEntry,
+    displayName: "First Pass Title",
+  };
+  const refineCfg = {
+    ...cfg,
+    session: { autoTitle: { refine: true, refineAfterMessages: 2 } },
+  } as OpenClawConfig;
+
+  function refineParams(entry: SessionEntry | undefined = generatedEntry) {
+    loadSessionEntry.mockReturnValue(entry);
+    return {
+      cfg: refineCfg,
+      agentId: "main",
+      entry,
+      sessionId: "session-1",
+      sessionKey: "agent:main:dashboard:chat-1",
+      storePath: "/tmp/openclaw/sessions.json",
+      userMessage: "Later task message",
+    };
+  }
+
+  beforeEach(() => {
+    generateConversationLabelWithFallback.mockReset();
+    updateSessionEntry.mockReset();
+    loadSessionEntry.mockReset();
+    readSessionTitleFieldsFromTranscript.mockReset();
+    readSessionTitleFieldsFromTranscript.mockReturnValue({
+      firstUserMessage: "Plan the release",
+      lastMessagePreview: "Ship it Friday",
+    });
+    generateConversationLabelWithFallback.mockResolvedValue("Release Planning");
+    resolveUtilityModelRefForAgent.mockReset().mockReturnValue("openai/gpt-5.6-luna");
+  });
+
+  it("fail-before: with the old explicit-name guard the threshold write is always rejected; pass-after: counter persists under a generated name", async () => {
+    // Threshold below the configured 2 would be rejected by the old
+    // !hasExplicitSessionName guard because the entry already carries a
+    // generated displayName. The fix persists the counter instead.
+    const writes: unknown[] = [];
+    updateSessionEntry.mockImplementation(async (_scope, update) => {
+      const patch = await update({ ...generatedEntry });
+      writes.push(patch);
+      const result = patch ? { ...generatedEntry, ...patch } : generatedEntry;
+      loadSessionEntry.mockReturnValue(result);
+      return result;
+    });
+
+    await maybeRefineDashboardSessionTitle(refineParams());
+
+    expect(writes[0]).toEqual({
+      titleRefinement: {
+        taskMessagesSinceTitle: 1,
+        refinementDone: false,
+        sessionId: "session-1",
+        generatedName: "First Pass Title",
+      },
+    });
+  });
+
+  it("runs the one-time refinement at threshold and persists the refined name (manual names never overwritten)", async () => {
+    let current: SessionEntry = {
+      ...generatedEntry,
+      titleRefinement: {
+        taskMessagesSinceTitle: 1,
+        refinementDone: false,
+        sessionId: "session-1",
+        generatedName: "First Pass Title",
+      },
+    };
+    updateSessionEntry.mockImplementation(async (_scope, update) => {
+      const patch = await update({ ...current });
+      if (patch) {
+        current = { ...current, ...patch };
+      }
+      loadSessionEntry.mockReturnValue(current);
+      return current;
+    });
+
+    await maybeRefineDashboardSessionTitle(refineParams(current));
+
+    expect(generateConversationLabelWithFallback).toHaveBeenCalledTimes(1);
+    expect(generateConversationLabelWithFallback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.stringContaining("concise session title"),
+      }),
+    );
+    expect(current.displayName).toBe("Release Planning");
+    expect(current.titleRefinement).toMatchObject({
+      refinementDone: true,
+      generatedName: "Release Planning",
+    });
+  });
+
+  it("exactly-once: refinementDone blocks a second refinement even at/after threshold", async () => {
+    const doneEntry: SessionEntry = {
+      ...generatedEntry,
+      titleRefinement: {
+        taskMessagesSinceTitle: 9,
+        refinementDone: true,
+        sessionId: "session-1",
+        generatedName: "First Pass Title",
+      },
+    };
+    await maybeRefineDashboardSessionTitle(refineParams(doneEntry));
+    expect(generateConversationLabelWithFallback).not.toHaveBeenCalled();
+    expect(updateSessionEntry).not.toHaveBeenCalled();
+  });
+
+  it("manual rename precedence: displayName not matching the owned generated name blocks persistence and generation", async () => {
+    let current: SessionEntry = {
+      ...generatedEntry,
+      displayName: "My Manual Name",
+      titleRefinement: {
+        taskMessagesSinceTitle: 1,
+        refinementDone: false,
+        sessionId: "session-1",
+        generatedName: "First Pass Title",
+      },
+    };
+    updateSessionEntry.mockImplementation(async (_scope, update) => {
+      const patch = await update({ ...current });
+      if (patch) {
+        current = { ...current, ...patch };
+      }
+      loadSessionEntry.mockReturnValue(current);
+      return current;
+    });
+
+    await maybeRefineDashboardSessionTitle(refineParams(current));
+
+    expect(generateConversationLabelWithFallback).not.toHaveBeenCalled();
+    expect(current.displayName).toBe("My Manual Name");
+  });
+
+  it("stale async writer: sessionId change (reset) blocks all refinement writes", async () => {
+    const resetEntry: SessionEntry = {
+      ...generatedEntry,
+      sessionId: "session-2",
+      titleRefinement: {
+        taskMessagesSinceTitle: 5,
+        refinementDone: false,
+        sessionId: "session-1",
+        generatedName: "First Pass Title",
+      },
+    };
+    await maybeRefineDashboardSessionTitle(refineParams(resetEntry));
+    expect(generateConversationLabelWithFallback).not.toHaveBeenCalled();
+    expect(updateSessionEntry).not.toHaveBeenCalled();
+  });
+
+  it("is opt-out by default: refine not configured never generates or writes", async () => {
+    updateSessionEntry.mockImplementation(async () => {
+      throw new Error("must not write when disabled");
+    });
+    await maybeRefineDashboardSessionTitle({
+      ...refineParams(),
+      cfg,
+    });
+    expect(generateConversationLabelWithFallback).not.toHaveBeenCalled();
+  });
 });

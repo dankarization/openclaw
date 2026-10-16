@@ -40,21 +40,27 @@ describe("resolveSessionTitleRefineConfig", () => {
 });
 
 describe("countTitleRefinementMessage", () => {
+  const NAME = "Generated Title";
+
   it("starts at 1 without prior state", () => {
-    expect(countTitleRefinementMessage(undefined, SID)).toEqual({
+    expect(countTitleRefinementMessage(undefined, SID, NAME)).toEqual({
       taskMessagesSinceTitle: 1,
       refinementDone: false,
       sessionId: SID,
+      generatedName: NAME,
     });
   });
 
-  it("increments prior state", () => {
+  it("increments prior state and tracks the owned generated name", () => {
     const prior: SessionTitleRefinementState = {
       taskMessagesSinceTitle: 2,
       refinementDone: false,
       sessionId: SID,
+      generatedName: NAME,
     };
-    expect(countTitleRefinementMessage(prior, SID).taskMessagesSinceTitle).toBe(3);
+    const next = countTitleRefinementMessage(prior, SID, NAME);
+    expect(next.taskMessagesSinceTitle).toBe(3);
+    expect(next.generatedName).toBe(NAME);
   });
 
   it("resets on sessionId change (new session after /reset)", () => {
@@ -62,11 +68,13 @@ describe("countTitleRefinementMessage", () => {
       taskMessagesSinceTitle: 5,
       refinementDone: false,
       sessionId: "old-session",
+      generatedName: NAME,
     };
-    expect(countTitleRefinementMessage(prior, SID)).toEqual({
+    expect(countTitleRefinementMessage(prior, SID, NAME)).toEqual({
       taskMessagesSinceTitle: 1,
       refinementDone: false,
       sessionId: SID,
+      generatedName: NAME,
     });
   });
 });
@@ -76,6 +84,7 @@ describe("shouldRunTitleRefinement", () => {
     taskMessagesSinceTitle: 6,
     refinementDone: false,
     sessionId: SID,
+    generatedName: "Generated Title",
     ...over,
   });
 

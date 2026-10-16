@@ -1,4 +1,5 @@
 import { truncateUtf16Safe } from "openclaw/plugin-sdk/text-utility-runtime";
+import { AUTO_TOPIC_LABEL_REFINE_PROMPT } from "./auto-topic-label-config.js";
 import { resolveAgentDir } from "./bot-message-dispatch.agent.runtime.js";
 import { generateTopicLabel } from "./bot-message-dispatch.runtime.js";
 import { getTelegramRuntime } from "./runtime.js";
@@ -78,7 +79,7 @@ export async function maybeRefineTopicLabel(params: {
   try {
     const key = refinementKey(params.chatId, params.threadId);
     const store = await loadRefinementStore();
-    const entry = await store.get(key);
+    const entry = await store.lookup(key);
     if (!entry || entry.done) {
       return;
     }
@@ -102,6 +103,7 @@ export async function maybeRefineTopicLabel(params: {
     try {
       label = await generateTopicLabel({
         userMessage: [entry.label, excerpt].filter(Boolean).join("\n---\n"),
+        prompt: AUTO_TOPIC_LABEL_REFINE_PROMPT,
         maxLength: 128,
         cfg: params.cfg,
         agentId: params.agentId,

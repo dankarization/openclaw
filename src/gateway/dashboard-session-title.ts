@@ -589,6 +589,8 @@ export async function maybeRefineDashboardSessionTitle(params: SessionTitleParam
       return;
     }
     // Manual titles are never refined; only generated displayName candidates.
+    // (displayName alone does not mean "manual": the initial generator writes
+    // it. Ownership of the generated value is tracked in titleRefinement.)
     if (entry.label?.trim() || entry.autoLabel?.trim() || !entry.displayName?.trim()) {
       return;
     }
@@ -596,7 +598,22 @@ export async function maybeRefineDashboardSessionTitle(params: SessionTitleParam
     if (!refineConfig.enabled) {
       return;
     }
-    const state = countTitleRefinementMessage(entry.titleRefinement, params.sessionId);
+    const generatedName = entry.displayName.trim();
+    const priorState = entry.titleRefinement;
+    // Exactly-once: a completed refinement never counts or writes again.
+    if (priorState?.refinementDone) {
+      return;
+    }
+    // Orphaned ownership: a manual rename (or any other writer) changed the
+    // title after the state captured the generated value. Refinement stops.
+    if (priorState && priorState.generatedName !== generatedName) {
+      return;
+    }
+    const state = countTitleRefinementMessage(
+      entry.titleRefinement,
+      params.sessionId,
+      generatedName,
+    );
     if (
       !shouldRunTitleRefinement({
         state,
@@ -605,11 +622,22 @@ export async function maybeRefineDashboardSessionTitle(params: SessionTitleParam
       })
     ) {
       // Persist the incremented counter only when it changes anything.
-      if (state.taskMessagesSinceTitle !== entry.titleRefinement?.taskMessagesSinceTitle) {
+      // Ownership guard: write only while the generated title is still current
+      // — either this arms fresh state for the initial generated name, or a
+      // prior state still owns it. Any later manual rename orphans the state
+      // (displayName no longer matches) and stops the refinement.
+      if (
+        state.taskMessagesSinceTitle !== priorState?.taskMessagesSinceTitle &&
+        !priorState?.refinementDone &&
+        (priorState?.generatedName === generatedName || priorState === undefined)
+      ) {
         await patchSessionEntryCore(
           scope,
           (current) =>
-            current.sessionId === params.sessionId && !hasExplicitSessionName(current)
+            current.sessionId === params.sessionId &&
+            current.displayName?.trim() === generatedName &&
+            (current.titleRefinement === undefined ||
+              current.titleRefinement.generatedName === generatedName)
               ? { titleRefinement: state }
               : null,
           {
@@ -658,7 +686,9 @@ export async function maybeRefineDashboardSessionTitle(params: SessionTitleParam
       await patchSessionEntryCore(
         scope,
         (current) =>
-          current.sessionId === params.sessionId && !hasExplicitSessionName(current)
+          current.sessionId === params.sessionId &&
+          current.displayName?.trim() === generatedName &&
+          current.titleRefinement?.generatedName === generatedName
             ? { titleRefinement: { ...state, refinementDone: true } }
             : null,
         {
@@ -672,13 +702,17 @@ export async function maybeRefineDashboardSessionTitle(params: SessionTitleParam
     await patchSessionEntryCore(
       scope,
       (current) => {
-        if (current.sessionId !== params.sessionId || hasExplicitSessionName(current)) {
+        if (
+          current.sessionId !== params.sessionId ||
+          current.displayName?.trim() !== generatedName ||
+          current.titleRefinement?.generatedName !== generatedName
+        ) {
           return null;
         }
         persisted = true;
         return {
           displayName: refined,
-          titleRefinement: { ...state, refinementDone: true },
+          titleRefinement: { ...state, refinementDone: true, generatedName: refined },
         };
       },
       {
