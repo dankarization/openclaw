@@ -772,4 +772,8 @@ internal fun ChatMediaAttachmentLabel(content: ChatMessageContent) {
 }
 
 /** Recorder-generated names (`voice-note-<uuid>.m4a`) carry no meaning; show "Voice note" instead. */
-internal fun isGeneratedVoiceNoteName(fileName: String): Boolean = fileName.trim().startsWith("voice-note-", ignoreCase = true)
+internal fun isGeneratedVoiceNoteName(fileName: String): Boolean = GENERATED_VOICE_NOTE_NAME.matches(fileName.trim())
+
+/** Matches only VoiceNoteRecorderController's `voice-note-<uuid>.m4a`, never a user-named file. */
+private val GENERATED_VOICE_NOTE_NAME =
+  Regex("^voice-note-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.m4a$", RegexOption.IGNORE_CASE)

@@ -781,11 +781,7 @@ class ChatReaderScrollOwnershipLayoutTest {
     val older = layout.visibleItemsInfo.single { it.key == olderKey }
     val before = renderedReaderText(textMarker)
     if (collapsedUserPrompt) {
-      val rendered = before.second.layoutInput.text.text
-      assertTrue(
-        "The actual user renderer must remain collapsed",
-        rendered.endsWith("…") && rendered.length < collapsedPromptText().length && collapsedPromptText().startsWith(rendered.removeSuffix("…")),
-      )
+      assertEquals("The actual user renderer must remain collapsed", ChatUserMessageDisclosurePolicy.collapsedPreview(collapsedPromptText()), before.second.layoutInput.text.text)
       assertEquals("Only the original user message and the two transient rows belong to this timeline", 3, layout.totalItemsCount)
     }
     val marker =

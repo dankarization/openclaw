@@ -118,7 +118,7 @@ class ChatScreenTest {
   }
 
   @Test
-  fun disclosureCoversUserTextNextToAttachments() {
+  fun disclosureDoesNotReorderMixedUserContent() {
     val mixedContent =
       listOf(
         ChatMessageContent(type = "text", text = "a".repeat(701)),
@@ -126,9 +126,7 @@ class ChatScreenTest {
         ChatMessageContent(type = "text", text = "caption"),
       )
 
-    // Attachments stay in place; only the text parts go through the adaptive disclosure.
-    assertTrue(shouldUseUserMessageDisclosure(isUser = true, content = mixedContent))
-    assertFalse(shouldUseUserMessageDisclosure(isUser = false, content = mixedContent))
+    assertFalse(shouldUseUserMessageDisclosure(isUser = true, content = mixedContent))
   }
 
   @Test

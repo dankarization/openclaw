@@ -223,7 +223,6 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -240,7 +239,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
@@ -319,45 +317,14 @@ internal object ChatUserMessageDisclosurePolicy {
   }
 }
 
-/**
- * User text always goes through the disclosure renderer; whether it actually collapses is
- * decided at layout time by [ChatAdaptiveCollapsePolicy] against the visible chat height.
- */
 internal fun shouldUseUserMessageDisclosure(
   isUser: Boolean,
   content: List<ChatMessageContent>,
-): Boolean = isUser && content.any { it.type == "text" && !it.text.isNullOrBlank() }
-
-/**
- * Collapsed preview for [text], or null when the whole text fits within
- * [ChatAdaptiveCollapsePolicy.VIEWPORT_FRACTION] of the visible chat height.
- */
-@Composable
-internal fun rememberAdaptiveCollapsedPreview(text: String): String? {
-  val measurer = rememberTextMeasurer()
-  val density = LocalDensity.current
-  // Window container size, not the deprecated Configuration screen size (lint ConfigurationScreenWidthHeight).
-  val window = LocalWindowInfo.current.containerSize
-  val viewportHeightPx = window.height
-  val bubbleWidthPx =
-    with(density) {
-      (window.width * chatBubbleWidthFraction(isUser = true) - (CHAT_MESSAGE_TEXT_INSET_DP * 2).dp.toPx())
-        .toInt()
-        .coerceAtLeast(1)
-    }
-  val style = ClawTheme.type.body.copy(fontWeight = FontWeight.Normal)
-  return remember(text, viewportHeightPx, bubbleWidthPx, style) {
-    val layout = measurer.measure(text, style, constraints = Constraints(maxWidth = bubbleWidthPx))
-    // Without font metrics (e.g. a headless renderer) fall back to the fixed line/character cap.
-    if (layout.size.height <= 0 || viewportHeightPx <= 0) return@remember ChatUserMessageDisclosurePolicy.collapsedPreview(text)
-    if (!ChatAdaptiveCollapsePolicy.shouldCollapse(layout.size.height, viewportHeightPx)) return@remember null
-    val maxHeight = ChatAdaptiveCollapsePolicy.maxExpandedHeightPx(viewportHeightPx)
-    val lastLine = (layout.getLineForVerticalPosition(maxHeight.toFloat()) - 1).coerceAtLeast(0)
-    var end = layout.getLineEnd(lastLine, visibleEnd = true).coerceIn(1, text.length)
-    if (end < text.length && text[end - 1].isHighSurrogate()) end -= 1
-    text.substring(0, end).trimEnd() + "…"
-  }
-}
+): Boolean =
+  isUser &&
+    content.isNotEmpty() &&
+    content.all { it.type == "text" } &&
+    ChatUserMessageDisclosurePolicy.collapsedPreview(chatMessagePlainText(content)) != null
 
 private class ChatBranchOpening(
   val session: ChatModelPickerSession,
@@ -2283,6 +2250,8 @@ internal fun ChatBubble(
   if (displayableContent.isEmpty() && transcript == null) return
 
   val messageText = chatMessagePlainText(displayableContent)
+  // Copy, Select text, Share and Reply act on what the bubble shows, transcript included.
+  val actionText = listOfNotNull(messageText.takeIf(String::isNotBlank), transcript).joinToString("\n\n")
   val reactionMessageId = entryId?.takeIf { !live && (isUser || normalizedRole == "assistant") }
   val canReact = reactionMessageId != null && onReact != null
   var reactionPickerOpen by remember(reactionMessageId, canReact) { mutableStateOf(false) }
@@ -2304,7 +2273,7 @@ internal fun ChatBubble(
     separateContent = true,
     messageActions = { modifier, body ->
       ChatMessageActionHost(
-        text = messageText,
+        text = actionText,
         onReply = onReplyMessage,
         showSessionActions = isUser && entryId != null && sessionActionsEnabled,
         onRewind = entryId?.let { value -> { onRewindMessage(value) } },
@@ -2541,7 +2510,7 @@ private fun ChatUserMessageText(
   expanded: Boolean,
   onExpandedChange: (Boolean) -> Unit,
 ) {
-  val preview = rememberAdaptiveCollapsedPreview(plainText)
+  val preview = ChatUserMessageDisclosurePolicy.collapsedPreview(plainText)
   val action = key(plainText) { rememberChatReaderAction() }
   val requester = remember(action) { BringIntoViewRequester() }
   var pendingPlacement by remember(action) { mutableStateOf<CompletableDeferred<IntSize>?>(null) }
@@ -4635,7 +4604,7 @@ private fun LiveTalkWaveform(
 }
 
 @Composable
-internal fun AttachmentStrip(
+private fun AttachmentStrip(
   attachments: List<PendingAttachment>,
   onRemoveAttachment: (String) -> Unit,
 ) {
@@ -4645,14 +4614,9 @@ internal fun AttachmentStrip(
     Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
       attachments.forEach { attachment ->
         if (attachment.mimeType.startsWith("image/")) {
-          // Same shape as the sent bubble: the photo itself, no separate file-name chip.
-          Box(modifier = Modifier.width(minOf(160.dp, chipMaxWidth))) {
+          Column(modifier = Modifier.width(minOf(160.dp, chipMaxWidth)), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             ChatBase64Image(base64 = attachment.base64, mimeType = attachment.mimeType, source = Base64ImageSource.Composer)
-            Box(Modifier.align(Alignment.TopEnd).padding(4.dp)) {
-              ChatRoundButton({ onRemoveAttachment(attachment.id) }, contentColor = ClawTheme.colors.text, background = ClawTheme.colors.canvas) {
-                Icon(imageVector = Icons.Default.Close, contentDescription = nativeString("Remove attachment"), modifier = Modifier.size(13.dp))
-              }
-            }
+            AttachmentChip(attachment = attachment, maxWidth = minOf(160.dp, chipMaxWidth), onRemove = { onRemoveAttachment(attachment.id) })
           }
         } else {
           AttachmentChip(attachment = attachment, maxWidth = chipMaxWidth, onRemove = { onRemoveAttachment(attachment.id) })

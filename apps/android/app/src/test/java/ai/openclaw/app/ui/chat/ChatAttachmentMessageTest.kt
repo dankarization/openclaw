@@ -9,7 +9,7 @@ import org.junit.Test
 
 class ChatAttachmentMessageTest {
   private val image = ChatMessageContent(type = "image", mimeType = "image/jpeg", fileName = "1000186721.jpg")
-  private val voice = ChatMessageContent(type = "audio", mimeType = "audio/mp4", fileName = "voice-note-b9526ed8.m4a", durationMs = 76_000)
+  private val voice = ChatMessageContent(type = "audio", mimeType = "audio/mp4", fileName = "voice-note-b9526ed8-69ef-44d1-ad36-0123456789ab.m4a", durationMs = 76_000)
 
   @Test
   fun placeholderTextIsDroppedWhenTheMessageCarriesAttachments() {
@@ -49,17 +49,18 @@ class ChatAttachmentMessageTest {
   }
 
   @Test
-  fun collapseThresholdIsAFractionOfTheVisibleChatHeight() {
-    assertEquals(0.6f, ChatAdaptiveCollapsePolicy.VIEWPORT_FRACTION)
-    assertFalse(ChatAdaptiveCollapsePolicy.shouldCollapse(contentHeightPx = 1_200, viewportHeightPx = 2_400))
-    assertFalse(ChatAdaptiveCollapsePolicy.shouldCollapse(contentHeightPx = 1_440, viewportHeightPx = 2_400))
-    assertTrue(ChatAdaptiveCollapsePolicy.shouldCollapse(contentHeightPx = 1_441, viewportHeightPx = 2_400))
-    assertFalse(ChatAdaptiveCollapsePolicy.shouldCollapse(contentHeightPx = 5_000, viewportHeightPx = 0))
+  fun bareTranscriptionMarkerKeepsTheOriginalText() {
+    val text = ChatMessageContent(type = "text", text = "**[Transcription]**")
+    val parts = splitChatAttachmentMessage(listOf(text))
+    assertEquals(listOf(text), parts.content)
+    assertNull(parts.transcript)
   }
 
   @Test
   fun generatedVoiceNoteNamesAreHidden() {
-    assertTrue(isGeneratedVoiceNoteName("voice-note-b9526ed8-69ef.m4a"))
+    assertTrue(isGeneratedVoiceNoteName("voice-note-b9526ed8-69ef-44d1-ad36-0123456789ab.m4a"))
+    assertFalse(isGeneratedVoiceNoteName("voice-note-for-mom.m4a"))
+    assertFalse(isGeneratedVoiceNoteName("voice-note-b9526ed8-69ef-44d1-ad36-0123456789ab.mp3"))
     assertFalse(isGeneratedVoiceNoteName("meeting.m4a"))
   }
 }

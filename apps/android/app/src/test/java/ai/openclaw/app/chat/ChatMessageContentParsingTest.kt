@@ -682,18 +682,30 @@ class ChatMessageContentParsingTest {
   }
 
   @Test
-  fun transcribedTurnKeepsItsPhotoFromTranscriptMediaFields() {
+  fun transcribedTurnRestoresItsPhotoFromHistoryMediaFacts() {
+    // Fails on base: a rewritten user turn kept only its text, so the photo vanished.
     val message =
       Json
         .parseToJsonElement(
-          """{"content":[{"type":"text","text":"**[Transcription]**\n> hi"}],"MediaPaths":["media/inbound/1000186721.jpg","media/inbound/voice.m4a"],"MediaTypes":["image/jpeg","audio/x-m4a"]}""",
+          """{"role":"user","content":[{"type":"text","text":"**[Transcription]**\n> hi"}],"__openclaw":{"media":[
+            {"url":"/api/chat/media/outgoing/main/55555555-5555-4555-8555-555555555555/full","contentType":"image/jpeg","kind":"image","fileName":"1000186721.jpg"},
+            {"contentType":"image/png","kind":"image","base64":"iVBORw0KGgo="},
+            {"url":"media://inbound/photo---af3c4068.jpg","contentType":"image/jpeg","kind":"image"},
+            {"url":"media://inbound/voice.m4a","contentType":"audio/mp4","kind":"audio"}
+          ]}}""",
         ).jsonObject
 
     assertEquals(
       listOf(
         ChatMessageContent(type = "text", text = "**[Transcription]**\n> hi"),
-        ChatMessageContent(type = "image", mimeType = "image/jpeg", fileName = "1000186721.jpg"),
-        ChatMessageContent(type = "audio", mimeType = "audio/x-m4a", fileName = "voice.m4a"),
+        ChatMessageContent(
+          type = "image",
+          mimeType = "image/jpeg",
+          fileName = "1000186721.jpg",
+          artifactId = "artifact_managed_image_55555555-5555-4555-8555-555555555555",
+          url = "/api/chat/media/outgoing/main/55555555-5555-4555-8555-555555555555/full",
+        ),
+        ChatMessageContent(type = "image", mimeType = "image/png", base64 = "iVBORw0KGgo="),
       ),
       parseChatMessageContents(message),
     )

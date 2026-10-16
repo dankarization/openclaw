@@ -8291,16 +8291,17 @@ private fun managedMediaAttachmentId(rawUrl: String?): String? {
 }
 
 internal fun parseChatMessageContents(obj: JsonObject): List<ChatMessageContent> {
-  val content =
+  val parsed =
     obj["content"].asArrayOrNull()?.mapNotNull(::parseChatMessageContent)
       ?: obj["content"].asStringOrNull()?.let { listOf(ChatMessageContent(type = "text", text = it)) }
       ?: obj["text"].asStringOrNull()?.let { listOf(ChatMessageContent(type = "text", text = it)) }
       ?: emptyList()
+  val content = parsed + parseHistoryMediaImages(obj, parsed)
   val transcriptAudio = parseTranscriptAudioContents(obj)
   if (transcriptAudio.isEmpty()) return content
   return content +
     transcriptAudio.filterNot { audio ->
-      content.any { (it.mimeType == audio.mimeType && it.fileName == audio.fileName) || (audio.type == "image" && it.type == "image") }
+      content.any { it.mimeType == audio.mimeType && it.fileName == audio.fileName }
     }
 }
 
@@ -8342,6 +8343,44 @@ internal fun parseChatMessageCost(obj: JsonObject): ChatMessageCost? {
   return parse(direct) ?: parse(nested)
 }
 
+/**
+ * When the Gateway rewrites a user turn (e.g. with a voice transcription) the photo can survive
+ * only in `__openclaw.media`. Restore it when that fact carries bytes the chat can already draw:
+ * inline base64 or a managed artifact. Inbound-upload references (`media://inbound/...`) are left
+ * to the authenticated inbound loader (openclaw/openclaw#169470) and are not guessed at here.
+ */
+private fun parseHistoryMediaImages(
+  obj: JsonObject,
+  existing: List<ChatMessageContent>,
+): List<ChatMessageContent> {
+  val facts = obj["__openclaw"].asObjectOrNull()?.get("media").asArrayOrNull() ?: return emptyList()
+  return facts.mapNotNull { element ->
+    val fact = element.asObjectOrNull() ?: return@mapNotNull null
+    val mimeType = fact["contentType"].asStringOrNull() ?: fact["mimeType"].asStringOrNull()
+    val kind = fact["kind"].asStringOrNull() ?: mimeType?.substringBefore('/')
+    if (kind != "image" || mimeType.equals("image/svg+xml", ignoreCase = true)) return@mapNotNull null
+    val url = fact["url"].asStringOrNull()?.trim()
+    val artifactId = fact.nonBlankString("artifactId") ?: managedImageArtifactId(url)
+    val base64 =
+      (fact["base64"] ?: fact["content"]).asStringOrNull()?.takeIf { it.isNotBlank() && it.length <= CHAT_IMAGE_MAX_BASE64_CHARS }
+    if (artifactId == null && base64 == null) return@mapNotNull null
+    if (existing.any { it.type == "image" && ((artifactId != null && it.artifactId == artifactId) || (base64 != null && it.base64 == base64)) }) {
+      return@mapNotNull null
+    }
+    ChatMessageContent(
+      type = "image",
+      mimeType = mimeType,
+      fileName = fact["fileName"].asStringOrNull(),
+      artifactId = artifactId,
+      url = url,
+      base64 = base64,
+      width = fact["width"].asLongOrNull()?.toInt(),
+      height = fact["height"].asLongOrNull()?.toInt(),
+      sizeBytes = fact["sizeBytes"].asLongOrNull(),
+    )
+  }
+}
+
 private fun parseTranscriptAudioContents(obj: JsonObject): List<ChatMessageContent> {
   val paths =
     obj["MediaPaths"].asArrayOrNull()?.mapNotNull { it.asStringOrNull() }
@@ -8352,11 +8391,9 @@ private fun parseTranscriptAudioContents(obj: JsonObject): List<ChatMessageConte
       ?: obj["MediaType"].asStringOrNull()?.let { listOf(it) }
       ?: emptyList()
   return paths.mapIndexedNotNull { index, path ->
-    // Images ride the same transcript media fields; dropping them made a photo vanish once
-    // the gateway rewrote the user turn with its transcription.
-    val mimeType = types.getOrNull(index)?.takeIf { it.startsWith("audio/") || it.startsWith("image/") } ?: return@mapIndexedNotNull null
+    val mimeType = types.getOrNull(index)?.takeIf { it.startsWith("audio/") } ?: return@mapIndexedNotNull null
     ChatMessageContent(
-      type = if (mimeType.startsWith("image/")) "image" else "audio",
+      type = "audio",
       mimeType = mimeType,
       fileName = path.substringAfterLast('/').takeIf(String::isNotBlank),
     )
