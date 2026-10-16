@@ -42,6 +42,7 @@ describe("chat.send voice transcription policy boundary", () => {
     scope: MediaUnderstandingScopeConfig,
     assertClientUploadAllowed?: () => void,
     echoFormat?: string,
+    assertInputCurrent?: () => void,
   ) {
     const dir = tempDirs.make("chat-audio-policy-");
     const mediaPath = path.join(dir, "voice.wav");
@@ -109,6 +110,7 @@ describe("chat.send voice transcription policy boundary", () => {
       }),
       client: null,
       logGateway: { warn: vi.fn() } as never,
+      assertInputCurrent,
       userTurn: controller,
     });
     const input = await readInput();
@@ -145,6 +147,18 @@ describe("chat.send voice transcription policy boundary", () => {
         "admission expired",
       );
       expect(assertions).toBe(3);
+      expect(runExec).not.toHaveBeenCalled();
+    });
+  });
+
+  it("rejects changed input routing before transcription I/O", async () => {
+    await withEnvAsync({ PATH: "" }, async () => {
+      const assertInputCurrent = () => {
+        throw new Error("Session routing changed before input admission; refresh and retry.");
+      };
+      await expect(
+        prepare({ default: "allow" }, undefined, undefined, assertInputCurrent),
+      ).rejects.toThrow("Session routing changed before input admission");
       expect(runExec).not.toHaveBeenCalled();
     });
   });

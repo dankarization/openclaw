@@ -189,6 +189,7 @@ export function prepareChatSendUserTurn(params: {
   client: GatewayRequestHandlerOptions["client"];
   logGateway: GatewayRequestContext["logGateway"];
   getConfig?: () => OpenClawConfig;
+  assertInputCurrent?: () => void;
   userTurn: ChatSendUserTurnInputController;
 }) {
   const { request, session, admission, attachments, client, logGateway, userTurn } = params;
@@ -348,10 +349,12 @@ export function prepareChatSendUserTurn(params: {
       const slots = result.entries.flatMap((entry, factIndex) =>
         entry.imageKind ? [{ kind: entry.imageKind, factIndex }] : [],
       );
-      const assertTranscriptCurrent = () => {
-        admission.assertWorkAdmissionCurrent?.();
-        admission.assertClientUploadAllowed?.();
-      };
+      const assertTranscriptCurrent =
+        params.assertInputCurrent ??
+        (() => {
+          admission.assertWorkAdmissionCurrent?.();
+          admission.assertClientUploadAllowed?.();
+        });
       const transcriptEcho = await resolveChatUiTranscriptEcho({
         clientInfo: request.clientInfo,
         agentId: session.agentId,
