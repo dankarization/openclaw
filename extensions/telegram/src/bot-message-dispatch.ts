@@ -301,7 +301,6 @@ export const dispatchTelegramMessage = async (
     runtime,
     replyToMode,
     telegramCfg,
-    telegramDeps: injectedTelegramDeps,
     retryDispatchErrors = false,
     suppressFailureFallback = false,
     turnAdoptionLifecycle,
@@ -309,9 +308,7 @@ export const dispatchTelegramMessage = async (
   } = dispatchParams;
   const dispatchStartedAt = Date.now();
   const dispatchContext = await resolveDispatchTelegramContext({ context });
-  const telegramDeps =
-    injectedTelegramDeps ?? (await import("./bot-deps.js")).defaultTelegramBotDeps;
-  const loadFreshSessionEntry = createFreshTelegramSessionEntryLoader({ cfg, telegramDeps });
+  const loadFreshSessionEntry = createFreshTelegramSessionEntryLoader({ cfg });
   const isRoomEvent = dispatchContext.ctxPayload.InboundEventKind === "room_event";
   const status = createTelegramDispatchStatus({ context: dispatchContext });
   const richMessagesParams = {
@@ -352,7 +349,6 @@ export const dispatchTelegramMessage = async (
     richMessages,
     statusReactionController: status.controller,
     tableMode,
-    telegramDeps,
   };
   const draftState = createDraftState(turnConfig);
   const progressState = createProgressState(turnConfig, draftState, () => turn);
