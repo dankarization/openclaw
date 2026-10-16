@@ -77,9 +77,34 @@ function resolveRawModelProvider(modelRef: string | undefined): string | undefin
   return provider || undefined;
 }
 
+function resolveAttemptRuntime(
+  params: ConversationLabelParams & { agentId: string },
+  attempt: ConversationLabelAttempt,
+): string | undefined {
+  const selection = resolveAttemptSelection(params, attempt);
+  if (!selection) {
+    return undefined;
+  }
+  const selectedRuntime = resolveCompatibleAgentRuntimeForProvider({
+    provider: selection.provider,
+    runtime: params.agentHarnessRuntimeOverride,
+    cfg: params.cfg,
+  });
+  const automaticRuntime = selectedRuntime
+    ? undefined
+    : resolveAutomaticUtilityRuntimeOverride({
+        cfg: params.cfg,
+        agentId: params.agentId,
+        utilityProvider: selection.provider,
+        utilityModelId: selection.modelId,
+      });
+  return selectedRuntime ?? (automaticRuntime === "claude-cli" ? automaticRuntime : undefined);
+}
+
 function resolveAttemptKey(
   params: ConversationLabelParams & { agentId: string },
   attempt: ConversationLabelAttempt,
+  runtime: string | undefined,
 ): string {
   const selection = resolveAttemptSelection(params, attempt);
   const rawRef = splitTrailingAuthProfile(attempt.modelRef?.trim() ?? "");
@@ -90,8 +115,11 @@ function resolveAttemptKey(
         selection.runtimeProvider ?? "",
         selection.modelId,
         selection.profileId ?? attempt.preferredProfile ?? "",
+        runtime ?? "",
       ].join("\0")
-    : ["raw", rawRef.model, rawRef.profile ?? attempt.preferredProfile ?? ""].join("\0");
+    : ["raw", rawRef.model, rawRef.profile ?? attempt.preferredProfile ?? "", runtime ?? ""].join(
+        "\0",
+      );
 }
 
 async function runLabelAttempts(
@@ -110,11 +138,15 @@ async function runLabelAttempts(
     params.operatorAuthority?.assertCurrent();
     params.abortSignal?.throwIfAborted();
   };
-  const seen = new Set(params.skipAttempts?.map((attempt) => resolveAttemptKey(params, attempt)));
+  const seen = new Set(
+    params.skipAttempts?.map((attempt) =>
+      resolveAttemptKey(params, attempt, resolveAttemptRuntime(params, attempt)),
+    ),
+  );
   const failures: LabelModelPhase[] = [];
   for (const attempt of params.attempts) {
     assertCurrent();
-    const key = resolveAttemptKey(params, attempt);
+    const key = resolveAttemptKey(params, attempt, resolveAttemptRuntime(params, attempt));
     if (seen.has(key)) {
       continue;
     }
@@ -159,13 +191,22 @@ async function runLabelAttempts(
         agentId: params.agentId,
         agentDir: params.agentDir ?? selection.agentDir,
         useUtilityModel: attempt.phase === "utility",
-        onAttempt: ({ provider, model: modelId, authProfileId }) => {
+        onAttempt: ({
+          provider,
+          model: modelId,
+          authProfileId,
+          agentHarnessRuntimeOverride: attemptRuntimeOverride,
+        }) => {
           seen.add(
-            resolveAttemptKey(params, {
-              modelRef: `${provider}/${modelId}`,
-              preferredProfile: authProfileId,
-              phase: attempt.phase,
-            }),
+            resolveAttemptKey(
+              params,
+              {
+                modelRef: `${provider}/${modelId}`,
+                preferredProfile: authProfileId,
+                phase: attempt.phase,
+              },
+              attemptRuntimeOverride,
+            ),
           );
         },
         ...(agentHarnessRuntimeOverride ? { agentHarnessRuntimeOverride } : {}),
