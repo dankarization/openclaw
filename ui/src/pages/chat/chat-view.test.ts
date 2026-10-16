@@ -23,7 +23,6 @@ import type {
 } from "../../lib/sessions/patch.ts";
 import { createTestSessionCapability } from "../../lib/sessions/session-capability.test-support.ts";
 import { areUiSessionKeysEquivalent } from "../../lib/sessions/session-key.ts";
-import { solidContent } from "../../lit/solid-content.tsx";
 import {
   createModelCatalog,
   createSessionsListResult,
@@ -33,7 +32,6 @@ import { createTestGatewayClient } from "../../test-helpers/gateway-client.ts";
 import { sessionMutationGatewayHello } from "../../test-helpers/gateway-methods.ts";
 import { mountSolid } from "../../test-helpers/mount-solid.ts";
 import { makeUiSettings } from "../../test-helpers/settings-node.ts";
-import { mountSolid as mountSolidComponent } from "../../test-helpers/solid-render.tsx";
 import { flush, waitForSolid } from "../../test-helpers/solid-settle.ts";
 import { waitForFast } from "../../test-helpers/wait-for.ts";
 import {
@@ -48,7 +46,10 @@ import {
   selectAttachmentMenuOption,
   selectFile,
 } from "./chat-attachment-picker.test-support.ts";
-import { createComposerContainer } from "./chat-composer.test-support.ts";
+import {
+  createComposerContainer,
+  createComposerControlsFixture,
+} from "./chat-composer.test-support.ts";
 import { makeChatHost } from "./chat-host.test-support.ts";
 import { createChatModelSetupBanner } from "./chat-model-setup.ts";
 import { applyChatPendingInputs, getChatPendingInputs } from "./chat-pending-inputs.ts";
@@ -73,6 +74,7 @@ import {
   renderChatInto,
   renderChatPropsInto,
   renderChatView,
+  renderChatModelControls,
   getComposerTextarea,
   requireElement,
   stubAnimationFrames,
@@ -100,6 +102,7 @@ import {
   resetTranscriptTestDom,
 } from "./components/chat-transcript.test-support.ts";
 import { ChatWelcome } from "./components/chat-welcome.tsx";
+import { saveChatSessionScrollPosition } from "./scroll.ts";
 import { RealtimeTalkLevelSignal } from "./talk/level.ts";
 import {
   workspaceConflictPathForDisplay,
@@ -536,22 +539,15 @@ function createChatModelControlsProps(state: ChatHeaderTestState): ChatModelCont
   };
 }
 
-const modelControlsUpdates = new WeakMap<HTMLElement, (props: ChatModelControlsProps) => void>();
-
 function renderModelControls(
   state: ChatHeaderTestState,
   overrides: Partial<ChatModelControlsProps> = {},
   container = document.createElement("div"),
 ) {
-  const props = { ...createChatModelControlsProps(state), ...overrides };
-  const update = modelControlsUpdates.get(container);
-  if (update) {
-    update(props);
-  } else {
-    const view = mountSolidComponent(ChatModelControls, props, container);
-    modelControlsUpdates.set(container, (next) => view.update(next));
-  }
-  return container;
+  return renderChatModelControls(
+    { ...createChatModelControlsProps(state), ...overrides },
+    container,
+  );
 }
 
 describe("chat typing status", () => {
@@ -635,7 +631,10 @@ describe("chat run error", () => {
       vi.mocked(chatThread.buildCachedChatItems).mockRestore();
       const onRetrySessionPlacementStartup = vi.fn();
       const onQueueRetry = vi.fn();
+      const paneId = `startup-${action}`;
+      saveChatSessionScrollPosition(paneId, "main", { scrollTop: 0, anchorToEnd: false });
       const container = renderChatView({
+        transcript: createTestTranscript(paneId),
         canSend: false,
         messages: [
           { role: "user", content: "[System] Gateway restarted", timestamp: 3 },
@@ -1902,15 +1901,7 @@ describe("chat loading skeleton", () => {
   it("shows prompt-bar progress beside context usage while the current session send is awaiting acknowledgement", () => {
     const container = renderChatView({
       sending: true,
-      composerControls: solidContent(
-        () =>
-          Object.assign(document.createElement("button"), {
-            className: "chat-composer-model-control",
-            type: "button",
-            textContent: "Model",
-          }),
-        {},
-      ),
+      composerControls: createComposerControlsFixture(),
       queue: [createPendingSend()],
       selectedSession: createContextUsageSessions().sessions[0],
     });
@@ -1949,6 +1940,7 @@ describe("chat loading skeleton", () => {
           role: "assistant",
           provider: "openai",
           responseModel: "gpt-5.5",
+          content: "Completed response",
           cost: { input: 0.001, output: 0.002 },
         },
       ],
@@ -1957,6 +1949,8 @@ describe("chat loading skeleton", () => {
 
     // The session provider matches a plan-usage group, so dollar estimates
     // yield to the subscription windows.
+    container.querySelector<HTMLElement>(".context-usage summary")!.click();
+    flush();
     expect(container.querySelector("[data-chat-usage-provider='true']")?.textContent).toContain(
       "OpenAI",
     );
@@ -2043,15 +2037,7 @@ describe("chat loading skeleton", () => {
     try {
       const container = renderChatView({
         messages: [{ role: "assistant", content: "Partial response" }],
-        composerControls: solidContent(
-          () =>
-            Object.assign(document.createElement("button"), {
-              className: "chat-composer-model-control",
-              type: "button",
-              textContent: "Model",
-            }),
-          {},
-        ),
+        composerControls: createComposerControlsFixture(),
         runStatus: {
           phase: "interrupted",
           runId: "run-1",
@@ -2850,6 +2836,7 @@ describe("chat slash menu accessibility", () => {
     textarea = container.querySelector<HTMLTextAreaElement>("textarea")!;
     textarea.setSelectionRange(textarea.value.length, textarea.value.length);
     textarea.dispatchEvent(new Event("select", { bubbles: true }));
+    flush();
 
     expect(container.querySelector(".skill-menu")).toBeNull();
   });
