@@ -706,6 +706,52 @@ class ChatMessageContentParsingTest {
           url = "/api/chat/media/outgoing/main/55555555-5555-4555-8555-555555555555/full",
         ),
         ChatMessageContent(type = "image", mimeType = "image/png", base64 = "iVBORw0KGgo="),
+        ChatMessageContent(type = "audio", mimeType = "audio/mp4", fileName = "voice.m4a"),
+      ),
+      parseChatMessageContents(message),
+    )
+  }
+
+  @Test
+  fun canonicalHistoryTurnRestoresItsVoiceNoteFromMediaFacts() {
+    // Fails on base: canonical rows omit MediaPaths/MediaTypes, so the voice row and duration vanished.
+    val message =
+      Json
+        .parseToJsonElement(
+          """{"role":"user","content":"See attached.","__openclaw":{"media":[
+            {"url":"media://inbound/0f8c2b1e-voice","contentType":"audio/mp4","kind":"audio","fileName":"voice-note-b9526ed8-69ef-44d1-ad36-0123456789ab.m4a","sizeBytes":4096,"durationMs":76000,"hydrationSuppressed":true}
+          ]}}""",
+        ).jsonObject
+
+    assertEquals(
+      listOf(
+        ChatMessageContent(type = "text", text = "See attached."),
+        ChatMessageContent(
+          type = "audio",
+          mimeType = "audio/mp4",
+          fileName = "voice-note-b9526ed8-69ef-44d1-ad36-0123456789ab.m4a",
+          sizeBytes = 4096,
+          durationMs = 76_000,
+        ),
+      ),
+      parseChatMessageContents(message),
+    )
+  }
+
+  @Test
+  fun legacyAndCanonicalVoiceFactsDoNotDuplicateTheVoiceRow() {
+    val message =
+      Json
+        .parseToJsonElement(
+          """{"role":"user","content":"hi","MediaPaths":["/tmp/voice.m4a"],"MediaTypes":["audio/mp4"],"__openclaw":{"media":[
+            {"url":"media://inbound/voice.m4a","contentType":"audio/mp4","kind":"audio","fileName":"voice.m4a"}
+          ]}}""",
+        ).jsonObject
+
+    assertEquals(
+      listOf(
+        ChatMessageContent(type = "text", text = "hi"),
+        ChatMessageContent(type = "audio", mimeType = "audio/mp4", fileName = "voice.m4a"),
       ),
       parseChatMessageContents(message),
     )

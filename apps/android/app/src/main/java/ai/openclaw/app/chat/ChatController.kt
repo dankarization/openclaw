@@ -8382,6 +8382,15 @@ private fun parseHistoryMediaImages(
 }
 
 private fun parseTranscriptAudioContents(obj: JsonObject): List<ChatMessageContent> {
+  val legacy = parseLegacyTranscriptAudioContents(obj)
+  val canonical =
+    parseHistoryMediaAudio(obj).filterNot { audio ->
+      legacy.any { it.mimeType == audio.mimeType && it.fileName == audio.fileName }
+    }
+  return legacy + canonical
+}
+
+private fun parseLegacyTranscriptAudioContents(obj: JsonObject): List<ChatMessageContent> {
   val paths =
     obj["MediaPaths"].asArrayOrNull()?.mapNotNull { it.asStringOrNull() }
       ?: obj["MediaPath"].asStringOrNull()?.let { listOf(it) }
@@ -8396,6 +8405,30 @@ private fun parseTranscriptAudioContents(obj: JsonObject): List<ChatMessageConte
       type = "audio",
       mimeType = mimeType,
       fileName = path.substringAfterLast('/').takeIf(String::isNotBlank),
+    )
+  }
+}
+
+/**
+ * Canonical transcript rows keep a sent voice note only as a durable `__openclaw.media` fact
+ * (kind, label, duration); restore the voice row from it so history refreshes keep it.
+ * Playback of `media://inbound/...` stays with the inbound loader, so no URL is guessed here.
+ */
+private fun parseHistoryMediaAudio(obj: JsonObject): List<ChatMessageContent> {
+  val facts = obj["__openclaw"].asObjectOrNull()?.get("media").asArrayOrNull() ?: return emptyList()
+  return facts.mapNotNull { element ->
+    val fact = element.asObjectOrNull() ?: return@mapNotNull null
+    val mimeType = fact["contentType"].asStringOrNull() ?: fact["mimeType"].asStringOrNull()
+    val kind = fact["kind"].asStringOrNull() ?: mimeType?.substringBefore('/')
+    if (kind != "audio" || mimeType?.startsWith("audio/") != true) return@mapNotNull null
+    ChatMessageContent(
+      type = "audio",
+      mimeType = mimeType,
+      fileName =
+        fact.nonBlankString("fileName")
+          ?: fact["url"].asStringOrNull()?.substringAfterLast('/')?.takeIf(String::isNotBlank),
+      sizeBytes = fact["sizeBytes"].asLongOrNull(),
+      durationMs = fact["durationMs"].asLongOrNull(),
     )
   }
 }

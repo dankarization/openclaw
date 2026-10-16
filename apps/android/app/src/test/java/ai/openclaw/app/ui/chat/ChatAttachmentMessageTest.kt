@@ -57,6 +57,32 @@ class ChatAttachmentMessageTest {
   }
 
   @Test
+  fun authoredCaptionStartingWithThePlaceholderIsKept() {
+    // Fails on base: the first authored line was deleted.
+    val text = ChatMessageContent(type = "text", text = "See attached.\nDetails below.")
+    val parts = splitChatAttachmentMessage(listOf(image, text))
+    assertEquals(listOf(image, text), parts.content)
+    assertNull(parts.transcript)
+  }
+
+  @Test
+  fun authoredTranscriptionHeadingOverPlainTextStaysText() {
+    // Fails on base: the heading was dropped and the text became a transcript block.
+    val text = ChatMessageContent(type = "text", text = "[Transcription]\nPlease fill in this template")
+    val parts = splitChatAttachmentMessage(listOf(text))
+    assertEquals(listOf(text), parts.content)
+    assertNull(parts.transcript)
+  }
+
+  @Test
+  fun unquotedTranscriptIsSplitOnlyWhenTheTurnCarriesAVoiceNote() {
+    val text = ChatMessageContent(type = "text", text = "**[Transcription]**\nspoken words")
+    val parts = splitChatAttachmentMessage(listOf(image, text, voice))
+    assertEquals(listOf(image, voice), parts.content)
+    assertEquals("spoken words", parts.transcript)
+  }
+
+  @Test
   fun generatedVoiceNoteNamesAreHidden() {
     assertTrue(isGeneratedVoiceNoteName("voice-note-b9526ed8-69ef-44d1-ad36-0123456789ab.m4a"))
     assertFalse(isGeneratedVoiceNoteName("voice-note-for-mom.m4a"))

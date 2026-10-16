@@ -17,17 +17,19 @@ internal data class ChatAttachmentMessageParts(
 private val TRANSCRIPTION_MARKER = Regex("""^\s*\**\s*\[\s*Transcri(?:ption|pt)\s*]\s*\**\s*:?\s*$""", RegexOption.IGNORE_CASE)
 
 /**
- * Splits `**[Transcription]**` + quoted lines out of user text and drops the
- * "See attached." placeholder when the message carries any attachment.
+ * Splits `**[Transcription]**` + quoted lines (or any payload when the turn carries a
+ * voice note) out of user text and drops an exact "See attached." placeholder body when
+ * the message carries any attachment.
  * Text without attachments or markers is returned unchanged.
  */
 internal fun splitChatAttachmentMessage(content: List<ChatMessageContent>): ChatAttachmentMessageParts {
   val hasAttachment = content.any { it.type != "text" }
+  val hasVoiceNote = content.any { it.type == "audio" || it.mimeType?.startsWith("audio/") == true }
   val transcripts = mutableListOf<String>()
   val parts =
     content.mapNotNull { part ->
       if (part.type != "text") return@mapNotNull part
-      val (body, transcript) = splitTranscriptText(part.text.orEmpty())
+      val (body, transcript) = splitTranscriptText(part.text.orEmpty(), hasVoiceNote)
       transcript?.let(transcripts::add)
       val cleaned = if (hasAttachment || transcript != null) stripAttachmentPlaceholder(body) else body
       when {
@@ -39,23 +41,29 @@ internal fun splitChatAttachmentMessage(content: List<ChatMessageContent>): Chat
   return ChatAttachmentMessageParts(parts, transcripts.joinToString("\n\n").takeIf { it.isNotBlank() })
 }
 
-private fun stripAttachmentPlaceholder(text: String): String {
-  val trimmed = text.trim()
-  if (trimmed == CHAT_ATTACHMENT_PLACEHOLDER_TEXT) return ""
-  return if (trimmed.startsWith(CHAT_ATTACHMENT_PLACEHOLDER_TEXT + "\n")) trimmed.removePrefix(CHAT_ATTACHMENT_PLACEHOLDER_TEXT).trim() else text
-}
+// The sender only synthesizes the placeholder for an entirely empty caption, so only an exact
+// placeholder body is dropped; a caption that merely starts with it is the author's text.
+private fun stripAttachmentPlaceholder(text: String): String = if (text.trim() == CHAT_ATTACHMENT_PLACEHOLDER_TEXT) "" else text
 
-private fun splitTranscriptText(text: String): Pair<String, String?> {
+private fun splitTranscriptText(
+  text: String,
+  hasVoiceNote: Boolean,
+): Pair<String, String?> {
   val lines = text.lines()
   val markerIndex = lines.indexOfFirst { TRANSCRIPTION_MARKER.matches(it) }
   if (markerIndex < 0) return text to null
+  val payload = lines.drop(markerIndex + 1).dropWhile { it.isBlank() }.dropLastWhile { it.isBlank() }
+  // A bare marker with no payload is not a transcript; keep the author's text as written.
+  if (payload.isEmpty()) return text to null
+  // Without a voice note, only the quoted transcript block counts; an authored
+  // `[Transcription]` heading over plain text stays ordinary message text.
+  val quoted = payload.all { it.isBlank() || it.trimStart().startsWith(">") }
+  if (!quoted && !hasVoiceNote) return text to null
   val transcript =
-    lines
-      .drop(markerIndex + 1)
+    payload
       .joinToString("\n") { line -> line.trimStart().removePrefix(">").removePrefix(" ") }
       .trim()
-  val body = lines.take(markerIndex).joinToString("\n").trim()
-  // A bare marker with no payload is not a transcript; keep the author's text as written.
   if (transcript.isEmpty()) return text to null
+  val body = lines.take(markerIndex).joinToString("\n").trim()
   return body to transcript
 }
