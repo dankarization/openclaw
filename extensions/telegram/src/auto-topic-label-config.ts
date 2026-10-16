@@ -18,14 +18,30 @@ export function resolveAutoTopicLabelRefineConfig(params: {
 }): { enabled: boolean; afterMessages: number } {
   const read = (
     config: TelegramDirectConfig["autoTopicLabel"] | undefined,
-  ): { refine?: boolean; refineAfterMessages?: number } | undefined =>
+  ): { enabled?: boolean; refine?: boolean; refineAfterMessages?: number } | undefined =>
     config && typeof config === "object" ? config : undefined;
   const direct = read(params.directConfig);
   const account = read(params.accountConfig);
+  // Effective base auto-label enablement, resolved per-key first: a per-DM
+  // boolean (or enabled:false) must disable refinement even when an account
+  // default carries refine:true.
+  const directEnabled =
+    params.directConfig === false || direct?.enabled === false
+      ? false
+      : params.directConfig === true || direct?.enabled === true
+        ? true
+        : undefined;
+  const accountEnabled =
+    params.accountConfig === false || account?.enabled === false
+      ? false
+      : params.accountConfig === true || account?.enabled === true
+        ? true
+        : undefined;
+  const baseEnabled = directEnabled ?? accountEnabled ?? true;
   const refine = direct?.refine ?? account?.refine;
   const rawAfter = direct?.refineAfterMessages ?? account?.refineAfterMessages;
   return {
-    enabled: refine === true,
+    enabled: baseEnabled && refine === true,
     afterMessages:
       typeof rawAfter === "number" && Number.isInteger(rawAfter) && rawAfter >= 1 && rawAfter <= 100
         ? rawAfter

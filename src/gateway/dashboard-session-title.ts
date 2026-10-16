@@ -22,11 +22,6 @@ import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { withTimeout } from "../infra/fs-safe.js";
 import { parseAgentSessionKey } from "../sessions/session-key-utils.js";
 import {
-  countTitleRefinementMessage,
-  resolveSessionTitleRefineConfig,
-  shouldRunTitleRefinement,
-} from "../sessions/session-title-refinement-state.js";
-import {
   SESSION_TITLE_SOURCE_MAX_CHARS,
   resolveSessionTitleSource,
 } from "../sessions/session-title-source.js";
@@ -110,7 +105,7 @@ export function buildDashboardSessionTitleSource(params: {
   return truncateUtf16Safe(source.trim(), SESSION_TITLE_SOURCE_MAX_CHARS);
 }
 
-type SessionTitleParams = {
+export type SessionTitleParams = {
   cfg: OpenClawConfig;
   agentId: string;
   entry?: SessionEntry;
@@ -236,7 +231,7 @@ function normalizeDashboardSessionTitle(raw: string): string | null {
   return /[^\s"'`„“”«»‘’]/u.test(normalized) ? normalized : null;
 }
 
-async function prepareTitleSkillCommands(params: {
+export async function prepareTitleSkillCommands(params: {
   cfg: OpenClawConfig;
   agentId: string;
   entry?: SessionEntry;
@@ -256,7 +251,7 @@ async function prepareTitleSkillCommands(params: {
   );
 }
 
-async function generateDashboardSessionTitle(params: {
+export async function generateDashboardSessionTitle(params: {
   cfg: OpenClawConfig;
   agentId: string;
   entry?: DashboardSessionTitleModelEntry;
@@ -555,175 +550,4 @@ export async function maybeGenerateSessionTitle(params: SessionTitleParams): Pro
     );
   };
   return await sessionTitleRequests.run(requestTarget, run, params.onTitleStateChanged);
-}
-
-const SESSION_TITLE_REFINEMENT_PROMPT =
-  "Generate a concise session title (3-6 words, max 60 characters) from the supplied conversation excerpt. Use the language the excerpt is written in, not the language of quoted literals, in sentence case: capitalize only the first word and words that language always capitalizes. No emoji. Return only the title.";
-
-/**
- * Opt-in one-time refinement of an already generated title after several later
- * task messages. Never touches explicit labels (the same persist guard that
- * protects first titles also protects refinements) and runs at most once per
- * session generation (durable `titleRefinement` state, sessionId-bound).
- */
-export async function maybeRefineDashboardSessionTitle(params: SessionTitleParams): Promise<void> {
-  const sessionKey = resolveStoredSessionKeyForAgentStore(params);
-  const scope = { agentId: params.agentId, sessionKey, storePath: params.storePath };
-  const assertCurrent = () => params.commitGuard?.();
-  const memory = captureSessionActorStorageOwner(scope, {
-    assertCurrent,
-    authorize: assertCurrent,
-  });
-  if (memory && !memory.owner?.readSession(sessionKey, memory.authority)?.entry) {
-    return;
-  }
-  const assertMemorySessionCurrent = memory?.owner?.captureSessionReadGuard(sessionKey);
-  const assertMemoryCurrent = () => {
-    assertMemorySessionCurrent?.();
-    memory?.binding?.actor.assertReadable();
-    memory?.authority.assertCurrent();
-  };
-  try {
-    const entry = await readSessionEntryReadOnlyInWorker(scope, assertMemoryCurrent);
-    if (!entry || entry.incognito || entry.sessionId !== params.sessionId) {
-      return;
-    }
-    // Manual titles are never refined; only generated displayName candidates.
-    // (displayName alone does not mean "manual": the initial generator writes
-    // it. Ownership of the generated value is tracked in titleRefinement.)
-    if (entry.label?.trim() || entry.autoLabel?.trim() || !entry.displayName?.trim()) {
-      return;
-    }
-    const refineConfig = resolveSessionTitleRefineConfig({ cfgSession: params.cfg.session });
-    if (!refineConfig.enabled) {
-      return;
-    }
-    const generatedName = entry.displayName.trim();
-    const priorState = entry.titleRefinement;
-    // Exactly-once: a completed refinement never counts or writes again.
-    if (priorState?.refinementDone) {
-      return;
-    }
-    // Orphaned ownership: a manual rename (or any other writer) changed the
-    // title after the state captured the generated value. Refinement stops.
-    if (priorState && priorState.generatedName !== generatedName) {
-      return;
-    }
-    const state = countTitleRefinementMessage(
-      entry.titleRefinement,
-      params.sessionId,
-      generatedName,
-    );
-    if (
-      !shouldRunTitleRefinement({
-        state,
-        sessionId: params.sessionId,
-        afterMessages: refineConfig.afterMessages,
-      })
-    ) {
-      // Persist the incremented counter only when it changes anything.
-      // Ownership guard: write only while the generated title is still current
-      // — either this arms fresh state for the initial generated name, or a
-      // prior state still owns it. Any later manual rename orphans the state
-      // (displayName no longer matches) and stops the refinement.
-      if (
-        state.taskMessagesSinceTitle !== priorState?.taskMessagesSinceTitle &&
-        !priorState?.refinementDone &&
-        (priorState?.generatedName === generatedName || priorState === undefined)
-      ) {
-        await patchSessionEntryCore(
-          scope,
-          (current) =>
-            current.sessionId === params.sessionId &&
-            current.displayName?.trim() === generatedName &&
-            (current.titleRefinement === undefined ||
-              current.titleRefinement.generatedName === generatedName)
-              ? { titleRefinement: state }
-              : null,
-          {
-            requireWriteSuccess: false,
-            ...sessionEntryCommitGuardOptions(assertMemoryCurrent),
-          },
-        );
-      }
-      return;
-    }
-    const skillCommands = await prepareTitleSkillCommands({
-      cfg: params.cfg,
-      agentId: params.agentId,
-      entry,
-      sessionKey,
-      assertCurrent: assertMemoryCurrent,
-    });
-    const transcriptScope = {
-      agentId: params.agentId,
-      sessionEntry: entry,
-      sessionId: params.sessionId,
-      sessionKey,
-      storePath: params.storePath,
-    };
-    const fields = await readSessionTitleFieldsFromTranscriptAsync(transcriptScope, {
-      skillCommands,
-    });
-    assertMemoryCurrent();
-    const sourceText = [fields.firstUserMessage ?? "", fields.lastMessagePreview ?? ""]
-      .filter(Boolean)
-      .join("\n---\n")
-      .trim();
-    if (!sourceText) {
-      return;
-    }
-    const refined = await generateDashboardSessionTitle({
-      cfg: params.cfg,
-      agentId: params.agentId,
-      entry: params.entry ?? entry,
-      sourceText,
-      promptOverride: SESSION_TITLE_REFINEMENT_PROMPT,
-      operatorAuthority: params.operatorAuthority,
-      ...(memory ? { assertCurrent: assertMemoryCurrent } : {}),
-    });
-    if (!refined || refined === entry.displayName.trim()) {
-      await patchSessionEntryCore(
-        scope,
-        (current) =>
-          current.sessionId === params.sessionId &&
-          current.displayName?.trim() === generatedName &&
-          current.titleRefinement?.generatedName === generatedName
-            ? { titleRefinement: { ...state, refinementDone: true } }
-            : null,
-        {
-          requireWriteSuccess: false,
-          ...sessionEntryCommitGuardOptions(assertMemoryCurrent),
-        },
-      );
-      return;
-    }
-    let persisted = false;
-    await patchSessionEntryCore(
-      scope,
-      (current) => {
-        if (
-          current.sessionId !== params.sessionId ||
-          current.displayName?.trim() !== generatedName ||
-          current.titleRefinement?.generatedName !== generatedName
-        ) {
-          return null;
-        }
-        persisted = true;
-        return {
-          displayName: refined,
-          titleRefinement: { ...state, refinementDone: true, generatedName: refined },
-        };
-      },
-      {
-        requireWriteSuccess: true,
-        ...sessionEntryCommitGuardOptions(assertMemoryCurrent),
-      },
-    );
-    if (persisted) {
-      params.onTitleStateChanged?.();
-    }
-  } catch {
-    // Refinement is optional; it must never fail a chat send.
-  }
 }

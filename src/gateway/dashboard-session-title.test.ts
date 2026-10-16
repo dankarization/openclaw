@@ -37,12 +37,12 @@ import { runWithAsyncWorkResources } from "../shared/async-work-resources.js";
 import { AsyncWorkScope } from "../shared/async-work-scope.js";
 import { createDeferredCore } from "../shared/deferred.js";
 import type { ChatAttachment } from "./chat-attachments.js";
+import { maybeRefineDashboardSessionTitle } from "./dashboard-session-title-refinement.js";
 import {
   buildDashboardSessionTitleSource,
   generateWorktreeSessionTitle,
   maybeGenerateDashboardSessionTitle,
   maybeGenerateSessionTitle,
-  maybeRefineDashboardSessionTitle,
   prepareDashboardSessionTitle,
 } from "./dashboard-session-title.js";
 import { deriveGoalSessionTitle } from "./derive-goal-session-title.js";

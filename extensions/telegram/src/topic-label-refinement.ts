@@ -7,25 +7,32 @@ import { getTopicName, updateTopicName } from "./topic-name-cache.js";
 
 /**
  * Durable, bounded state for the opt-in one-time DM topic label refinement.
- * Keyed by `<chatId>:<threadId>`; the entry only exists for labels this bot
- * generated, which doubles as the manual-rename guard (user-renamed topics are
- * detected by comparing the live cached name with the generated label).
+ * Keyed by `<accountId>:<chatId>:<threadId>` so multi-account deployments with
+ * colliding chat/topic IDs never share state; the entry only exists for labels
+ * this bot generated, which doubles as the manual-rename guard (user-renamed
+ * topics are detected by comparing the live cached name with the label).
  */
 type TopicLabelRefinementEntry = {
   /** Label this bot generated for the first turn. */
   label: string;
   /** User task messages observed after the label was generated. */
   count: number;
-  /** True once the single refinement has run (successfully or not). */
+  /** True once the single attempt has been claimed (see claim semantics). */
   done: boolean;
+  /** Outcome of a claimed attempt, recorded best-effort after the effect. */
+  outcome?: "renamed" | "failed";
 };
 
 const REFINEMENT_STORE_NAMESPACE = "telegram.topic-label-refinement";
 const REFINEMENT_STORE_MAX_ENTRIES = 2_048;
 const REFINEMENT_SOURCE_MAX_CHARS = 500;
 
-function refinementKey(chatId: number | string, threadId: number): string {
-  return `${chatId}:${threadId}`;
+function refinementKey(params: {
+  accountId: string;
+  chatId: number | string;
+  threadId: number;
+}): string {
+  return `${params.accountId}:${params.chatId}:${params.threadId}`;
 }
 
 async function loadRefinementStore() {
@@ -36,15 +43,16 @@ async function loadRefinementStore() {
 }
 
 /** Records that this bot generated the initial label; arms the refinement counter. */
-export async function armTopicLabelRefinement(
-  chatId: number | string,
-  threadId: number,
-  label: string,
-): Promise<void> {
+export async function armTopicLabelRefinement(params: {
+  accountId: string;
+  chatId: number | string;
+  threadId: number;
+  label: string;
+}): Promise<void> {
   try {
     const store = await loadRefinementStore();
-    await store.register(refinementKey(chatId, threadId), {
-      label,
+    await store.register(refinementKey(params), {
+      label: params.label,
       count: 0,
       done: false,
     });
@@ -59,6 +67,7 @@ export async function armTopicLabelRefinement(
  * and never renames a topic that was manually renamed after generation.
  */
 export async function maybeRefineTopicLabel(params: {
+  accountId: string;
   bot: {
     api: {
       editForumTopic: (
@@ -68,6 +77,8 @@ export async function maybeRefineTopicLabel(params: {
       ) => Promise<unknown>;
     };
   };
+  /** Fails when the owning account/service was stopped or replaced. */
+  assertServiceCurrent: () => void;
   cfg: Parameters<typeof resolveAgentDir>[0];
   agentId: string;
   chatId: number | string;
@@ -77,7 +88,7 @@ export async function maybeRefineTopicLabel(params: {
   logVerbose: (message: string) => void;
 }): Promise<void> {
   try {
-    const key = refinementKey(params.chatId, params.threadId);
+    const key = refinementKey(params);
     const store = await loadRefinementStore();
     const entry = await store.lookup(key);
     if (!entry || entry.done) {
@@ -91,7 +102,7 @@ export async function maybeRefineTopicLabel(params: {
     // Manual-rename guard: refine only while the topic still carries our label.
     const currentName = await getTopicName(params.chatId, params.threadId);
     if (currentName && currentName !== entry.label) {
-      await store.register(key, { ...next, done: true });
+      await store.register(key, { ...next, done: true, outcome: "failed" });
       params.logVerbose("auto-topic-label: refinement skipped (topic renamed manually)");
       return;
     }
@@ -99,7 +110,12 @@ export async function maybeRefineTopicLabel(params: {
     if (!excerpt.trim()) {
       return;
     }
-    let label: string | undefined;
+    // Durable attempt claim BEFORE any external effect: a crash after the Bot
+    // API edit (or a rejected edit) must never re-run the LLM and re-rename on
+    // a later turn. Outcome is recorded best-effort afterwards.
+    await store.register(key, { ...next, done: true, outcome: "failed" });
+    params.assertServiceCurrent();
+    let label: string | null;
     try {
       label = await generateTopicLabel({
         userMessage: [entry.label, excerpt].filter(Boolean).join("\n---\n"),
@@ -110,23 +126,24 @@ export async function maybeRefineTopicLabel(params: {
         agentDir: resolveAgentDir(params.cfg, params.agentId),
       });
     } catch (err) {
-      // Exactly-once: a failed generation still consumes the single attempt.
+      // The attempt was already consumed above; failure only logs.
       params.logVerbose(`auto-topic-label: refinement failed: ${String(err)}`);
-      await store.register(key, { ...next, done: true });
       return;
     }
     if (!label) {
       params.logVerbose("auto-topic-label: refinement produced empty label");
-      await store.register(key, { ...next, done: true });
       return;
     }
     if (label === entry.label) {
-      await store.register(key, { ...next, done: true });
+      await store.register(key, { ...next, done: true, outcome: "renamed" });
       return;
     }
+    // Revalidate service authority immediately before the Bot API effect so a
+    // stopped/reloaded account never renames after shutdown.
+    params.assertServiceCurrent();
     await params.bot.api.editForumTopic(params.chatId, params.threadId, { name: label });
     await updateTopicName(params.chatId, params.threadId, { name: label });
-    await store.register(key, { ...next, label, done: true });
+    await store.register(key, { ...next, label, done: true, outcome: "renamed" });
     params.logVerbose(
       `auto-topic-label: refined topic ${params.chatId}/${params.threadId} (len=${label.length})`,
     );

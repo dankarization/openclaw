@@ -49,12 +49,11 @@ export function countTitleRefinementMessage(
   sessionId: string,
   generatedName: string,
 ): SessionTitleRefinementState {
-  if (state && state.sessionId !== sessionId) {
-    state = undefined;
-  }
+  // A state from a previous session incarnation (/reset) does not count.
+  const owned = state && state.sessionId === sessionId ? state : undefined;
   return {
-    taskMessagesSinceTitle: (state?.taskMessagesSinceTitle ?? 0) + 1,
-    refinementDone: state?.refinementDone ?? false,
+    taskMessagesSinceTitle: (owned?.taskMessagesSinceTitle ?? 0) + 1,
+    refinementDone: owned?.refinementDone ?? false,
     sessionId,
     generatedName,
   };

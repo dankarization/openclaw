@@ -198,6 +198,7 @@ function scheduleDmTopicLabel(params: {
   isFirstTurnInSession: boolean;
   telegramCfg: DispatchTelegramMessageParams["telegramCfg"];
   userMessage: string;
+  accountAbortSignal?: AbortSignal;
 }) {
   const { context } = params;
   const isDmTopic =
@@ -210,6 +211,11 @@ function scheduleDmTopicLabel(params: {
       ? context.groupConfig.autoTopicLabel
       : undefined;
   const topicThreadId = context.threadSpec.id!;
+  const assertAccountCurrent = () => {
+    if (params.accountAbortSignal?.aborted) {
+      throw new Error("telegram account stopped; refinement cancelled");
+    }
+  };
   if (!params.isFirstTurnInSession) {
     // Later turns: opt-in one-time bounded refinement of the auto label.
     // This must run before any first-turn-only early return so that later
@@ -222,7 +228,9 @@ function scheduleDmTopicLabel(params: {
       return;
     }
     void maybeRefineTopicLabel({
+      accountId: context.route.accountId,
       bot: params.bot,
+      assertServiceCurrent: assertAccountCurrent,
       cfg: params.cfg,
       agentId: context.route.agentId,
       chatId: context.chatId,
@@ -270,7 +278,12 @@ function scheduleDmTopicLabel(params: {
         accountConfig: params.telegramCfg.autoTopicLabel,
       });
       if (refineCfg.enabled) {
-        await armTopicLabelRefinement(context.chatId, topicThreadId, label);
+        await armTopicLabelRefinement({
+          accountId: context.route.accountId,
+          chatId: context.chatId,
+          threadId: topicThreadId,
+          label,
+        });
       }
     } catch (err) {
       logVerbose(`auto-topic-label: failed: ${String(err)}`);
@@ -292,6 +305,7 @@ export const dispatchTelegramMessage = async (
     retryDispatchErrors = false,
     suppressFailureFallback = false,
     turnAdoptionLifecycle,
+    opts,
   } = dispatchParams;
   const dispatchStartedAt = Date.now();
   const dispatchContext = await resolveDispatchTelegramContext({ context });
@@ -522,6 +536,7 @@ export const dispatchTelegramMessage = async (
       dispatchContext.ctxPayload.RawBody ?? dispatchContext.ctxPayload.Body ?? "",
       500,
     ),
+    ...(opts.accountAbortSignal ? { accountAbortSignal: opts.accountAbortSignal } : {}),
   });
   if (status.controller) {
     status.finalizeInBackground(

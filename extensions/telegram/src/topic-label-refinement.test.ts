@@ -20,20 +20,25 @@ const h = vi.hoisted(() => {
   };
 });
 
+// mock-isolation: text truncation double keeps string-boundary tests deterministic.
 vi.mock("openclaw/plugin-sdk/text-utility-runtime", () => ({
   truncateUtf16Safe: (text: string, max: number) => text.slice(0, max),
 }));
+// mock-isolation: label generation needs a controlled LLM double; real generator would call live model providers.
 vi.mock("./bot-message-dispatch.runtime.js", () => ({
   generateTopicLabel: h.generateTopicLabel,
 }));
+// mock-isolation: agent dir resolution must not touch real workspace layout in unit tests.
 vi.mock("./bot-message-dispatch.agent.runtime.js", () => ({
   resolveAgentDir: () => "/tmp/agent",
 }));
+// mock-isolation: keyed store is replaced by an in-memory double; real runtime owns persistent plugin state.
 vi.mock("./runtime.js", () => ({
   getTelegramRuntime: () => ({
     state: { openKeyedStore: () => h.persistent },
   }),
 }));
+// mock-isolation: live topic-name cache writes go to real Telegram state; tests drive the double directly.
 vi.mock("./topic-name-cache.js", () => ({
   getTopicName: vi.fn(async () => h.storeState.get("live-name")?.name),
   updateTopicName: vi.fn(async (_chatId: unknown, _threadId: unknown, patch: { name?: string }) => {
@@ -47,8 +52,11 @@ const { storeState, editForumTopic, generateTopicLabel, logVerbose } = h;
 
 const CHAT = -100123;
 const THREAD = 42;
+const ACCOUNT = "acct-1";
 const base = () => ({
+  accountId: ACCOUNT,
   bot: { api: { editForumTopic } },
+  assertServiceCurrent: vi.fn(() => undefined),
   cfg: {},
   agentId: "main",
   chatId: CHAT,
@@ -71,14 +79,24 @@ describe("maybeRefineTopicLabel", () => {
   });
 
   it("counts turns and does not refine before threshold", async () => {
-    await armTopicLabelRefinement(CHAT, THREAD, "Initial Label");
+    await armTopicLabelRefinement({
+      accountId: ACCOUNT,
+      chatId: CHAT,
+      threadId: THREAD,
+      label: "Initial Label",
+    });
     await maybeRefineTopicLabel(base());
     expect(generateTopicLabel).not.toHaveBeenCalled();
     expect(editForumTopic).not.toHaveBeenCalled();
   });
 
   it("refines exactly once at threshold and renames topic + cache", async () => {
-    await armTopicLabelRefinement(CHAT, THREAD, "Initial Label");
+    await armTopicLabelRefinement({
+      accountId: ACCOUNT,
+      chatId: CHAT,
+      threadId: THREAD,
+      label: "Initial Label",
+    });
     await maybeRefineTopicLabel(base());
     await maybeRefineTopicLabel(base());
     expect(editForumTopic).toHaveBeenCalledTimes(1);
@@ -89,9 +107,65 @@ describe("maybeRefineTopicLabel", () => {
     expect(generateTopicLabel).toHaveBeenCalledTimes(1);
   });
 
+  it("does not share state across accounts (colliding chat/topic ids)", async () => {
+    await armTopicLabelRefinement({
+      accountId: "other",
+      chatId: CHAT,
+      threadId: THREAD,
+      label: "Initial Label",
+    });
+    await maybeRefineTopicLabel(base());
+    await maybeRefineTopicLabel(base());
+    expect(generateTopicLabel).not.toHaveBeenCalled();
+    expect(editForumTopic).not.toHaveBeenCalled();
+  });
+
+  it("consumes the attempt before the external rename (edit failure does not retry)", async () => {
+    await armTopicLabelRefinement({
+      accountId: ACCOUNT,
+      chatId: CHAT,
+      threadId: THREAD,
+      label: "Initial Label",
+    });
+    await maybeRefineTopicLabel(base());
+    editForumTopic.mockRejectedValueOnce(new Error("bot api down"));
+    await maybeRefineTopicLabel(base());
+    expect(generateTopicLabel).toHaveBeenCalledTimes(1);
+    expect(editForumTopic).toHaveBeenCalledTimes(1);
+    // attempt was claimed before the edit: no further LLM calls or renames
+    await maybeRefineTopicLabel(base());
+    expect(generateTopicLabel).toHaveBeenCalledTimes(1);
+    expect(editForumTopic).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses the external rename once the account service is stopped", async () => {
+    await armTopicLabelRefinement({
+      accountId: ACCOUNT,
+      chatId: CHAT,
+      threadId: THREAD,
+      label: "Initial Label",
+    });
+    await maybeRefineTopicLabel(base());
+    const stopping = base();
+    stopping.assertServiceCurrent = () => {
+      throw new Error("account stopped");
+    };
+    await maybeRefineTopicLabel(stopping);
+    expect(generateTopicLabel).not.toHaveBeenCalled();
+    expect(editForumTopic).not.toHaveBeenCalled();
+    // claimed: later turns (even healthy service) never re-run
+    await maybeRefineTopicLabel(base());
+    expect(generateTopicLabel).not.toHaveBeenCalled();
+  });
+
   it("marks done without rename when model returns same label or empty", async () => {
     generateTopicLabel.mockResolvedValueOnce("Initial Label");
-    await armTopicLabelRefinement(CHAT, THREAD, "Initial Label");
+    await armTopicLabelRefinement({
+      accountId: ACCOUNT,
+      chatId: CHAT,
+      threadId: THREAD,
+      label: "Initial Label",
+    });
     await maybeRefineTopicLabel(base());
     await maybeRefineTopicLabel(base());
     expect(editForumTopic).not.toHaveBeenCalled();
@@ -100,7 +174,12 @@ describe("maybeRefineTopicLabel", () => {
   });
 
   it("skips rename and stops when topic was manually renamed", async () => {
-    await armTopicLabelRefinement(CHAT, THREAD, "Initial Label");
+    await armTopicLabelRefinement({
+      accountId: ACCOUNT,
+      chatId: CHAT,
+      threadId: THREAD,
+      label: "Initial Label",
+    });
     storeState.set("live-name", { name: "My Manual Name" });
     await maybeRefineTopicLabel(base());
     await maybeRefineTopicLabel(base());
@@ -114,7 +193,12 @@ describe("maybeRefineTopicLabel", () => {
 
   it("marks done on generation failure (no repeated attempts)", async () => {
     generateTopicLabel.mockRejectedValueOnce(new Error("llm down"));
-    await armTopicLabelRefinement(CHAT, THREAD, "Initial Label");
+    await armTopicLabelRefinement({
+      accountId: ACCOUNT,
+      chatId: CHAT,
+      threadId: THREAD,
+      label: "Initial Label",
+    });
     await maybeRefineTopicLabel(base());
     await maybeRefineTopicLabel(base());
     expect(editForumTopic).not.toHaveBeenCalled();

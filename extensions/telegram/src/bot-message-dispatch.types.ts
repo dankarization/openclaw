@@ -42,7 +42,7 @@ export type DispatchTelegramMessageParams = {
   telegramDeps?: TelegramBotDeps;
   opts: Pick<
     TelegramBotOptions,
-    "token" | "mediaMaxMb" | "ownerAgentId" | "dispatchReplyFromConfig"
+    "token" | "mediaMaxMb" | "ownerAgentId" | "dispatchReplyFromConfig" | "accountAbortSignal"
   >;
   retryDispatchErrors?: boolean;
   suppressFailureFallback?: boolean;

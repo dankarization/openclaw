@@ -1,11 +1,11 @@
 import type { SessionEntry } from "../../config/sessions/types.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { runWithGatewayIndependentRootWorkContinuation } from "../../process/gateway-work-admission.js";
+import { maybeRefineDashboardSessionTitle } from "../dashboard-session-title-refinement.js";
 import {
   buildDashboardSessionTitleSource,
   isDashboardSessionTitleCandidate,
   maybeGenerateDashboardSessionTitle,
-  maybeRefineDashboardSessionTitle,
 } from "../dashboard-session-title.js";
 import { formatForLog } from "../ws-log.js";
 import type { NormalizedChatSendRequest } from "./chat-send-request.js";
@@ -64,7 +64,7 @@ export function scheduleChatDashboardSessionTitle(
   void runWithGatewayIndependentRootWorkContinuation(async () => {
     // Naming only patches metadata under the title writer's session identity check.
     // It must not hold a turn admission while waiting on a model.
-    await maybeGenerateDashboardSessionTitle({
+    const titled = await maybeGenerateDashboardSessionTitle({
       cfg: params.cfg,
       agentId: params.agentId,
       sessionId: params.admittedSessionId,
@@ -85,22 +85,26 @@ export function scheduleChatDashboardSessionTitle(
         }),
     });
     // Opt-in one-time refinement runs after the initial title pass; it never
-    // creates a title, only refines an existing generated one.
-    await maybeRefineDashboardSessionTitle({
-      cfg: params.cfg,
-      agentId: params.agentId,
-      sessionId: params.admittedSessionId,
-      sessionKey: params.sessionKey,
-      storePath: params.storePath,
-      currentUserMessage: params.request.rawMessage,
-      userMessage: titleSource,
-      onTitleStateChanged: () =>
-        emitSessionTitleChanged(params.context, {
-          sessionKey: params.sessionKey,
-          sessionId: params.admittedSessionId,
-          agentId: params.agentId,
-        }),
-    });
+    // creates a title, only refines an existing generated one. The turn that
+    // persisted the initial title is not a "later" turn: skip counting it so
+    // the threshold counts subsequent task messages only.
+    if (!titled) {
+      await maybeRefineDashboardSessionTitle({
+        cfg: params.cfg,
+        agentId: params.agentId,
+        sessionId: params.admittedSessionId,
+        sessionKey: params.sessionKey,
+        storePath: params.storePath,
+        currentUserMessage: params.request.rawMessage,
+        userMessage: titleSource,
+        onTitleStateChanged: () =>
+          emitSessionTitleChanged(params.context, {
+            sessionKey: params.sessionKey,
+            sessionId: params.admittedSessionId,
+            agentId: params.agentId,
+          }),
+      });
+    }
   }, "chat-send:background").catch((err: unknown) => {
     params.context.logGateway.warn(
       `dashboard session title generation failed: ${formatForLog(err)}`,
