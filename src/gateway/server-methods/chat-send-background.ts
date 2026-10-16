@@ -5,6 +5,7 @@ import {
   buildDashboardSessionTitleSource,
   isDashboardSessionTitleCandidate,
   maybeGenerateDashboardSessionTitle,
+  maybeRefineDashboardSessionTitle,
 } from "../dashboard-session-title.js";
 import { formatForLog } from "../ws-log.js";
 import type { NormalizedChatSendRequest } from "./chat-send-request.js";
@@ -76,6 +77,23 @@ export function scheduleChatDashboardSessionTitle(
         params.context.logGateway.warn(
           "dashboard session title generation exhausted; using a crustacean fallback name",
         ),
+      onTitleStateChanged: () =>
+        emitSessionTitleChanged(params.context, {
+          sessionKey: params.sessionKey,
+          sessionId: params.admittedSessionId,
+          agentId: params.agentId,
+        }),
+    });
+    // Opt-in one-time refinement runs after the initial title pass; it never
+    // creates a title, only refines an existing generated one.
+    await maybeRefineDashboardSessionTitle({
+      cfg: params.cfg,
+      agentId: params.agentId,
+      sessionId: params.admittedSessionId,
+      sessionKey: params.sessionKey,
+      storePath: params.storePath,
+      currentUserMessage: params.request.rawMessage,
+      userMessage: titleSource,
       onTitleStateChanged: () =>
         emitSessionTitleChanged(params.context, {
           sessionKey: params.sessionKey,

@@ -23,6 +23,7 @@ import {
   generateTopicLabel,
   getAgentScopedMediaLocalRoots,
   resolveAutoTopicLabelConfig,
+  resolveAutoTopicLabelRefineConfig,
   resolveChunkMode,
 } from "./bot-message-dispatch.runtime.js";
 import type {
@@ -39,6 +40,7 @@ import {
 import { resolveTelegramRichMessages, resolveTelegramTableMode } from "./rich-messages-config.js";
 import { cacheSticker, describeStickerImage } from "./sticker-cache.js";
 import { resolveStickerVisionSupport } from "./sticker-vision.js";
+import { armTopicLabelRefinement, maybeRefineTopicLabel } from "./topic-label-refinement.js";
 
 const EMPTY_RESPONSE_FALLBACK = "No response generated. Please try again.";
 const silentReplyDispatchLogger = createSubsystemLogger("telegram/silent-reply-dispatch");
@@ -195,6 +197,7 @@ function scheduleDmTopicLabel(params: {
   context: TelegramMessageContext;
   isFirstTurnInSession: boolean;
   telegramCfg: DispatchTelegramMessageParams["telegramCfg"];
+  userMessage: string;
 }) {
   const { context } = params;
   const isDmTopic =
@@ -221,6 +224,27 @@ function scheduleDmTopicLabel(params: {
     return;
   }
   const topicThreadId = context.threadSpec.id!;
+  if (!params.isFirstTurnInSession) {
+    // Later turns: opt-in one-time bounded refinement of the auto label.
+    const refineCfg = resolveAutoTopicLabelRefineConfig({
+      directConfig: directAutoTopicLabel,
+      accountConfig: params.telegramCfg.autoTopicLabel,
+    });
+    if (!refineCfg.enabled || !params.userMessage.trim()) {
+      return;
+    }
+    void maybeRefineTopicLabel({
+      bot: params.bot,
+      cfg: params.cfg,
+      agentId: context.route.agentId,
+      chatId: context.chatId,
+      threadId: topicThreadId,
+      userMessage: params.userMessage,
+      afterMessages: refineCfg.afterMessages,
+      logVerbose,
+    });
+    return;
+  }
   void (async () => {
     try {
       const label = await generateTopicLabel({
@@ -238,6 +262,14 @@ function scheduleDmTopicLabel(params: {
       logVerbose(`auto-topic-label: generated label (len=${label.length})`);
       await params.bot.api.editForumTopic(context.chatId, topicThreadId, { name: label });
       logVerbose(`auto-topic-label: renamed topic ${context.chatId}/${topicThreadId}`);
+      // Opt-in: arm the one-time bounded refinement counter for this topic.
+      const refineCfg = resolveAutoTopicLabelRefineConfig({
+        directConfig: directAutoTopicLabel,
+        accountConfig: params.telegramCfg.autoTopicLabel,
+      });
+      if (refineCfg.enabled) {
+        await armTopicLabelRefinement(context.chatId, topicThreadId, label);
+      }
     } catch (err) {
       logVerbose(`auto-topic-label: failed: ${String(err)}`);
     }
@@ -484,6 +516,10 @@ export const dispatchTelegramMessage = async (
     context: dispatchContext,
     isFirstTurnInSession,
     telegramCfg,
+    userMessage: truncateUtf16Safe(
+      dispatchContext.ctxPayload.RawBody ?? dispatchContext.ctxPayload.Body ?? "",
+      500,
+    ),
   });
   if (status.controller) {
     status.finalizeInBackground(
