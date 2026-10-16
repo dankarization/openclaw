@@ -26,10 +26,12 @@ const { complete, select, loadRuntime } = vi.hoisted(() => ({
   select: vi.fn(),
   loadRuntime: vi.fn(),
 }));
-vi.mock("./summary-model.runtime.js", () => {
+vi.mock("./summary-model.runtime.js", async (importOriginal) => {
   loadRuntime();
   return {
+    ...(await importOriginal<typeof import("./summary-model.runtime.js")>()),
     runIsolatedCompletion: complete,
+    runUtilityCompletion: complete,
     resolveSimpleCompletionSelectionForAgent: select,
   };
 });

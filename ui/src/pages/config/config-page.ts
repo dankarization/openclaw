@@ -41,6 +41,7 @@ import { formatUiError } from "../../lib/format-error.ts";
 import { isMissingOperatorReadScopeError } from "../../lib/gateway-errors.ts";
 import { canCallGatewayMethod } from "../../lib/gateway-methods.ts";
 import { loadModelCatalog } from "../../lib/model-catalog-store.ts";
+import { modelSettingPrimary, readModelSetting } from "../../lib/model-setting.ts";
 import { registerEnglishCatalog, t } from "../../lib/reactive/i18n.ts";
 import { resolveScrollBehavior } from "../../lib/scroll-behavior.ts";
 import {
@@ -854,6 +855,7 @@ export class ConfigPageController {
     const gatewayConfig = asConfigRecord(configObject.gateway);
     const controlUiConfig = asConfigRecord(gatewayConfig?.controlUi);
     const agentsDefaults = asConfigRecord(asConfigRecord(configObject.agents)?.defaults);
+    const utilityModel = readModelSetting(agentsDefaults?.utilityModel);
     const themePref = this.currentSyncedPref("theme");
     const themeModePref = this.currentSyncedPref("themeMode");
     const accentPref = this.currentSyncedPref("accent");
@@ -982,30 +984,28 @@ export class ConfigPageController {
         ? (this.routeData.section ?? defaultConfigSelection(this.pageId).activeSection)
         : null,
       sessionObserverEnabled: controlUiConfig?.sessionObserver !== false,
-      sessionObserverUtilityModel:
-        typeof agentsDefaults?.utilityModel === "string" ? agentsDefaults.utilityModel : undefined,
+      sessionObserverUtilityModel: modelSettingPrimary(utilityModel),
       sessionObserverResolvedModel: this.systemInfo?.defaultAgentUtilityModel,
       sessionObserverModels: this.sessionObserverModels,
       sessionObserverModelsUnavailable: this.sessionObserverModelsUnavailable,
       sessionObserverDisabled: sessionObserverBusy,
-      setSessionObserverEnabled: (enabled) => {
+      setSessionObserverEnabled: (enabled) =>
         void runtimeConfig.patch({
           raw: buildSessionObserverTogglePatch(enabled),
           note: t("configView.sessionObserver.toggleNote"),
-        });
-      },
-      setSessionObserverUtilityModel: (modelSelection) => {
+        }),
+      setSessionObserverUtilityModel: (modelSelection) =>
         void runtimeConfig
           .patch({
-            raw: buildSessionObserverUtilityModelPatch(modelSelection),
+            raw: buildSessionObserverUtilityModelPatch(modelSelection, utilityModel),
             note: t("configView.sessionObserver.modelNote"),
+            replacePaths: ["agents.defaults.utilityModel.fallbacks"],
           })
           .then((saved) => {
             if (saved) {
               void this.refreshSystemInfo();
             }
-          });
-      },
+          }),
       lobsterPetVisits: this.settings.lobsterPetVisits ?? UI_APPEARANCE_DEFAULTS.lobsterPetVisits,
       sessionDeleteConfirm:
         this.settings.sessionDeleteConfirm ?? UI_APPEARANCE_DEFAULTS.sessionDeleteConfirm,

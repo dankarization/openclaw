@@ -209,7 +209,10 @@ describe("applyNonInteractivePluginProviderChoice", () => {
           defaults: {
             ...config.agents?.defaults,
             model: { primary: "utility-fixture/small" },
-            utilityModel: "utility-fixture/small",
+            utilityModel: {
+              primary: "utility-fixture/small",
+              fallbacks: ["utility-fixture/backup"],
+            },
           },
         },
       }));
@@ -244,7 +247,10 @@ describe("applyNonInteractivePluginProviderChoice", () => {
       }
       const before = structuredClone(baseConfig);
       const result = await apply();
-      expect(result?.agents?.defaults?.utilityModel).toBe("utility-fixture/small");
+      expect(result?.agents?.defaults?.utilityModel).toEqual({
+        primary: "utility-fixture/small",
+        fallbacks: ["utility-fixture/backup"],
+      });
       expect(result?.agents?.defaults?.model).toEqual(
         legacy ? { primary: "local-fixture/small" } : undefined,
       );

@@ -11,6 +11,7 @@ import { buildBtwCliPrompt } from "../agents/btw-prompts.js";
 import type { PreparedCliRunContext } from "../agents/cli-runner/types.js";
 import { withSessionManagerWrite } from "../agents/sessions/session-manager-write-admission.js";
 import { makeZeroUsageSnapshot } from "../agents/usage.js";
+import { readUtilityModelSetting } from "../agents/utility-model-setting.js";
 import { resolveUtilityModelRefForAgent } from "../agents/utility-model.js";
 import { resolveSessionStorePathCore } from "../config/sessions.js";
 import { composeSessionSourceAssertion } from "../config/sessions/session-source-authority.js";
@@ -560,7 +561,7 @@ export function createSessionCompanionAskRuntime(params: SessionCompanionAskRunt
           "The selected session changed before Side chat could answer.",
         );
       }
-      const rawAnswer = await run({
+      const runParams: SessionCompanionRunParams = {
         cfg,
         agentId,
         modelRef: utilityModelRef,
@@ -573,7 +574,48 @@ export function createSessionCompanionAskRuntime(params: SessionCompanionAskRunt
         assertSourceCurrent,
         ...(request.assertInputCurrent ? { assertInputCurrent: request.assertInputCurrent } : {}),
         signal: controller.signal,
-      });
+      };
+      const utility = readUtilityModelSetting(cfg, agentId);
+      const fallbacks = utility.kind === "disabled" ? [] : utility.fallbacks;
+      let rawAnswer: string;
+      if (fallbacks.length) {
+        // The fallback owner filters the whole chain before choosing a permitted route.
+        const selection = resolveSessionCompanionModel({
+          ...runParams,
+          operatorAuthority: undefined,
+        });
+        const { runWithModelFallback } = await import("../agents/model-fallback-runner.js");
+        const result = await runWithModelFallback({
+          cfg,
+          agentId,
+          provider: selection.provider,
+          model: selection.modelId,
+          requestedRouteResolution: "resolved",
+          fallbacksOverride: fallbacks,
+          abortSignal: controller.signal,
+          operatorAuthority: request.operatorAuthority,
+          skipAuthProfileRuntime: true,
+          run: (provider, model, options) => {
+            controller.signal.throwIfAborted();
+            assertSourceCurrent?.();
+            request.assertInputCurrent?.();
+            return run({
+              ...runParams,
+              modelRef:
+                options?.modelRoutingProvenance.stage === "fallback"
+                  ? `${provider}/${model}${
+                      provider === selection.provider && selection.profileId
+                        ? `@${selection.profileId}`
+                        : ""
+                    }`
+                  : utilityModelRef,
+            });
+          },
+        });
+        rawAnswer = result.result;
+      } else {
+        rawAnswer = await run(runParams);
+      }
       const replySessionId = await currentSessionId(sessionKey, agentId);
       if (activeAsk.cancellation || params.isDisposed()) {
         throw new Error("session companion ask was cancelled");

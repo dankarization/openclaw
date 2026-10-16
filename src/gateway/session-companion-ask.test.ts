@@ -5,6 +5,7 @@ import { prepareCliRunModelAuthority } from "../agents/cli-runner/run-admission.
 import type { RunCliAgentParams } from "../agents/cli-runner/types.js";
 import { resolveBundledStaticCatalogModel } from "../agents/embedded-agent-runner/model.static-catalog.js";
 import type { RunEmbeddedAgentInternalParams } from "../agents/embedded-agent-runner/run/internal-params.js";
+import { FailoverError } from "../agents/failover-error.js";
 import { createAgentHarnessToolSurfaceRuntimeCore } from "../agents/harness/tool-surface-bridge.js";
 import { ProviderAuthError } from "../agents/model-auth-runtime-shared.js";
 import { prepareOperatorModelPolicy } from "../agents/operator-model-policy.js";
@@ -28,7 +29,10 @@ const runEmbeddedAgent = vi.hoisted(() =>
 const resolveModelAsync = vi.hoisted(() => vi.fn());
 const resolveApiKeyForProviderCore = vi.hoisted(() => vi.fn());
 const resolveSelection = vi.hoisted(() =>
-  vi.fn(() => ({ provider: "test", modelId: "model-a" }) as { provider: string; modelId: string }),
+  vi.fn(
+    (_params: { modelRef?: string }) =>
+      ({ provider: "test", modelId: "model-a" }) as { provider: string; modelId: string },
+  ),
 );
 const { prepareCliRunContext, executePreparedCliRun } = vi.hoisted(() => ({
   prepareCliRunContext: vi.fn(async (params: RunCliAgentParams) => ({
@@ -116,6 +120,8 @@ const question = {
 describe("session companion embedded invocation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resolveSelection.mockReset().mockReturnValue({ provider: "test", modelId: "model-a" });
+    executePreparedCliRun.mockReset().mockResolvedValue({ text: "The session is fixing a bug." });
     resolveApiKeyForProviderCore
       .mockReset()
       .mockRejectedValue(
@@ -129,6 +135,94 @@ describe("session companion embedded invocation", () => {
       meta: { durationMs: 1, finalAssistantVisibleText: "The session is reading a file." },
     });
   });
+
+  it.each(["embedded", "cli", "denied-primary"] as const)(
+    "answers with the utility fallback when the primary is unavailable: %s",
+    async (runtime) => {
+      const primary =
+        runtime === "cli"
+          ? { provider: "anthropic", modelId: "claude-haiku-4-5" }
+          : { provider: "test", modelId: "model-a" };
+      const cfg: OpenClawConfig = {
+        agents: {
+          defaults: {
+            model: { primary: "test/main", fallbacks: ["test/main-backup"] },
+            utilityModel: {
+              primary: `${primary.provider}/${primary.modelId}`,
+              fallbacks: ["test/model-b"],
+            },
+            ...(runtime === "cli"
+              ? {
+                  models: { "anthropic/claude-haiku-4-5": { agentRuntime: { id: "claude-cli" } } },
+                }
+              : {}),
+          },
+        },
+      };
+      resolveSelection.mockImplementation(({ modelRef }) =>
+        modelRef === "test/model-b" ? { provider: "test", modelId: "model-b" } : primary,
+      );
+      const failure = new FailoverError("Synthetic unavailable utility model", {
+        reason: "timeout",
+        provider: primary.provider,
+        model: primary.modelId,
+      });
+      if (runtime === "cli") {
+        cliBackendsTesting.setDepsForTest({
+          resolvePluginSetupCliBackend: () => undefined,
+          resolveRuntimeCliBackends: () => [
+            {
+              id: "claude-cli",
+              modelProvider: "anthropic",
+              pluginId: "anthropic",
+              config: { command: "claude" },
+            },
+          ],
+        });
+        executePreparedCliRun.mockRejectedValueOnce(failure);
+      } else if (runtime === "embedded") {
+        runEmbeddedAgent.mockRejectedValueOnce(failure);
+      }
+      const operatorAuthority =
+        runtime === "denied-primary"
+          ? createAdmittedRunOperatorAuthority({
+              profileId: "companion-reader",
+              scopes: ["operator.read"],
+              assertCurrent() {},
+              modelPolicy: prepareOperatorModelPolicy({
+                cfg,
+                policy: { sourceAgent: "main", deny: ["test/model-a"] },
+                manifestPlugins: [],
+              }),
+            })
+          : undefined;
+      const companion = createCompanion(cfg);
+      try {
+        await expect(companion.ask({ ...question, operatorAuthority })).resolves.toMatchObject({
+          answer: "The session is reading a file.",
+        });
+        expect(runEmbeddedAgent.mock.calls.map(([params]) => params.model)).toEqual(
+          runtime === "embedded" ? ["model-a", "model-b"] : ["model-b"],
+        );
+        for (const [params] of runEmbeddedAgent.mock.calls) {
+          expect(params.modelFallbacksOverride).toEqual([]);
+          expect(params.toolsAllow).toEqual(["read", "sessions_history", "sessions_search"]);
+          expect(params.requireWorkspaceOnly).toBe(true);
+        }
+        expect(executePreparedCliRun).toHaveBeenCalledTimes(runtime === "cli" ? 1 : 0);
+        expect(companion.state(question).exchanges).toEqual([
+          {
+            question: question.question,
+            answer: "The session is reading a file.",
+            ts: expect.any(Number),
+          },
+        ]);
+      } finally {
+        cliBackendsTesting.resetDepsForTest();
+        companion.dispose();
+      }
+    },
+  );
 
   it("passes a selected-text comment to the model without persisting it as a file", async () => {
     const companion = createCompanion();
