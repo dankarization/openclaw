@@ -612,4 +612,22 @@ class ChatMessageContentParsingTest {
       parseChatMessageContents(message),
     )
   }
+
+  @Test
+  fun transcribedTurnKeepsItsPhotoFromTranscriptMediaFields() {
+    val message =
+      Json
+        .parseToJsonElement(
+          """{"content":[{"type":"text","text":"**[Transcription]**\n> hi"}],"MediaPaths":["media/inbound/1000186721.jpg","media/inbound/voice.m4a"],"MediaTypes":["image/jpeg","audio/x-m4a"]}""",
+        ).jsonObject
+
+    assertEquals(
+      listOf(
+        ChatMessageContent(type = "text", text = "**[Transcription]**\n> hi"),
+        ChatMessageContent(type = "image", mimeType = "image/jpeg", fileName = "1000186721.jpg"),
+        ChatMessageContent(type = "audio", mimeType = "audio/x-m4a", fileName = "voice.m4a"),
+      ),
+      parseChatMessageContents(message),
+    )
+  }
 }
