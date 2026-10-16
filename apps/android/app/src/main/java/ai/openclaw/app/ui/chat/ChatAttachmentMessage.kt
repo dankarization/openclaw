@@ -1,7 +1,6 @@
 package ai.openclaw.app.ui.chat
 
 import ai.openclaw.app.chat.ChatMessageContent
-import kotlin.math.floor
 
 /** Placeholder the send path uses when the composer text is empty but attachments exist. */
 internal const val CHAT_ATTACHMENT_PLACEHOLDER_TEXT = "See attached."
@@ -56,22 +55,7 @@ private fun splitTranscriptText(text: String): Pair<String, String?> {
       .joinToString("\n") { line -> line.trimStart().removePrefix(">").removePrefix(" ") }
       .trim()
   val body = lines.take(markerIndex).joinToString("\n").trim()
-  if (transcript.isEmpty()) return body to null
+  // A bare marker with no payload is not a transcript; keep the author's text as written.
+  if (transcript.isEmpty()) return text to null
   return body to transcript
-}
-
-/**
- * Adaptive collapse threshold for long user text and transcripts. A bubble collapses
- * only when its full text would take more than [VIEWPORT_FRACTION] of the visible chat
- * height, so tall screens show whole messages and small screens keep the expander.
- */
-internal object ChatAdaptiveCollapsePolicy {
-  const val VIEWPORT_FRACTION = 0.6f
-
-  fun maxExpandedHeightPx(viewportHeightPx: Int): Int = floor(viewportHeightPx * VIEWPORT_FRACTION).toInt()
-
-  fun shouldCollapse(
-    contentHeightPx: Int,
-    viewportHeightPx: Int,
-  ): Boolean = viewportHeightPx > 0 && contentHeightPx > maxExpandedHeightPx(viewportHeightPx)
 }

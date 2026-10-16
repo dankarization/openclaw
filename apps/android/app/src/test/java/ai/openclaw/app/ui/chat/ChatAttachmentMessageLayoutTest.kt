@@ -18,9 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.captureToImage
-import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -55,53 +53,12 @@ class ChatAttachmentMessageLayoutTest {
 
   @Test
   @Config(qualifiers = "w412dp-h915dp-xxhdpi")
-  fun transcribedMessageKeepsPhotoAndFitsWithoutExpanderOnTallScreen() {
+  fun transcribedMessageKeepsPhotoAndVoiceRowWithTranscriptUnderIt() {
     render("transcribed-tall", listOf(photo(), ChatMessageContent(type = "text", text = "See attached.\n**[Transcription]**\n> $TRANSCRIPT"), voice()))
     composeRule.onNodeWithTag("chat-voice-transcript", useUnmergedTree = true).assertExists()
     composeRule.onNodeWithText("Voice note").assertExists()
     assertFalse(composeRule.onAllNodes(hasText("[Transcription]", substring = true)).fetchSemanticsNodes().isNotEmpty())
-    assertFalse("Text that fits must not offer View all", composeRule.onAllNodes(hasText("View all") and hasClickAction()).fetchSemanticsNodes().isNotEmpty())
     assertTrue(composeRule.onAllNodes(hasText(TRANSCRIPT.takeLast(30), substring = true)).fetchSemanticsNodes().isNotEmpty())
-  }
-
-  @Test
-  @Config(qualifiers = "w320dp-h480dp-hdpi")
-  fun transcribedMessageCollapsesOnlyWhenTallerThanTheViewportShare() {
-    render("transcribed-small", listOf(photo(), ChatMessageContent(type = "text", text = "**[Transcription]**\n> $TRANSCRIPT"), voice()))
-    val viewAll = composeRule.onNode(hasText("View all") and hasClickAction())
-    viewAll.assertExists()
-    val click = checkNotNull(viewAll.fetchSemanticsNode().config[SemanticsActions.OnClick].action)
-    composeRule.runOnUiThread { assertTrue(click()) }
-    composeRule.waitForIdle()
-    assertTrue(composeRule.onAllNodes(hasText("Close"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
-    assertTrue(composeRule.onAllNodes(hasText(TRANSCRIPT.takeLast(30), substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
-  }
-
-  @Test
-  @Config(qualifiers = "w412dp-h915dp-xxhdpi")
-  fun composerShowsPhotoWithoutSeparateFileNameChip() {
-    val attachments =
-      listOf(
-        PendingAttachment(id = "p", fileName = "1000186721.jpg", mimeType = "image/jpeg", base64 = photo().base64!!),
-        PendingAttachment(id = "v", fileName = "voice-note-b9526ed8.m4a", mimeType = "audio/mp4", base64 = "AA==", durationMs = 76_000),
-      )
-    composeRule.setContent {
-      ClawDesignTheme(dark = false) {
-        Box(
-          Modifier
-            .testTag(ROOT)
-            .background(ClawTheme.colors.canvas)
-            .padding(12.dp)
-            .fillMaxWidth(),
-        ) {
-          AttachmentStrip(attachments = attachments, onRemoveAttachment = {})
-        }
-      }
-    }
-    composeRule.waitForIdle()
-    composeRule.onNodeWithText("1000186721.jpg").assertDoesNotExist()
-    composeRule.onNodeWithText("Voice note · 1:16").assertExists()
-    capture("composer")
   }
 
   private fun render(
@@ -176,7 +133,7 @@ class ChatAttachmentMessageLayoutTest {
     return ChatMessageContent(type = "image", mimeType = "image/jpeg", fileName = "1000186721.jpg", base64 = Base64.encodeToString(bytes, Base64.NO_WRAP))
   }
 
-  private fun voice() = ChatMessageContent(type = "audio", mimeType = "audio/mp4", fileName = "voice-note-b9526ed8.m4a", durationMs = 76_000)
+  private fun voice() = ChatMessageContent(type = "audio", mimeType = "audio/mp4", fileName = "voice-note-b9526ed8-69ef-44d1-ad36-0123456789ab.m4a", durationMs = 76_000)
 
   private companion object {
     const val ROOT = "unified-root"

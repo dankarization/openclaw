@@ -1454,8 +1454,6 @@ class ChatFullMessageOwnershipLayoutTest {
   }
 
   @Test
-  // User-text collapse is measured against the viewport, so it needs real text metrics.
-  @GraphicsMode(GraphicsMode.Mode.NATIVE)
   fun expandedOrdinaryUserMessageSurvivesAnUnchangedGatewayReconnect() {
     gateway.historyRole = "user"
     gateway.historyTruncated = false
@@ -1465,7 +1463,7 @@ class ChatFullMessageOwnershipLayoutTest {
     composeRule.waitUntil(FULL_MESSAGE_READY_TIMEOUT_MS) {
       composeRule.onAllNodes(hasText(FULL_MESSAGE_TAIL, substring = true)).fetchSemanticsNodes().isNotEmpty()
     }
-    composeRule.onNodeWithText("Close").assertExists()
+    composeRule.onNodeWithText("Close").assertIsDisplayed()
     assertExpandedTextAbsent()
     composeRule.runOnIdle { replaceConnectionBeforeRecomposition() }
     composeRule.waitForIdle()
