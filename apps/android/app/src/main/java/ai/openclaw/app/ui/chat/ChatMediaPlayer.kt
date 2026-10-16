@@ -547,7 +547,7 @@ private fun MediaPlaybackPresentation.AudioPlayerSurface(
         Icon(Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(16.dp), tint = ClawTheme.colors.textMuted)
         Column(modifier = Modifier.weight(1f)) {
           Text(
-            text = content.fileName?.takeIf(String::isNotBlank) ?: nativeString("Voice note"),
+            text = content.fileName?.takeIf { it.isNotBlank() && !isGeneratedVoiceNoteName(it) } ?: nativeString("Voice note"),
             style = ClawTheme.type.body,
             color = ClawTheme.colors.text,
           )
@@ -753,7 +753,7 @@ internal fun ChatMediaAttachmentLabel(content: ChatMessageContent) {
     )
     Text(
       text =
-        content.fileName?.takeIf(String::isNotBlank)
+        content.fileName?.takeIf { it.isNotBlank() && !(isAudio && isGeneratedVoiceNoteName(it)) }
           ?: if (isAudio) nativeString("Voice note") else nativeString("Video"),
       style = ClawTheme.type.body,
       color = ClawTheme.colors.text,
@@ -770,3 +770,6 @@ internal fun ChatMediaAttachmentLabel(content: ChatMessageContent) {
     }
   }
 }
+
+/** Recorder-generated names (`voice-note-<uuid>.m4a`) carry no meaning; show "Voice note" instead. */
+internal fun isGeneratedVoiceNoteName(fileName: String): Boolean = fileName.trim().startsWith("voice-note-", ignoreCase = true)

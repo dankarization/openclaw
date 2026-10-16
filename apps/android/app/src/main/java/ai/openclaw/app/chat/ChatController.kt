@@ -8300,7 +8300,7 @@ internal fun parseChatMessageContents(obj: JsonObject): List<ChatMessageContent>
   if (transcriptAudio.isEmpty()) return content
   return content +
     transcriptAudio.filterNot { audio ->
-      content.any { it.mimeType == audio.mimeType && it.fileName == audio.fileName }
+      content.any { (it.mimeType == audio.mimeType && it.fileName == audio.fileName) || (audio.type == "image" && it.type == "image") }
     }
 }
 
@@ -8352,9 +8352,11 @@ private fun parseTranscriptAudioContents(obj: JsonObject): List<ChatMessageConte
       ?: obj["MediaType"].asStringOrNull()?.let { listOf(it) }
       ?: emptyList()
   return paths.mapIndexedNotNull { index, path ->
-    val mimeType = types.getOrNull(index)?.takeIf { it.startsWith("audio/") } ?: return@mapIndexedNotNull null
+    // Images ride the same transcript media fields; dropping them made a photo vanish once
+    // the gateway rewrote the user turn with its transcription.
+    val mimeType = types.getOrNull(index)?.takeIf { it.startsWith("audio/") || it.startsWith("image/") } ?: return@mapIndexedNotNull null
     ChatMessageContent(
-      type = "audio",
+      type = if (mimeType.startsWith("image/")) "image" else "audio",
       mimeType = mimeType,
       fileName = path.substringAfterLast('/').takeIf(String::isNotBlank),
     )
