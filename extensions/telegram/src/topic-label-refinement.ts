@@ -51,6 +51,12 @@ export async function armTopicLabelRefinement(params: {
 }): Promise<void> {
   try {
     const store = await loadRefinementStore();
+    // Once-per-topic: a completed refinement for this topic survives re-arming
+    // after /reset or a new session in the same DM topic.
+    const existing = await store.lookup(refinementKey(params));
+    if (existing?.done) {
+      return;
+    }
     await store.register(refinementKey(params), {
       label: params.label,
       count: 0,

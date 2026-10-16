@@ -117,6 +117,11 @@ export async function maybeRefineDashboardSessionTitle(params: SessionTitleParam
         ) {
           return null;
         }
+        // Below threshold: persist the counter only; the claim (and inference)
+        // happens on the turn that reaches afterMessages.
+        if (state.taskMessagesSinceTitle < refineConfig.afterMessages) {
+          return { titleRefinement: state };
+        }
         claimed = true;
         claimedState = state;
         return { titleRefinement: state };
@@ -148,7 +153,17 @@ export async function maybeRefineDashboardSessionTitle(params: SessionTitleParam
       skillCommands,
     });
     assertMemoryCurrent();
-    const sourceText = [fields.firstUserMessage ?? "", fields.lastMessagePreview ?? ""]
+    // The triggering turn may not be in the transcript yet (background naming
+    // raced transcript publication), so its validated source is appended.
+    const triggeringSource = resolveSessionTitleSource(
+      params.currentUserMessage ?? "",
+      skillCommands,
+    );
+    const sourceText = [
+      fields.firstUserMessage ?? "",
+      fields.lastMessagePreview ?? "",
+      triggeringSource && triggeringSource !== fields.lastMessagePreview ? triggeringSource : "",
+    ]
       .filter(Boolean)
       .join("\n---\n")
       .trim();

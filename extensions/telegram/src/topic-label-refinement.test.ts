@@ -206,4 +206,28 @@ describe("maybeRefineTopicLabel", () => {
     await maybeRefineTopicLabel(base());
     expect(generateTopicLabel).toHaveBeenCalledTimes(1);
   });
+
+  it("fail-before: unconditional re-arm overwrote done state; pass-after: completed topic refinement survives re-arming", async () => {
+    await armTopicLabelRefinement({
+      accountId: ACCOUNT,
+      chatId: CHAT,
+      threadId: THREAD,
+      label: "Initial Label",
+    });
+    await maybeRefineTopicLabel(base());
+    await maybeRefineTopicLabel(base());
+    expect(editForumTopic).toHaveBeenCalledTimes(1);
+    // Same topic after /reset: a new first turn re-arms, but the completed
+    // refinement must not be reset for a second paid attempt.
+    await armTopicLabelRefinement({
+      accountId: ACCOUNT,
+      chatId: CHAT,
+      threadId: THREAD,
+      label: "Fresh Label",
+    });
+    await maybeRefineTopicLabel({ ...base(), userMessage: "another later task" });
+    await maybeRefineTopicLabel({ ...base(), userMessage: "another later task" });
+    expect(generateTopicLabel).toHaveBeenCalledTimes(1);
+    expect(editForumTopic).toHaveBeenCalledTimes(1);
+  });
 });
