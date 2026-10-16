@@ -290,6 +290,7 @@ describe("utility completion with an unavailable implicit harness", () => {
     const registry = createEmptyPluginRegistry();
     const dispatch = vi.fn(async () => ({
       assistant: makeAssistantMessageFixture({
+        stopReason: "stop",
         provider: "utility-fixture",
         model: "small",
         content: [{ type: "text", text: "The admitted utility harness answered." }],

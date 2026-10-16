@@ -47,6 +47,38 @@ beforeEach(() => {
 });
 
 describe("generateConversationLabel", () => {
+  it("uses utility backups for implicit thread and topic labels", async () => {
+    runIsolatedCompletion
+      .mockRejectedValueOnce(
+        new FailoverError("Fixture server unavailable", { reason: "server_error" }),
+      )
+      .mockResolvedValueOnce({ text: "Garden planning" });
+
+    await expect(
+      generateConversationLabel({
+        cfg: {
+          agents: {
+            defaults: {
+              model: "openai/gpt-main",
+              utilityModel: {
+                primary: "openai/gpt-mini",
+                fallbacks: ["openai/utility-backup"],
+              },
+            },
+          },
+          plugins: { enabled: false },
+        },
+        agentId: "main",
+        userMessage: "Plan a garden.",
+        prompt: "Generate a label.",
+      }),
+    ).resolves.toBe("Garden planning");
+    expect(runIsolatedCompletion.mock.calls.map(([request]) => request.model)).toEqual([
+      "gpt-mini",
+      "utility-backup",
+    ]);
+  });
+
   it("warns once per model per minute without exposing provider errors or title source", async () => {
     const warningLog = createWarnLogCapture("conversation-label");
     const logs = createDiagnosticLogRecordCapture();

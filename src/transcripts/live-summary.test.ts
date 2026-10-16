@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDeferred } from "../../test/helpers/promise.js";
 import { useAutoCleanupTempDirTracker } from "../../test/helpers/temp-dir.js";
+import "../agents/isolated-completion.js";
 import { createTranscriptsTool } from "../agents/tools/transcripts-tool.js";
+import "../agents/utility-completion.js";
 import type { MeetingSessionRecord } from "../meeting-bot/session-types.js";
 import { createMeetingDurableTranscriptBridge } from "../meeting-bot/transcripts-bridge.runtime.js";
 import { createEmptyPluginRegistry } from "../plugins/registry-empty.js";
