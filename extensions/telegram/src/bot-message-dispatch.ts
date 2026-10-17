@@ -40,7 +40,11 @@ import {
 import { resolveTelegramRichMessages, resolveTelegramTableMode } from "./rich-messages-config.js";
 import { cacheSticker, describeStickerImage } from "./sticker-cache.js";
 import { resolveStickerVisionSupport } from "./sticker-vision.js";
-import { armTopicLabelRefinement, maybeRefineTopicLabel } from "./topic-label-refinement.js";
+import {
+  armTopicLabelRefinement,
+  attachTopicLabelRefinementLabel,
+  maybeRefineTopicLabel,
+} from "./topic-label-refinement.js";
 
 const EMPTY_RESPONSE_FALLBACK = "No response generated. Please try again.";
 const silentReplyDispatchLogger = createSubsystemLogger("telegram/silent-reply-dispatch");
@@ -191,7 +195,7 @@ async function prepareTelegramSticker(params: {
   logVerbose(`telegram: cached sticker description for ${sticker.fileUniqueId}`);
 }
 
-function scheduleDmTopicLabel(params: {
+async function scheduleDmTopicLabel(params: {
   bot: DispatchTelegramMessageParams["bot"];
   cfg: DispatchTelegramMessageParams["cfg"];
   context: TelegramMessageContext;
@@ -228,6 +232,7 @@ function scheduleDmTopicLabel(params: {
       return;
     }
     void maybeRefineTopicLabel({
+      botId: params.bot.botInfo?.id,
       accountId: context.route.accountId,
       bot: params.bot,
       assertServiceCurrent: assertAccountCurrent,
@@ -255,6 +260,24 @@ function scheduleDmTopicLabel(params: {
   if (!autoTopicConfig) {
     return;
   }
+  const refineCfg = resolveAutoTopicLabelRefineConfig({
+    directConfig: directAutoTopicLabel,
+    accountConfig: params.telegramCfg.autoTopicLabel,
+  });
+  // Arm the refinement counter BEFORE the async first-turn label so a fast
+  // follow-up that lands while the label is still generating is counted on
+  // this turn's entry once it appears, instead of racing past the arming
+  // window (Codex 4300868452). Arming is idempotent for entries that are not
+  // done, and the label is attached after generation completes.
+  if (refineCfg.enabled) {
+    await armTopicLabelRefinement({
+      botId: params.bot.botInfo?.id,
+      accountId: context.route.accountId,
+      chatId: context.chatId,
+      threadId: topicThreadId,
+      label: "",
+    });
+  }
   void (async () => {
     try {
       const label = await generateTopicLabel({
@@ -272,13 +295,10 @@ function scheduleDmTopicLabel(params: {
       logVerbose(`auto-topic-label: generated label (len=${label.length})`);
       await params.bot.api.editForumTopic(context.chatId, topicThreadId, { name: label });
       logVerbose(`auto-topic-label: renamed topic ${context.chatId}/${topicThreadId}`);
-      // Opt-in: arm the one-time bounded refinement counter for this topic.
-      const refineCfg = resolveAutoTopicLabelRefineConfig({
-        directConfig: directAutoTopicLabel,
-        accountConfig: params.telegramCfg.autoTopicLabel,
-      });
+      // Attach the generated label to the already-armed refinement entry.
       if (refineCfg.enabled) {
-        await armTopicLabelRefinement({
+        await attachTopicLabelRefinementLabel({
+          botId: params.bot.botInfo?.id,
           accountId: context.route.accountId,
           chatId: context.chatId,
           threadId: topicThreadId,
@@ -522,7 +542,7 @@ export const dispatchTelegramMessage = async (
     return { kind: "completed" };
   }
 
-  scheduleDmTopicLabel({
+  void scheduleDmTopicLabel({
     bot,
     cfg,
     context: dispatchContext,

@@ -12,6 +12,23 @@ export const AUTO_TOPIC_LABEL_REFINE_PROMPT =
 /** Default task messages after the first turn before the one-time refinement runs. */
 export const AUTO_TOPIC_LABEL_REFINE_AFTER_MESSAGES_DEFAULT = 6;
 
+/** Per-key enablement: false disables, true enables, undefined inherits the next scope. */
+function resolveAutoTopicLabelKeyEnabled(
+  config:
+    | TelegramDirectConfig["autoTopicLabel"]
+    | TelegramAccountConfig["autoTopicLabel"]
+    | undefined,
+): boolean | undefined {
+  const obj = config && typeof config === "object" ? config : undefined;
+  if (config === false || obj?.enabled === false) {
+    return false;
+  }
+  if (config === true || obj?.enabled === true) {
+    return true;
+  }
+  return undefined;
+}
+
 export function resolveAutoTopicLabelRefineConfig(params: {
   directConfig?: TelegramDirectConfig["autoTopicLabel"];
   accountConfig?: TelegramAccountConfig["autoTopicLabel"];
@@ -25,19 +42,10 @@ export function resolveAutoTopicLabelRefineConfig(params: {
   // Effective base auto-label enablement, resolved per-key first: a per-DM
   // boolean (or enabled:false) must disable refinement even when an account
   // default carries refine:true.
-  const directEnabled =
-    params.directConfig === false || direct?.enabled === false
-      ? false
-      : params.directConfig === true || direct?.enabled === true
-        ? true
-        : undefined;
-  const accountEnabled =
-    params.accountConfig === false || account?.enabled === false
-      ? false
-      : params.accountConfig === true || account?.enabled === true
-        ? true
-        : undefined;
-  const baseEnabled = directEnabled ?? accountEnabled ?? true;
+  const baseEnabled =
+    resolveAutoTopicLabelKeyEnabled(params.directConfig) ??
+    resolveAutoTopicLabelKeyEnabled(params.accountConfig) ??
+    true;
   const refine = direct?.refine ?? account?.refine;
   const rawAfter = direct?.refineAfterMessages ?? account?.refineAfterMessages;
   return {
@@ -57,24 +65,11 @@ export function resolveAutoTopicLabelConfig(
   // resolveAutoTopicLabelRefineConfig: a per-DM boolean or explicit
   // enabled:false disables; an account-level false disables any per-DM
   // object that does not explicitly opt back in with enabled:true.
-  const directEnabled =
-    directConfig === false
-      ? false
-      : directConfig === true || (typeof directConfig === "object" && directConfig.enabled === true)
-        ? true
-        : typeof directConfig === "object" && directConfig.enabled === false
-          ? false
-          : undefined;
-  const accountEnabled =
-    accountConfig === false
-      ? false
-      : accountConfig === true ||
-          (typeof accountConfig === "object" && accountConfig.enabled === true)
-        ? true
-        : typeof accountConfig === "object" && accountConfig.enabled === false
-          ? false
-          : undefined;
-  if ((directEnabled ?? accountEnabled ?? true) === false) {
+  const keyEnabled =
+    resolveAutoTopicLabelKeyEnabled(directConfig) ??
+    resolveAutoTopicLabelKeyEnabled(accountConfig) ??
+    true;
+  if (!keyEnabled) {
     return null;
   }
   const config = directConfig ?? accountConfig;

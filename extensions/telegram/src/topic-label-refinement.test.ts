@@ -53,7 +53,9 @@ const { storeState, editForumTopic, generateTopicLabel, logVerbose } = h;
 const CHAT = -100123;
 const THREAD = 42;
 const ACCOUNT = "acct-1";
+const BOT_ID = 777000;
 const base = () => ({
+  botId: BOT_ID,
   accountId: ACCOUNT,
   bot: { api: { editForumTopic } },
   assertServiceCurrent: vi.fn(() => undefined),
@@ -80,6 +82,7 @@ describe("maybeRefineTopicLabel", () => {
 
   it("counts turns and does not refine before threshold", async () => {
     await armTopicLabelRefinement({
+      botId: BOT_ID,
       accountId: ACCOUNT,
       chatId: CHAT,
       threadId: THREAD,
@@ -92,6 +95,7 @@ describe("maybeRefineTopicLabel", () => {
 
   it("refines exactly once at threshold and renames topic + cache", async () => {
     await armTopicLabelRefinement({
+      botId: BOT_ID,
       accountId: ACCOUNT,
       chatId: CHAT,
       threadId: THREAD,
@@ -109,6 +113,7 @@ describe("maybeRefineTopicLabel", () => {
 
   it("does not share state across accounts (colliding chat/topic ids)", async () => {
     await armTopicLabelRefinement({
+      botId: BOT_ID,
       accountId: "other",
       chatId: CHAT,
       threadId: THREAD,
@@ -122,6 +127,7 @@ describe("maybeRefineTopicLabel", () => {
 
   it("consumes the attempt before the external rename (edit failure does not retry)", async () => {
     await armTopicLabelRefinement({
+      botId: BOT_ID,
       accountId: ACCOUNT,
       chatId: CHAT,
       threadId: THREAD,
@@ -138,8 +144,9 @@ describe("maybeRefineTopicLabel", () => {
     expect(editForumTopic).toHaveBeenCalledTimes(1);
   });
 
-  it("refuses the external rename once the account service is stopped", async () => {
+  it("refuses the external rename once the account service is stopped (attempt NOT consumed)", async () => {
     await armTopicLabelRefinement({
+      botId: BOT_ID,
       accountId: ACCOUNT,
       chatId: CHAT,
       threadId: THREAD,
@@ -153,14 +160,84 @@ describe("maybeRefineTopicLabel", () => {
     await maybeRefineTopicLabel(stopping);
     expect(generateTopicLabel).not.toHaveBeenCalled();
     expect(editForumTopic).not.toHaveBeenCalled();
-    // claimed: later turns (even healthy service) never re-run
+    // authority check happens BEFORE the durable claim: a stopped account's
+    // attempt is NOT spent; a healthy later turn can still refine exactly once
     await maybeRefineTopicLabel(base());
+    expect(generateTopicLabel).toHaveBeenCalledTimes(1);
+    expect(editForumTopic).toHaveBeenCalledTimes(1);
+    // and still exactly-once afterwards
+    await maybeRefineTopicLabel(base());
+    expect(generateTopicLabel).toHaveBeenCalledTimes(1);
+  });
+
+  it("includes bot identity in the refinement key (token rotation cannot rename replacement bot's topic)", async () => {
+    await armTopicLabelRefinement({
+      botId: 111,
+      accountId: ACCOUNT,
+      chatId: CHAT,
+      threadId: THREAD,
+      label: "Initial Label",
+    });
+    // Same accountId, different bot after repointing: prior-bot state is invisible.
+    await maybeRefineTopicLabel({ ...base(), botId: 222 });
+    await maybeRefineTopicLabel({ ...base(), botId: 222 });
     expect(generateTopicLabel).not.toHaveBeenCalled();
+    expect(editForumTopic).not.toHaveBeenCalled();
+  });
+
+  it("carries intermediate turns into the refinement source", async () => {
+    await armTopicLabelRefinement({
+      botId: BOT_ID,
+      accountId: ACCOUNT,
+      chatId: CHAT,
+      threadId: THREAD,
+      label: "Initial Label",
+    });
+    await maybeRefineTopicLabel({ ...base(), userMessage: "first detail" });
+    generateTopicLabel.mockClear();
+    await maybeRefineTopicLabel({ ...base(), userMessage: "second detail" });
+    expect(generateTopicLabel).toHaveBeenCalledTimes(1);
+    const call = generateTopicLabel.mock.calls[0][0];
+    expect(call.userMessage).toContain("Initial Label");
+    expect(call.userMessage).toContain("first detail");
+    expect(call.userMessage).toContain("second detail");
+  });
+
+  it("counts a follow-up that arrives while the first-turn label is generating (arm-before-async)", async () => {
+    // Arm without a label simulates the dispatch ordering: arming happens
+    // before the async first-turn label resolves, and the follow-up is counted
+    // against the armed entry rather than racing past an empty arming window.
+    await armTopicLabelRefinement({
+      botId: BOT_ID,
+      accountId: ACCOUNT,
+      chatId: CHAT,
+      threadId: THREAD,
+      label: "",
+    });
+    // attach the generated label (as dispatch does after the async label lands)
+    const { attachTopicLabelRefinementLabel } = await import("./topic-label-refinement.js");
+    await attachTopicLabelRefinementLabel({
+      botId: BOT_ID,
+      accountId: ACCOUNT,
+      chatId: CHAT,
+      threadId: THREAD,
+      label: "Late Label",
+    });
+    storeState.set("live-name", { name: "Late Label" });
+    await maybeRefineTopicLabel({ ...base(), userMessage: "follow-up one" });
+    await maybeRefineTopicLabel({ ...base(), userMessage: "follow-up two" });
+    expect(generateTopicLabel).toHaveBeenCalledTimes(1);
+    expect(editForumTopic).toHaveBeenCalledTimes(1);
+    const call = generateTopicLabel.mock.calls[0][0];
+    expect(call.userMessage).toContain("Late Label");
+    expect(call.userMessage).toContain("follow-up one");
+    expect(call.userMessage).toContain("follow-up two");
   });
 
   it("marks done without rename when model returns same label or empty", async () => {
     generateTopicLabel.mockResolvedValueOnce("Initial Label");
     await armTopicLabelRefinement({
+      botId: BOT_ID,
       accountId: ACCOUNT,
       chatId: CHAT,
       threadId: THREAD,
@@ -175,6 +252,7 @@ describe("maybeRefineTopicLabel", () => {
 
   it("skips rename and stops when topic was manually renamed", async () => {
     await armTopicLabelRefinement({
+      botId: BOT_ID,
       accountId: ACCOUNT,
       chatId: CHAT,
       threadId: THREAD,
@@ -194,6 +272,7 @@ describe("maybeRefineTopicLabel", () => {
   it("marks done on generation failure (no repeated attempts)", async () => {
     generateTopicLabel.mockRejectedValueOnce(new Error("llm down"));
     await armTopicLabelRefinement({
+      botId: BOT_ID,
       accountId: ACCOUNT,
       chatId: CHAT,
       threadId: THREAD,
@@ -209,6 +288,7 @@ describe("maybeRefineTopicLabel", () => {
 
   it("fail-before: unconditional re-arm overwrote done state; pass-after: completed topic refinement survives re-arming", async () => {
     await armTopicLabelRefinement({
+      botId: BOT_ID,
       accountId: ACCOUNT,
       chatId: CHAT,
       threadId: THREAD,

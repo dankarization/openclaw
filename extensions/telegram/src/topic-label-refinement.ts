@@ -9,16 +9,21 @@ import { getTopicName, updateTopicName } from "./topic-name-cache.js";
 
 /**
  * Durable, bounded state for the opt-in one-time DM topic label refinement.
- * Keyed by `<accountId>:<chatId>:<threadId>` so multi-account deployments with
- * colliding chat/topic IDs never share state; the entry only exists for labels
- * this bot generated, which doubles as the manual-rename guard (user-renamed
- * topics are detected by comparing the live cached name with the label).
+ * Keyed by `<botTokenHash>:<accountId>:<chatId>:<threadId>` so multi-account
+ * deployments with colliding chat/topic IDs never share state and a repointed
+ * `accountId` (bot-token rotation, monitor.ts `bot-id-changed`) never lets the
+ * previous bot's entry drive the replacement bot's `editForumTopic`; the entry
+ * only exists for labels this bot generated, which doubles as the
+ * manual-rename guard (user-renamed topics are detected by comparing the live
+ * cached name with the label).
  */
 type TopicLabelRefinementEntry = {
   /** Label this bot generated for the first turn. */
   label: string;
   /** User task messages observed after the label was generated. */
   count: number;
+  /** Intermediate user excerpts retained for the refinement source. */
+  excerpts?: string[];
   /** True once the single attempt has been claimed (see claim semantics). */
   done: boolean;
   /** Outcome of a claimed attempt, recorded best-effort after the effect. */
@@ -29,12 +34,19 @@ const REFINEMENT_STORE_NAMESPACE = "telegram.topic-label-refinement";
 const REFINEMENT_STORE_MAX_ENTRIES = 2_048;
 const REFINEMENT_SOURCE_MAX_CHARS = 500;
 
+/**
+ * Bot identity for the refinement key: the bot user id from the startup getMe
+ * probe. Namespace-scoping the durable key by bot identity keeps an unfinished
+ * prior-bot entry from renaming a colliding topic under a replacement bot
+ * after token rotation (Codex 4301074602).
+ */
 function refinementKey(params: {
+  botId: number | string | undefined;
   accountId: string;
   chatId: number | string;
   threadId: number;
 }): string {
-  return `${params.accountId}:${params.chatId}:${params.threadId}`;
+  return `${params.botId ?? "unknown-bot"}:${params.accountId}:${params.chatId}:${params.threadId}`;
 }
 
 async function loadRefinementStore() {
@@ -46,6 +58,7 @@ async function loadRefinementStore() {
 
 /** Records that this bot generated the initial label; arms the refinement counter. */
 export async function armTopicLabelRefinement(params: {
+  botId: number | string | undefined;
   accountId: string;
   chatId: number | string;
   threadId: number;
@@ -62,10 +75,36 @@ export async function armTopicLabelRefinement(params: {
     await store.register(refinementKey(params), {
       label: params.label,
       count: 0,
+      excerpts: [],
       done: false,
     });
   } catch (err) {
     console.warn(`auto-topic-label: refinement arming failed: ${String(err)}`);
+  }
+}
+
+/**
+ * Attaches the generated first-turn label to the already-armed entry
+ * (arm-before-async-label ordering). Without an armed entry this is a no-op,
+ * matching the previous arm-after-label behavior.
+ */
+export async function attachTopicLabelRefinementLabel(params: {
+  botId: number | string | undefined;
+  accountId: string;
+  chatId: number | string;
+  threadId: number;
+  label: string;
+}): Promise<void> {
+  try {
+    const store = await loadRefinementStore();
+    const key = refinementKey(params);
+    const existing = await store.lookup(key);
+    if (!existing || existing.done) {
+      return;
+    }
+    await store.register(key, { ...existing, label: params.label });
+  } catch (err) {
+    console.warn(`auto-topic-label: refinement label attach failed: ${String(err)}`);
   }
 }
 
@@ -92,6 +131,7 @@ function resolveTopicNameCacheScope(params: {
 }
 
 export async function maybeRefineTopicLabel(params: {
+  botId: number | string | undefined;
   accountId: string;
   bot: {
     api: {
@@ -121,7 +161,19 @@ export async function maybeRefineTopicLabel(params: {
     }
     const next: TopicLabelRefinementEntry = { ...entry, count: entry.count + 1 };
     if (next.count < params.afterMessages) {
-      await store.register(key, next);
+      const excerpt = truncateUtf16Safe(params.userMessage, REFINEMENT_SOURCE_MAX_CHARS);
+      if (!excerpt.trim()) {
+        return;
+      }
+      // Retain intermediate turns below the threshold so the refinement prompt
+      // carries the full task context, not only the final message
+      // (Codex 4300799475).
+      await store.register(key, {
+        ...next,
+        excerpts: [...(entry.excerpts ?? []), excerpt].slice(
+          -Math.max(1, params.afterMessages - 1),
+        ),
+      });
       return;
     }
     // Manual-rename guard: refine only while the topic still carries our label.
@@ -135,19 +187,34 @@ export async function maybeRefineTopicLabel(params: {
       params.logVerbose("auto-topic-label: refinement skipped (topic renamed manually)");
       return;
     }
+    // Service authority BEFORE consuming the attempt: a stopped/reloaded
+    // account must not have its single refinement spent on a turn that can
+    // never reach the Bot API (Codex 4300799472).
+    params.assertServiceCurrent();
     const excerpt = truncateUtf16Safe(params.userMessage, REFINEMENT_SOURCE_MAX_CHARS);
     if (!excerpt.trim()) {
       return;
     }
+    const excerpts = [...(entry.excerpts ?? []), excerpt].slice(
+      -Math.max(1, params.afterMessages - 1),
+    );
     // Durable attempt claim BEFORE any external effect: a crash after the Bot
     // API edit (or a rejected edit) must never re-run the LLM and re-rename on
     // a later turn. Outcome is recorded best-effort afterwards.
-    await store.register(key, { ...next, done: true, outcome: "failed" });
+    // Exactly-once vs bounded eviction: evict-oldest may drop the done marker
+    // only after 2_048 newer entries; a dropped marker without armed state is
+    // inert (this function no-ops without an entry), and re-arming happens only
+    // from this bot's own first-turn label generation, which restarts the count
+    // at zero rather than resurrecting a consumed attempt mid-count
+    // (Codex 4300868455).
+    await store.register(key, { ...next, excerpts, done: true, outcome: "failed" });
     params.assertServiceCurrent();
     let label: string | null;
     try {
       label = await generateTopicLabel({
-        userMessage: [entry.label, excerpt].filter(Boolean).join("\n---\n"),
+        userMessage: [entry.label, ...(entry.excerpts ?? []), excerpt]
+          .filter(Boolean)
+          .join("\n---\n"),
         prompt: AUTO_TOPIC_LABEL_REFINE_PROMPT,
         maxLength: 128,
         cfg: params.cfg,
