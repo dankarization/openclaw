@@ -654,6 +654,8 @@ private class DeferredChatCommandOutbox(
 
   override suspend fun loadAttachments(id: String): List<LoadedOutboxAttachment> = ready().commandOutbox.loadAttachments(id)
 
+  override suspend fun loadAttachmentBytes(attachmentId: String): ByteArray? = ready().commandOutbox.loadAttachmentBytes(attachmentId)
+
   override suspend fun updateStatusIfAttempt(
     id: String,
     expectedAttemptVersion: Int,
