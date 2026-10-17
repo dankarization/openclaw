@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type GenerateTopicLabelParams = Parameters<
+  typeof import("./bot-message-dispatch.runtime.js").generateTopicLabel
+>[0];
+
 const h = vi.hoisted(() => {
   const storeState = new Map<string, Record<string, unknown>>();
   return {
@@ -15,7 +19,7 @@ const h = vi.hoisted(() => {
       entries: async () => Array.from(storeState.entries(), ([key, value]) => ({ key, value })),
     },
     editForumTopic: vi.fn(async () => true),
-    generateTopicLabel: vi.fn(async () => "Refined Label"),
+    generateTopicLabel: vi.fn(async (_params: GenerateTopicLabelParams) => "Refined Label"),
     logVerbose: vi.fn(),
   };
 });
