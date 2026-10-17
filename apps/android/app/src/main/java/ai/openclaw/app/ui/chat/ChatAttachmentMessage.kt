@@ -12,7 +12,14 @@ internal const val CHAT_ATTACHMENT_PLACEHOLDER_TEXT = "See attached."
 internal data class ChatAttachmentMessageParts(
   val content: List<ChatMessageContent>,
   val transcript: String?,
-)
+) {
+  /**
+   * Text the link preview scans: the author's text first, then the transcript, so a URL
+   * spoken in the voice note still previews after the transcript moves out of the text.
+   */
+  val linkPreviewContent: List<ChatMessageContent>
+    get() = if (transcript == null) content else content + ChatMessageContent(type = "text", text = transcript)
+}
 
 private val TRANSCRIPTION_MARKER = Regex("""^\s*\**\s*\[\s*Transcri(?:ption|pt)\s*]\s*\**\s*:?\s*$""", RegexOption.IGNORE_CASE)
 

@@ -89,4 +89,22 @@ class ChatAttachmentMessageTest {
     assertFalse(isGeneratedVoiceNoteName("voice-note-b9526ed8-69ef-44d1-ad36-0123456789ab.mp3"))
     assertFalse(isGeneratedVoiceNoteName("meeting.m4a"))
   }
+
+  @Test
+  fun transcriptUrlStaysInTheLinkPreviewInput() {
+    val text = ChatMessageContent(type = "text", text = "See attached.\n**[Transcription]**\n> look at https://example.com/page")
+    val parts = splitChatAttachmentMessage(listOf(image, text, voice))
+    assertEquals(listOf(image, voice), parts.content)
+    assertEquals(
+      listOf(ChatMessageContent(type = "text", text = "look at https://example.com/page")),
+      parts.linkPreviewContent.filter { it.type == "text" },
+    )
+  }
+
+  @Test
+  fun linkPreviewInputIsTheDisplayedContentWithoutATranscript() {
+    val text = ChatMessageContent(type = "text", text = "https://example.com")
+    val parts = splitChatAttachmentMessage(listOf(image, text))
+    assertEquals(parts.content, parts.linkPreviewContent)
+  }
 }
