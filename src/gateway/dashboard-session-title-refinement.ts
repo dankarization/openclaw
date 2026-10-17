@@ -77,24 +77,25 @@ export async function maybeRefineDashboardSessionTitle(params: SessionTitleParam
     }
     const generatedName = entry.displayName.trim();
     const priorState = entry.titleRefinement;
+    // Provenance: only names the automatic title writer marked (via
+    // initializeTitleRefinementState) may be refined. A displayName that
+    // exists without this state was set explicitly by the user/operator and
+    // must never be adopted as a generated name.
+    if (
+      !priorState ||
+      priorState.sessionId !== params.sessionId ||
+      priorState.generatedName !== generatedName
+    ) {
+      return;
+    }
     // Exactly-once: a completed refinement never counts or writes again.
-    if (priorState?.refinementDone) {
+    if (priorState.refinementDone) {
       return;
     }
-    // Orphaned ownership: a manual rename (or any other writer) changed the
-    // title after the state captured the generated value. Refinement stops.
-    if (priorState && priorState.generatedName !== generatedName) {
-      return;
-    }
-    const state = countTitleRefinementMessage(
-      entry.titleRefinement,
-      params.sessionId,
-      generatedName,
-    );
-    // Atomic claim: increment-and-claim (or increment-below-threshold) happens
-    // in ONE patch before any inference. With afterMessages=1 this is where the
-    // attempt is consumed; overlapping background jobs serialise on the
-    // entry-guarded patch and only one caller sees the claim succeed.
+    // Atomic claim: each job computes its increment INSIDE the entry-guarded
+    // patch from the persisted state, so overlapping background turns
+    // serialise without losing counter increments; exactly one caller sees
+    // the claim succeed on the turn that reaches afterMessages.
     let claimed = false;
     let claimedState: SessionTitleRefinementState | undefined;
     await patchSessionEntryCore(
@@ -109,22 +110,29 @@ export async function maybeRefineDashboardSessionTitle(params: SessionTitleParam
           return null;
         }
         const currentPrior = current.titleRefinement;
-        // Another writer already claimed or completed the attempt.
+        // Provenance must persist into the claim: no state, or state from a
+        // different session/name, means the name is not writer-owned.
         if (
-          currentPrior?.refinementDone ||
-          (currentPrior && currentPrior.generatedName !== current.displayName?.trim()) ||
-          (currentPrior && state.taskMessagesSinceTitle <= currentPrior.taskMessagesSinceTitle)
+          !currentPrior ||
+          currentPrior.refinementDone ||
+          currentPrior.generatedName !== generatedName ||
+          currentPrior.sessionId !== params.sessionId
         ) {
           return null;
         }
+        const nextState = countTitleRefinementMessage(
+          current.titleRefinement,
+          params.sessionId,
+          generatedName,
+        );
         // Below threshold: persist the counter only; the claim (and inference)
         // happens on the turn that reaches afterMessages.
-        if (state.taskMessagesSinceTitle < refineConfig.afterMessages) {
-          return { titleRefinement: state };
+        if (nextState.taskMessagesSinceTitle < refineConfig.afterMessages) {
+          return { titleRefinement: nextState };
         }
         claimed = true;
-        claimedState = state;
-        return { titleRefinement: state };
+        claimedState = nextState;
+        return { titleRefinement: nextState };
       },
       {
         requireWriteSuccess: false,

@@ -31,6 +31,7 @@ vi.mock("./session-transcript-title-reader.js", () => ({
 
 import type { InternalSessionEntry as SessionEntry } from "../config/sessions/types.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import { initializeTitleRefinementState } from "../sessions/session-title-refinement-state.js";
 import { maybeRefineDashboardSessionTitle } from "./dashboard-session-title-refinement.js";
 
 const cfg = {
@@ -46,6 +47,7 @@ describe("maybeRefineDashboardSessionTitle", () => {
   const generatedEntry: SessionEntry = {
     ...baseEntry,
     displayName: "First Pass Title",
+    titleRefinement: initializeTitleRefinementState("session-1", "First Pass Title"),
   };
   const refineCfg = {
     ...cfg,
@@ -254,5 +256,49 @@ describe("maybeRefineDashboardSessionTitle", () => {
         userMessage: expect.stringContaining("Migrate the billing cron"),
       }),
     );
+  });
+
+  it("provenance: a displayName without init state is never adopted as generated (4300095321)", async () => {
+    // Entry created with an explicit displayName but no titleRefinement
+    // provenance: the automatic writer never produced this name, so
+    // refinement must not count messages or overwrite it.
+    const explicitEntry: SessionEntry = {
+      ...baseEntry,
+      displayName: "Operator Set Name",
+    };
+    updateSessionEntry.mockImplementation(async (_scope, update) => {
+      const patch = await update({ ...explicitEntry });
+      if (patch) {
+        Object.assign(explicitEntry, patch);
+      }
+      return explicitEntry;
+    });
+
+    await maybeRefineDashboardSessionTitle(refineParams(explicitEntry));
+
+    expect(updateSessionEntry).not.toHaveBeenCalled();
+    expect(generateConversationLabelWithFallback).not.toHaveBeenCalled();
+    expect(explicitEntry.displayName).toBe("Operator Set Name");
+  });
+
+  it("provenance: overlapping turns each increment; no lost counter (4299713772)", async () => {
+    // Two background jobs run against the same persisted entry; the second
+    // must compute its increment from the first job's persisted state.
+    let current: SessionEntry = { ...generatedEntry };
+    updateSessionEntry.mockImplementation(async (_scope, update) => {
+      const patch = await update({ ...current });
+      if (patch) {
+        current = { ...current, ...patch };
+      }
+      loadSessionEntry.mockReturnValue(current);
+      return current;
+    });
+
+    await Promise.all([
+      maybeRefineDashboardSessionTitle(refineParams(current)),
+      maybeRefineDashboardSessionTitle(refineParams(current)),
+    ]);
+
+    expect(current.titleRefinement?.taskMessagesSinceTitle).toBe(2);
   });
 });

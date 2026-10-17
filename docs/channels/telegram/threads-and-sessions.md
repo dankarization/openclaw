@@ -68,7 +68,7 @@ Topic ownership persists alongside topic names in the existing cache, which reta
 
 ## Automatic DM topic names
 
-In DM forum topics, OpenClaw can name the topic automatically after the first message using the configured LLM. This is on by default and can be disabled per DM or per account with `channels.telegram.autoTopicLabel: false` (same path under `channels.telegram.accounts.<accountId>.direct`). An object form customizes the LLM prompt:
+In DM forum topics, OpenClaw can name the topic automatically after the first message using the configured LLM. This is on by default and can be disabled per DM or per account: set `channels.telegram.autoTopicLabel: false` (default account), `channels.telegram.accounts.<accountId>.autoTopicLabel: false` (account default), or a per-DM `channels.telegram.accounts.<accountId>.direct.<chatId>.autoTopicLabel: false` (root `channels.telegram.direct.<chatId>.autoTopicLabel` for the default account). An object form customizes the LLM prompt:
 
 ```json5
 {

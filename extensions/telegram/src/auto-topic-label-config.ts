@@ -53,6 +53,30 @@ export function resolveAutoTopicLabelConfig(
   directConfig?: TelegramDirectConfig["autoTopicLabel"],
   accountConfig?: TelegramAccountConfig["autoTopicLabel"],
 ): { enabled: true; prompt: string } | null {
+  // Effective enablement resolves per-key first, mirroring
+  // resolveAutoTopicLabelRefineConfig: a per-DM boolean or explicit
+  // enabled:false disables; an account-level false disables any per-DM
+  // object that does not explicitly opt back in with enabled:true.
+  const directEnabled =
+    directConfig === false
+      ? false
+      : directConfig === true || (typeof directConfig === "object" && directConfig.enabled === true)
+        ? true
+        : typeof directConfig === "object" && directConfig.enabled === false
+          ? false
+          : undefined;
+  const accountEnabled =
+    accountConfig === false
+      ? false
+      : accountConfig === true ||
+          (typeof accountConfig === "object" && accountConfig.enabled === true)
+        ? true
+        : typeof accountConfig === "object" && accountConfig.enabled === false
+          ? false
+          : undefined;
+  if ((directEnabled ?? accountEnabled ?? true) === false) {
+    return null;
+  }
   const config = directConfig ?? accountConfig;
   if (config === undefined || config === true) {
     return { enabled: true, prompt: AUTO_TOPIC_LABEL_DEFAULT_PROMPT };

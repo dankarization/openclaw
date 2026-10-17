@@ -21,6 +21,7 @@ import type { SessionEntry } from "../config/sessions/types.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { withTimeout } from "../infra/fs-safe.js";
 import { parseAgentSessionKey } from "../sessions/session-key-utils.js";
+import { initializeTitleRefinementState } from "../sessions/session-title-refinement-state.js";
 import {
   SESSION_TITLE_SOURCE_MAX_CHARS,
   resolveSessionTitleSource,
@@ -461,7 +462,12 @@ export async function maybeGenerateSessionTitle(params: SessionTitleParams): Pro
             return null;
           }
           persisted = true;
-          return { displayName };
+          // Record automatic-title provenance: refinement only runs for names
+          // this writer produced, never for pre-existing display names.
+          return {
+            displayName,
+            titleRefinement: initializeTitleRefinementState(params.sessionId, displayName),
+          };
         },
         {
           requireWriteSuccess: true,

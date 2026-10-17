@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   AUTO_TOPIC_LABEL_REFINE_AFTER_MESSAGES_DEFAULT,
+  resolveAutoTopicLabelConfig,
   resolveAutoTopicLabelRefineConfig,
 } from "./auto-topic-label-config.js";
 
@@ -43,5 +44,27 @@ describe("resolveAutoTopicLabelRefineConfig", () => {
     expect(cfg(-1).afterMessages).toBe(AUTO_TOPIC_LABEL_REFINE_AFTER_MESSAGES_DEFAULT);
     expect(cfg(101).afterMessages).toBe(AUTO_TOPIC_LABEL_REFINE_AFTER_MESSAGES_DEFAULT);
     expect(cfg(9).afterMessages).toBe(9);
+  });
+});
+
+describe("resolveAutoTopicLabelConfig per-DM precedence", () => {
+  it("account-level false disables a direct object without explicit enabled", () => {
+    // 4299713761: a DM object like { refine: true } or { prompt: "x" } must
+    // not re-enable auto-labelling when the account default is false.
+    expect(resolveAutoTopicLabelConfig(undefined, false)).toBeNull();
+    expect(resolveAutoTopicLabelConfig({ refine: true }, false)).toBeNull();
+    expect(resolveAutoTopicLabelConfig({ prompt: "custom" }, false)).toBeNull();
+  });
+
+  it("direct explicit enablement keeps precedence over the account default", () => {
+    expect(resolveAutoTopicLabelConfig({ enabled: true }, false)).toEqual({
+      enabled: true,
+      prompt: expect.any(String),
+    });
+    expect(resolveAutoTopicLabelConfig(false, true)).toBeNull();
+    expect(resolveAutoTopicLabelConfig(undefined, true)).toEqual({
+      enabled: true,
+      prompt: expect.any(String),
+    });
   });
 });

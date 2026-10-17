@@ -102,7 +102,7 @@ describe("shouldRunTitleRefinement", () => {
   });
 
   it("runs exactly at threshold", () => {
-    expect(shouldRunTitleRefinement({ state: state(), sessionId: SID, afterMessages: 6 })).toBe(
+    expect(shouldRunTitleRefinement({ state: state({}), sessionId: SID, afterMessages: 6 })).toBe(
       true,
     );
   });

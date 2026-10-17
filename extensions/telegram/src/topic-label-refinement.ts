@@ -1,4 +1,6 @@
+import { resolveStorePath } from "openclaw/plugin-sdk/session-store-runtime";
 import { truncateUtf16Safe } from "openclaw/plugin-sdk/text-utility-runtime";
+import { resolveTelegramAccountOwnerAgentId } from "./account-owner.js";
 import { AUTO_TOPIC_LABEL_REFINE_PROMPT } from "./auto-topic-label-config.js";
 import { resolveAgentDir } from "./bot-message-dispatch.agent.runtime.js";
 import { generateTopicLabel } from "./bot-message-dispatch.runtime.js";
@@ -72,6 +74,23 @@ export async function armTopicLabelRefinement(params: {
  * the auto label. Never touches topics whose names the bot did not generate,
  * and never renames a topic that was manually renamed after generation.
  */
+/**
+ * Resolves the same account-scoped topic-name cache scope that
+ * bot-message-context uses, so the manual-rename guard and post-refinement
+ * cache update hit the account's own store instead of the default scope.
+ */
+function resolveTopicNameCacheScope(params: {
+  cfg: Parameters<typeof resolveAgentDir>[0];
+  accountId: string;
+}): string {
+  return resolveStorePath(params.cfg.session?.store, {
+    agentId: resolveTelegramAccountOwnerAgentId({
+      cfg: params.cfg,
+      accountId: params.accountId,
+    }),
+  });
+}
+
 export async function maybeRefineTopicLabel(params: {
   accountId: string;
   bot: {
@@ -106,7 +125,11 @@ export async function maybeRefineTopicLabel(params: {
       return;
     }
     // Manual-rename guard: refine only while the topic still carries our label.
-    const currentName = await getTopicName(params.chatId, params.threadId);
+    // Both guard and cache update use the account-scoped cache scope so that
+    // multi-account deployments with colliding chat/topic IDs never read
+    // another account's cached name (4300095326).
+    const cacheScope = resolveTopicNameCacheScope({ cfg: params.cfg, accountId: params.accountId });
+    const currentName = await getTopicName(params.chatId, params.threadId, cacheScope);
     if (currentName && currentName !== entry.label) {
       await store.register(key, { ...next, done: true, outcome: "failed" });
       params.logVerbose("auto-topic-label: refinement skipped (topic renamed manually)");
@@ -148,7 +171,7 @@ export async function maybeRefineTopicLabel(params: {
     // stopped/reloaded account never renames after shutdown.
     params.assertServiceCurrent();
     await params.bot.api.editForumTopic(params.chatId, params.threadId, { name: label });
-    await updateTopicName(params.chatId, params.threadId, { name: label });
+    await updateTopicName(params.chatId, params.threadId, { name: label }, cacheScope);
     await store.register(key, { ...next, label, done: true, outcome: "renamed" });
     params.logVerbose(
       `auto-topic-label: refined topic ${params.chatId}/${params.threadId} (len=${label.length})`,

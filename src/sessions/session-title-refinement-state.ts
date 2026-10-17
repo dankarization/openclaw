@@ -59,6 +59,23 @@ export function countTitleRefinementMessage(
   };
 }
 
+/**
+ * Provenance marker written by the automatic title writer when it persists a
+ * generated displayName. Refinement only proceeds when this state exists, so
+ * explicit (non-generated) display names are never adopted for refinement.
+ */
+export function initializeTitleRefinementState(
+  sessionId: string,
+  generatedName: string,
+): SessionTitleRefinementState {
+  return {
+    taskMessagesSinceTitle: 0,
+    refinementDone: false,
+    sessionId,
+    generatedName,
+  };
+}
+
 /** True when the bounded one-time refinement should run on this message. */
 export function shouldRunTitleRefinement(params: {
   state: SessionTitleRefinementState | undefined;
