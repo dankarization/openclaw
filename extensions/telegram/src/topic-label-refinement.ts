@@ -1,3 +1,4 @@
+import { isControlCommandMessage } from "openclaw/plugin-sdk/command-detection";
 import { resolveStorePath } from "openclaw/plugin-sdk/session-store-runtime";
 import { truncateUtf16Safe } from "openclaw/plugin-sdk/text-utility-runtime";
 import { resolveTelegramAccountOwnerAgentId } from "./account-owner.js";
@@ -153,6 +154,11 @@ export async function maybeRefineTopicLabel(params: {
   logVerbose: (message: string) => void;
 }): Promise<void> {
   try {
+    // Control-only turns are not task messages and must not spend the one
+    // refinement attempt when text commands use the ordinary dispatch path.
+    if (isControlCommandMessage(params.userMessage, params.cfg)) {
+      return;
+    }
     const key = refinementKey(params);
     const store = await loadRefinementStore();
     const entry = await store.lookup(key);

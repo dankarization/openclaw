@@ -97,6 +97,25 @@ describe("maybeRefineTopicLabel", () => {
     expect(editForumTopic).not.toHaveBeenCalled();
   });
 
+  it("does not count text control commands toward later task messages", async () => {
+    await armTopicLabelRefinement({
+      botId: BOT_ID,
+      accountId: ACCOUNT,
+      chatId: CHAT,
+      threadId: THREAD,
+      label: "Initial Label",
+    });
+
+    await maybeRefineTopicLabel({ ...base(), userMessage: "/status" });
+    await maybeRefineTopicLabel({ ...base(), userMessage: "/help" });
+    await maybeRefineTopicLabel({ ...base(), userMessage: "First real task" });
+    expect(generateTopicLabel).not.toHaveBeenCalled();
+
+    await maybeRefineTopicLabel({ ...base(), userMessage: "Second real task" });
+    expect(generateTopicLabel).toHaveBeenCalledTimes(1);
+    expect(editForumTopic).toHaveBeenCalledTimes(1);
+  });
+
   it("refines exactly once at threshold and renames topic + cache", async () => {
     await armTopicLabelRefinement({
       botId: BOT_ID,
