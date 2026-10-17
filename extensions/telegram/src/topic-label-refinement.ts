@@ -38,6 +38,9 @@ type TopicLabelRefinementEntry = {
 const REFINEMENT_STORE_NAMESPACE = "telegram.topic-label-refinement";
 const REFINEMENT_STORE_MAX_ENTRIES = 2_048;
 const REFINEMENT_SOURCE_MAX_CHARS = 500;
+/** Fixed excerpt budget, independent of refineAfterMessages (Codex 4304532547). */
+const MAX_TOPIC_REFINEMENT_EXCERPTS = 8;
+const MAX_TOPIC_REFINEMENT_EXCERPT_CHARS = 4_000;
 
 /**
  * Bot identity for the refinement key: the bot user id from the startup getMe
@@ -180,12 +183,18 @@ export async function maybeRefineTopicLabel(params: {
       }
       // Retain intermediate turns below the threshold so the refinement prompt
       // carries the full task context, not only the final message
-      // (Codex 4300799475).
+      // (Codex 4300799475). The retained window is capped independently of the
+      // threshold: with refineAfterMessages: 100 and CJK/long messages this
+      // would otherwise send ~50k chars to the label model and reject the only
+      // refinement attempt on smaller-context providers (Codex 4304532547).
+      const retained = [...(entry.excerpts ?? []), excerpt];
+      let kept: string[] = retained.slice(-MAX_TOPIC_REFINEMENT_EXCERPTS);
+      while (kept.join("").length > MAX_TOPIC_REFINEMENT_EXCERPT_CHARS && kept.length > 1) {
+        kept = kept.slice(1);
+      }
       await store.register(key, {
         ...next,
-        excerpts: [...(entry.excerpts ?? []), excerpt].slice(
-          -Math.max(1, params.afterMessages - 1),
-        ),
+        excerpts: kept,
       });
       return;
     }
@@ -206,8 +215,17 @@ export async function maybeRefineTopicLabel(params: {
       params.logVerbose("auto-topic-label: refinement deferred (initial label still pending)");
       return;
     }
-    if (currentName && currentName !== entry.label) {
-      await store.register(key, { ...next, done: true, outcome: "failed" });
+    if (currentName === undefined) {
+      // The topic's cached name is unavailable (evicted by unrelated topic
+      // churn or a failed cache write): its current name is unknown, so
+      // refinement must not assume it still carries our label — a manual
+      // rename would be overwritten. Fail closed without consuming the
+      // attempt (Codex 4304532550).
+      params.logVerbose("auto-topic-label: refinement skipped (cached topic name unavailable)");
+      return;
+    }
+    if (currentName !== entry.label) {
+      await store.register(key, { ...next, excerpts: [], done: true, outcome: "failed" });
       params.logVerbose("auto-topic-label: refinement skipped (topic renamed manually)");
       return;
     }
@@ -219,19 +237,18 @@ export async function maybeRefineTopicLabel(params: {
     if (!excerpt.trim()) {
       return;
     }
-    const excerpts = [...(entry.excerpts ?? []), excerpt].slice(
-      -Math.max(1, params.afterMessages - 1),
-    );
     // Durable attempt claim BEFORE any external effect: a crash after the Bot
     // API edit (or a rejected edit) must never re-run the LLM and re-rename on
-    // a later turn. Outcome is recorded best-effort afterwards.
+    // a later turn. Outcome is recorded best-effort afterwards. The claim does
+    // not retain the excerpt array: the refinement prompt already carries it
+    // and the done record must not pin ~4k chars indefinitely (Codex 4304532547).
     // Exactly-once vs bounded eviction: evict-oldest may drop the done marker
     // only after 2_048 newer entries; a dropped marker without armed state is
     // inert (this function no-ops without an entry), and re-arming happens only
     // from this bot's own first-turn label generation, which restarts the count
     // at zero rather than resurrecting a consumed attempt mid-count
     // (Codex 4300868455).
-    await store.register(key, { ...next, excerpts, done: true, outcome: "failed" });
+    await store.register(key, { ...next, excerpts: [], done: true, outcome: "failed" });
     params.assertServiceCurrent();
     let label: string | null;
     try {
@@ -255,7 +272,7 @@ export async function maybeRefineTopicLabel(params: {
       return;
     }
     if (label === entry.label) {
-      await store.register(key, { ...next, done: true, outcome: "renamed" });
+      await store.register(key, { ...next, excerpts: [], done: true, outcome: "renamed" });
       return;
     }
     // Re-check the manual-rename guard after the awaited inference: a human
@@ -263,7 +280,7 @@ export async function maybeRefineTopicLabel(params: {
     // refinement must never overwrite that name (Codex 4303083920).
     const postInferenceName = await getTopicName(params.chatId, params.threadId, cacheScope);
     if (postInferenceName && postInferenceName !== entry.label) {
-      await store.register(key, { ...next, excerpts, done: true, outcome: "failed" });
+      await store.register(key, { ...next, excerpts: [], done: true, outcome: "failed" });
       params.logVerbose("auto-topic-label: refinement skipped after inference (renamed manually)");
       return;
     }
@@ -272,7 +289,7 @@ export async function maybeRefineTopicLabel(params: {
     params.assertServiceCurrent();
     await params.bot.api.editForumTopic(params.chatId, params.threadId, { name: label });
     await updateTopicName(params.chatId, params.threadId, { name: label }, cacheScope);
-    await store.register(key, { ...next, label, done: true, outcome: "renamed" });
+    await store.register(key, { ...next, excerpts: [], label, done: true, outcome: "renamed" });
     params.logVerbose(
       `auto-topic-label: refined topic ${params.chatId}/${params.threadId} (len=${label.length})`,
     );

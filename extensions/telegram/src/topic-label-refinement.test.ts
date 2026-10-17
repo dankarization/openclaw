@@ -78,6 +78,10 @@ const base = () => ({
 beforeEach(() => {
   storeState.clear();
   vi.clearAllMocks();
+  // Production default: a landed auto label is cached (4302875124), so the
+  // refinement's manual-rename guard reads back the armed label. Individual
+  // tests override this to simulate pending labels, renames, or eviction.
+  storeState.set("live-name", { name: "Initial Label" });
 });
 
 describe("maybeRefineTopicLabel", () => {
@@ -260,6 +264,49 @@ describe("maybeRefineTopicLabel", () => {
     expect(call?.userMessage).toContain("follow-up two");
   });
 
+  it("caps retained excerpts independently of the threshold and clears them on claim (4304532547)", async () => {
+    await armTopicLabelRefinement({
+      botId: BOT_ID,
+      accountId: ACCOUNT,
+      chatId: CHAT,
+      threadId: THREAD,
+      label: "Auto Label",
+    });
+    storeState.set("live-name", { name: "Auto Label" });
+    for (let i = 0; i < 60; i++) {
+      await maybeRefineTopicLabel({
+        ...base(),
+        afterMessages: 100,
+        userMessage: `CJK task ${"漢".repeat(450)} ${i}`,
+      });
+    }
+    const pending = Object.values(h.storeState).find(
+      (v) => v && typeof v === "object" && "excerpts" in v,
+    ) as { excerpts?: string[] } | undefined;
+    expect(pending?.excerpts?.length ?? 0).toBeLessThanOrEqual(8);
+    expect((pending?.excerpts ?? []).join("").length).toBeLessThanOrEqual(4_000);
+  });
+
+  it("skips refinement without consuming the attempt when the cached name is unavailable (4304532550)", async () => {
+    await armTopicLabelRefinement({
+      botId: BOT_ID,
+      accountId: ACCOUNT,
+      chatId: CHAT,
+      threadId: THREAD,
+      label: "Auto Label",
+    });
+    // Cache evicted / never written: the current name is unknown.
+    storeState.delete("live-name");
+    await maybeRefineTopicLabel({ ...base(), afterMessages: 1, userMessage: "follow-up" });
+    expect(generateTopicLabel).not.toHaveBeenCalled();
+    expect(editForumTopic).not.toHaveBeenCalled();
+    // The attempt survives; once the name is available again, refinement runs.
+    storeState.set("live-name", { name: "Auto Label" });
+    await maybeRefineTopicLabel({ ...base(), afterMessages: 1, userMessage: "follow-up two" });
+    expect(generateTopicLabel).toHaveBeenCalledTimes(1);
+    expect(editForumTopic).toHaveBeenCalledTimes(1);
+  });
+
   it("defers while the first-turn label is pending even when the cache holds the original name (4304147108)", async () => {
     // refineAfterMessages:1: a follow-up arrives while the first-turn label is
     // still generating AND DM metadata has already cached the topic's original
@@ -336,8 +383,12 @@ describe("maybeRefineTopicLabel", () => {
     });
     await maybeRefineTopicLabel(base());
     let stopped = false;
+    // First read (pre-inference guard) returns the armed label so the claim
+    // proceeds; the second read (post-inference) coincides with the account
+    // stopping. undefined is safe there — the post-inference check treats a
+    // missing name as unchanged and falls through to the authority check.
     vi.mocked(getTopicName)
-      .mockImplementationOnce(async () => undefined)
+      .mockImplementationOnce(async () => "Initial Label")
       .mockImplementationOnce(async () => {
         stopped = true;
         return undefined;

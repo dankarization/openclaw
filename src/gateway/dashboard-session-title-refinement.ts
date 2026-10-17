@@ -199,6 +199,10 @@ export async function maybeRefineDashboardSessionTitle(params: SessionTitleParam
       utilityOnly: true,
       operatorAuthority: params.operatorAuthority,
       ...(memory ? { assertCurrent: assertMemoryCurrent } : {}),
+      // A single-concurrency/local model queues the refinement behind the
+      // overlapping reply; retry once after that turn settles instead of
+      // burning the durable attempt on a 15-second timeout (Codex 4304532543).
+      ...(params.retryAfter ? { retryAfter: params.retryAfter } : {}),
     });
     if (!refined || refined === generatedName) {
       return;

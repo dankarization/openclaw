@@ -145,6 +145,9 @@ export function scheduleChatDashboardSessionTitle(
         // Attachment-only turns carry no text source; the bounded attachment
         // descriptor keeps their refinement count advancing (Codex 4304147111).
         userMessage: refinementSource,
+        // Retry the refinement after the overlapping turn settles, mirroring
+        // the initial-title path, instead of timing out behind it (4304532543).
+        ...(retryAfter ? { retryAfter } : {}),
         onTitleStateChanged: () =>
           emitSessionTitleChanged(params.context, {
             sessionKey: params.sessionKey,
