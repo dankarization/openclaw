@@ -20,6 +20,7 @@ import ai.openclaw.app.chat.ChatFastMode
 import ai.openclaw.app.chat.ChatMessage
 import ai.openclaw.app.chat.ChatMessageContent
 import ai.openclaw.app.chat.ChatMessageCost
+import ai.openclaw.app.chat.ChatOutboxAttachment
 import ai.openclaw.app.chat.ChatOutboxItem
 import ai.openclaw.app.chat.ChatOutboxStatus
 import ai.openclaw.app.chat.ChatPendingToolCall
@@ -1048,6 +1049,7 @@ internal fun ChatScreen(
     loadSourceFavicon = viewModel::loadChatSourceFavicon,
     loadImageArtifact = viewModel::loadChatImageArtifact,
     loadMediaArtifact = viewModel::loadChatMediaArtifact,
+    loadOutboxImagePreview = viewModel::loadChatOutboxImagePreview,
     modifier = Modifier.fillMaxSize().imePadding(),
     tabletopPanes = tabletopPanes,
     features = features,
@@ -1768,6 +1770,7 @@ private fun ChatMessageList(
   loadSourceFavicon: suspend (GatewaySourcePreviewConfig, String) -> GatewayLoadedImage?,
   loadImageArtifact: suspend (String) -> GatewayLoadedImage?,
   loadMediaArtifact: suspend (String, GatewayMediaKind, Boolean) -> GatewayLoadedMedia?,
+  loadOutboxImagePreview: suspend (ChatOutboxAttachment) -> ByteArray?,
   modifier: Modifier = Modifier,
   tabletopPanes: TabletopPaneBounds?,
   features: List<DisplayFeature>,
@@ -1917,6 +1920,7 @@ private fun ChatMessageList(
                     is ChatTimelineItem.OutboxCommand -> {
                       ChatOutboxBubble(
                         item = item.item,
+                        loadImagePreview = loadOutboxImagePreview,
                         onRetry = { onRetryOutbox(item.item.id) },
                         onDelete = { onDeleteOutbox(item.item.id) },
                       )
@@ -1925,6 +1929,7 @@ private fun ChatMessageList(
                     is ChatTimelineItem.RecoveryOutboxCommand -> {
                       ChatOutboxBubble(
                         item = item.item,
+                        loadImagePreview = loadOutboxImagePreview,
                         retryEnabled = false,
                         onRetry = { onRetryOutbox(item.item.id) },
                         onDelete = { onDeleteOutbox(item.item.id) },

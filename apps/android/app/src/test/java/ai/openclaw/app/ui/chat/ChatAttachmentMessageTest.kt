@@ -1,6 +1,7 @@
 package ai.openclaw.app.ui.chat
 
 import ai.openclaw.app.chat.ChatMessageContent
+import ai.openclaw.app.chat.ChatOutboxAttachment
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -142,5 +143,42 @@ class ChatAttachmentMessageTest {
     val parts = splitChatAttachmentMessage(listOf(image, text, voice))
     assertNull(parts.transcript)
     assertEquals(listOf(image, text, voice), parts.content)
+  }
+
+  private val queuedPhoto = ChatOutboxAttachment("photo-1", "image", "image/jpeg", "1000186721.jpg", null, 91_525L)
+  private val queuedVoice =
+    ChatOutboxAttachment("voice-1", "audio", "audio/mp4", "voice-note-b9526ed8-69ef-44d1-ad36-0123456789ab.m4a", 5_000L, 40_000L)
+
+  @Test
+  fun queuedPhotoAndVoiceNoteDropThePlaceholderAndKeepTheSentOrder() {
+    // Even when the voice note was attached first, the bubble leads with the photo like the sent bubble.
+    val parts = chatOutboxBubbleParts("See attached.", listOf(queuedVoice, queuedPhoto))
+    assertEquals(listOf("image", "audio"), parts.map { it.content.type })
+    assertEquals(listOf(queuedPhoto, queuedVoice), parts.map { it.attachment })
+    assertEquals(5_000L, parts.last().content.durationMs)
+    assertTrue(parts.none { it.content.text == "See attached." })
+  }
+
+  @Test
+  fun queuedAuthoredCaptionSitsBetweenThePhotoAndTheVoiceRow() {
+    val parts = chatOutboxBubbleParts("See attached. Look at the roof", listOf(queuedPhoto, queuedVoice))
+    assertEquals(listOf("image", "text", "audio"), parts.map { it.content.type })
+    assertEquals("See attached. Look at the roof", parts[1].content.text)
+    assertNull(parts[1].attachment)
+  }
+
+  @Test
+  fun queuedTextOnlyPlaceholderStaysText() {
+    val parts = chatOutboxBubbleParts("See attached.", emptyList())
+    assertEquals(listOf(ChatMessageContent(type = "text", text = "See attached.")), parts.map { it.content })
+  }
+
+  @Test
+  fun queuedFileNamesAreKeptForTheRendererToDecide() {
+    val named = ChatOutboxAttachment("voice-2", "audio", "audio/x-m4a", "site-visit.m4a", 7_000L, 100_000L)
+    val parts = chatOutboxBubbleParts("", listOf(named, queuedVoice))
+    assertEquals(listOf("site-visit.m4a", queuedVoice.fileName), parts.map { it.content.fileName })
+    assertFalse(isGeneratedVoiceNoteName("site-visit.m4a"))
+    assertTrue(isGeneratedVoiceNoteName(queuedVoice.fileName))
   }
 }
