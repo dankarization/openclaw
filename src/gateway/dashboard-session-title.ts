@@ -115,6 +115,8 @@ export type SessionTitleParams = {
   storePath: string;
   currentUserMessage?: string;
   userMessage: string;
+  /** A title prepared before its opening chat turn skips that turn when refining. */
+  skipNextRefinementMessage?: boolean;
   commitGuard?: SessionSourceAssertion;
   withSource?: WorktreeSourceStage;
   retryFailedJoin?: boolean;
@@ -376,7 +378,7 @@ export async function generateWorktreeSessionTitle(
     sessionKey: resolveStoredSessionKeyForAgentStore(params),
     storePath: params.storePath,
   };
-  const request = maybeGenerateSessionTitle(params);
+  const request = maybeGenerateSessionTitle({ ...params, skipNextRefinementMessage: true });
   try {
     await withTimeout(request, WORKTREE_SESSION_TITLE_WAIT_MS, "worktree title generation");
   } catch (error) {
@@ -463,13 +465,13 @@ export async function maybeGenerateSessionTitle(params: SessionTitleParams): Pro
           }
           persisted = true;
           // Record automatic-title provenance: refinement only runs for names
-          // this writer produced, never for pre-existing display names.
-          // skipNextMessage stops the title-producing turn itself from being
-          // counted as the first "later" message (Codex 4302677494).
+          // this writer produced, never for pre-existing display names. The
+          // chat-send scheduler already skips refinement for this title-producing
+          // turn; only titles prepared before their opening turn need a skip marker.
           return {
             displayName,
             titleRefinement: initializeTitleRefinementState(params.sessionId, displayName, {
-              skipNextMessage: true,
+              skipNextMessage: params.skipNextRefinementMessage,
             }),
           };
         },

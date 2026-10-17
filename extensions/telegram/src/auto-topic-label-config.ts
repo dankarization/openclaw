@@ -70,12 +70,10 @@ export function resolveAutoTopicLabelConfig(
     return null;
   }
   if (directConfig === undefined || directConfig === true) {
-    // No per-DM object: the account default (boolean or object with prompt)
-    // fully applies; fall through to the account resolution below.
+    // With no per-DM object, inherit the account prompt when present. The
+    // per-key check above already resolved enablement, including a literal
+    // per-DM true overriding an account-level false.
     const account = accountConfig && typeof accountConfig === "object" ? accountConfig : undefined;
-    if (accountConfig === false || account?.enabled === false) {
-      return null;
-    }
     return {
       enabled: true,
       prompt: account?.prompt?.trim() || AUTO_TOPIC_LABEL_DEFAULT_PROMPT,

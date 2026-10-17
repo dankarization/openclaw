@@ -67,4 +67,17 @@ describe("resolveAutoTopicLabelConfig per-DM precedence", () => {
       prompt: expect.any(String),
     });
   });
+
+  it("literal true enables a DM when the account disables auto-labeling", () => {
+    expect(resolveAutoTopicLabelConfig(true, false)).toEqual({
+      enabled: true,
+      prompt: expect.stringContaining("Generate a very short topic label"),
+    });
+    expect(resolveAutoTopicLabelConfig(true, { enabled: false, prompt: "Account prompt" })).toEqual(
+      {
+        enabled: true,
+        prompt: "Account prompt",
+      },
+    );
+  });
 });
