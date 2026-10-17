@@ -69,15 +69,27 @@ export function resolveAutoTopicLabelConfig(
   if (!keyEnabled) {
     return null;
   }
-  const config = directConfig ?? accountConfig;
-  if (config === undefined || config === true) {
-    return { enabled: true, prompt: AUTO_TOPIC_LABEL_DEFAULT_PROMPT };
+  if (directConfig === undefined || directConfig === true) {
+    // No per-DM object: the account default (boolean or object with prompt)
+    // fully applies; fall through to the account resolution below.
+    const account = accountConfig && typeof accountConfig === "object" ? accountConfig : undefined;
+    if (accountConfig === false || account?.enabled === false) {
+      return null;
+    }
+    return {
+      enabled: true,
+      prompt: account?.prompt?.trim() || AUTO_TOPIC_LABEL_DEFAULT_PROMPT,
+    };
   }
-  if (config === false || config.enabled === false) {
+  if (directConfig === false || directConfig.enabled === false) {
     return null;
   }
+  // A per-DM object without its own prompt inherits the account-level prompt
+  // instead of dropping it (Codex 4302677497).
+  const accountPrompt =
+    accountConfig && typeof accountConfig === "object" ? accountConfig.prompt?.trim() : undefined;
   return {
     enabled: true,
-    prompt: config.prompt?.trim() || AUTO_TOPIC_LABEL_DEFAULT_PROMPT,
+    prompt: directConfig.prompt?.trim() || accountPrompt || AUTO_TOPIC_LABEL_DEFAULT_PROMPT,
   };
 }

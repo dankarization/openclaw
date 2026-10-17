@@ -464,9 +464,13 @@ export async function maybeGenerateSessionTitle(params: SessionTitleParams): Pro
           persisted = true;
           // Record automatic-title provenance: refinement only runs for names
           // this writer produced, never for pre-existing display names.
+          // skipNextMessage stops the title-producing turn itself from being
+          // counted as the first "later" message (Codex 4302677494).
           return {
             displayName,
-            titleRefinement: initializeTitleRefinementState(params.sessionId, displayName),
+            titleRefinement: initializeTitleRefinementState(params.sessionId, displayName, {
+              skipNextMessage: true,
+            }),
           };
         },
         {
