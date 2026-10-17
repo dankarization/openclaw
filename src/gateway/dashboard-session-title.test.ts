@@ -179,7 +179,14 @@ describe("maybeGenerateDashboardSessionTitle", () => {
     await expect(maybeGenerateDashboardSessionTitle(titleParams())).resolves.toBe(true);
 
     const update = updateSessionEntry.mock.calls[0]?.[1];
-    expect(await update?.({ ...baseEntry })).toEqual({ displayName: expected });
+    expect(await update?.({ ...baseEntry })).toEqual({
+      displayName: expected,
+      titleRefinement: expect.objectContaining({
+        generatedName: expected,
+        refinementDone: false,
+        taskMessagesSinceTitle: 0,
+      }),
+    });
   });
 
   it("skips a persisted display name even when supplied an older entry", async () => {
@@ -206,7 +213,14 @@ describe("maybeGenerateDashboardSessionTitle", () => {
     ).resolves.toBe(true);
 
     const update = updateSessionEntry.mock.calls[0]?.[1];
-    expect(await update?.({ ...entry })).toEqual({ displayName: "Release Planning" });
+    expect(await update?.({ ...entry })).toEqual({
+      displayName: "Release Planning",
+      titleRefinement: expect.objectContaining({
+        generatedName: "Release Planning",
+        refinementDone: false,
+        taskMessagesSinceTitle: 0,
+      }),
+    });
   });
 
   it("retries a historical session from the transcript's first user message", async () => {

@@ -6,10 +6,77 @@ import type {
 const AUTO_TOPIC_LABEL_DEFAULT_PROMPT =
   "Generate a very short topic label (2-4 words, max 25 chars) for a chat conversation based on the supplied source message. No emoji. Use the same language as the message, in sentence case: capitalize only the first word and words that language always capitalizes. Be concise and descriptive. Return ONLY the topic name, nothing else.";
 
+export const AUTO_TOPIC_LABEL_REFINE_PROMPT =
+  "Generate a very short topic label (2-4 words, max 25 chars) for a chat conversation based on the supplied conversation excerpt. Use the language the excerpt is written in, not the language of quoted literals, in sentence case: capitalize only the first word and words that language always capitalizes. No emoji. Return ONLY the topic name, nothing else.";
+
+/** Default task messages after the first turn before the one-time refinement runs. */
+export const AUTO_TOPIC_LABEL_REFINE_AFTER_MESSAGES_DEFAULT = 6;
+
+export function resolveAutoTopicLabelRefineConfig(params: {
+  directConfig?: TelegramDirectConfig["autoTopicLabel"];
+  accountConfig?: TelegramAccountConfig["autoTopicLabel"];
+}): { enabled: boolean; afterMessages: number } {
+  const read = (
+    config: TelegramDirectConfig["autoTopicLabel"] | undefined,
+  ): { enabled?: boolean; refine?: boolean; refineAfterMessages?: number } | undefined =>
+    config && typeof config === "object" ? config : undefined;
+  const direct = read(params.directConfig);
+  const account = read(params.accountConfig);
+  // Effective base auto-label enablement, resolved per-key first: a per-DM
+  // boolean (or enabled:false) must disable refinement even when an account
+  // default carries refine:true.
+  const directEnabled =
+    params.directConfig === false || direct?.enabled === false
+      ? false
+      : params.directConfig === true || direct?.enabled === true
+        ? true
+        : undefined;
+  const accountEnabled =
+    params.accountConfig === false || account?.enabled === false
+      ? false
+      : params.accountConfig === true || account?.enabled === true
+        ? true
+        : undefined;
+  const baseEnabled = directEnabled ?? accountEnabled ?? true;
+  const refine = direct?.refine ?? account?.refine;
+  const rawAfter = direct?.refineAfterMessages ?? account?.refineAfterMessages;
+  return {
+    enabled: baseEnabled && refine === true,
+    afterMessages:
+      typeof rawAfter === "number" && Number.isInteger(rawAfter) && rawAfter >= 1 && rawAfter <= 100
+        ? rawAfter
+        : AUTO_TOPIC_LABEL_REFINE_AFTER_MESSAGES_DEFAULT,
+  };
+}
+
 export function resolveAutoTopicLabelConfig(
   directConfig?: TelegramDirectConfig["autoTopicLabel"],
   accountConfig?: TelegramAccountConfig["autoTopicLabel"],
 ): { enabled: true; prompt: string } | null {
+  // Effective enablement resolves per-key first, mirroring
+  // resolveAutoTopicLabelRefineConfig: a per-DM boolean or explicit
+  // enabled:false disables; an account-level false disables any per-DM
+  // object that does not explicitly opt back in with enabled:true.
+  const directEnabled =
+    directConfig === false
+      ? false
+      : directConfig === true || (typeof directConfig === "object" && directConfig.enabled === true)
+        ? true
+        : typeof directConfig === "object" && directConfig.enabled === false
+          ? false
+          : undefined;
+  const accountEnabled =
+    accountConfig === false
+      ? false
+      : accountConfig === true ||
+          (typeof accountConfig === "object" && accountConfig.enabled === true)
+        ? true
+        : typeof accountConfig === "object" && accountConfig.enabled === false
+          ? false
+          : undefined;
+  if ((directEnabled ?? accountEnabled ?? true) === false) {
+    return null;
+  }
   const config = directConfig ?? accountConfig;
   if (config === undefined || config === true) {
     return { enabled: true, prompt: AUTO_TOPIC_LABEL_DEFAULT_PROMPT };

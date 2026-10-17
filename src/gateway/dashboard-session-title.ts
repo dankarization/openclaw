@@ -21,6 +21,7 @@ import type { SessionEntry } from "../config/sessions/types.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { withTimeout } from "../infra/fs-safe.js";
 import { parseAgentSessionKey } from "../sessions/session-key-utils.js";
+import { initializeTitleRefinementState } from "../sessions/session-title-refinement-state.js";
 import {
   SESSION_TITLE_SOURCE_MAX_CHARS,
   resolveSessionTitleSource,
@@ -105,7 +106,7 @@ export function buildDashboardSessionTitleSource(params: {
   return truncateUtf16Safe(source.trim(), SESSION_TITLE_SOURCE_MAX_CHARS);
 }
 
-type SessionTitleParams = {
+export type SessionTitleParams = {
   cfg: OpenClawConfig;
   agentId: string;
   entry?: SessionEntry;
@@ -231,7 +232,7 @@ function normalizeDashboardSessionTitle(raw: string): string | null {
   return /[^\s"'`„“”«»‘’]/u.test(normalized) ? normalized : null;
 }
 
-async function prepareTitleSkillCommands(params: {
+export async function prepareTitleSkillCommands(params: {
   cfg: OpenClawConfig;
   agentId: string;
   entry?: SessionEntry;
@@ -251,7 +252,7 @@ async function prepareTitleSkillCommands(params: {
   );
 }
 
-async function generateDashboardSessionTitle(params: {
+export async function generateDashboardSessionTitle(params: {
   cfg: OpenClawConfig;
   agentId: string;
   entry?: DashboardSessionTitleModelEntry;
@@ -262,6 +263,7 @@ async function generateDashboardSessionTitle(params: {
   operatorAuthority?: AdmittedRunOperatorAuthority;
   retryAfter?: Promise<void>;
   onFallback?: () => void;
+  promptOverride?: string;
 }): Promise<string | null> {
   const sourceText = params.sourceText;
   const regularModel = resolveSessionModelRef(params.cfg, params.entry, params.agentId);
@@ -293,7 +295,7 @@ async function generateDashboardSessionTitle(params: {
       params.abortSignal?.throwIfAborted();
       return await generateConversationLabelWithFallback({
         userMessage: sourceText,
-        prompt: DASHBOARD_SESSION_TITLE_PROMPT,
+        prompt: params.promptOverride ?? DASHBOARD_SESSION_TITLE_PROMPT,
         cfg: params.cfg,
         agentId: params.agentId,
         ...(agentHarnessRuntimeOverride ? { agentHarnessRuntimeOverride } : {}),
@@ -460,7 +462,12 @@ export async function maybeGenerateSessionTitle(params: SessionTitleParams): Pro
             return null;
           }
           persisted = true;
-          return { displayName };
+          // Record automatic-title provenance: refinement only runs for names
+          // this writer produced, never for pre-existing display names.
+          return {
+            displayName,
+            titleRefinement: initializeTitleRefinementState(params.sessionId, displayName),
+          };
         },
         {
           requireWriteSuccess: true,
