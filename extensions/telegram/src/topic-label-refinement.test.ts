@@ -147,9 +147,9 @@ describe("maybeRefineTopicLabel", () => {
     });
     await maybeRefineTopicLabel(base());
     const stopping = base();
-    stopping.assertServiceCurrent = () => {
+    stopping.assertServiceCurrent = vi.fn(() => {
       throw new Error("account stopped");
-    };
+    });
     await maybeRefineTopicLabel(stopping);
     expect(generateTopicLabel).not.toHaveBeenCalled();
     expect(editForumTopic).not.toHaveBeenCalled();

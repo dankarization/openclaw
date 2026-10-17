@@ -49,6 +49,7 @@ vi.mock("./update-command-schema.js", () => ({
   preflightUpdateCommandSchemas: async () => ({ preflightNotes: [], preflightFailures: [] }),
   captureUpdateActivationSchemas: async () => ({}),
 }));
+// mock-isolation: Database context inspection is stubbed so maintenance tests run without live database state.
 vi.mock("./update-command-database-context.js", () => ({
   inspectUpdateDatabaseContexts: async (): ReturnType<
     typeof import("./update-command-database-context.js").inspectUpdateDatabaseContexts
