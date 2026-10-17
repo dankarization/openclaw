@@ -26,6 +26,24 @@ function resolveAutoTopicLabelKeyEnabled(
   return undefined;
 }
 
+/**
+ * Per-key enablement: a present direct key decides for that DM. An explicit
+ * boolean/`enabled:false` disables; any other direct object is an explicit
+ * per-DM configuration and stays enabled over an account default of false —
+ * Codex 4304147110 supersedes 4299713761, whose required `enabled:true`
+ * silently disabled pre-existing per-DM prompt objects. The account default
+ * applies only when the DM key is absent.
+ */
+function resolveEffectiveKeyEnabled(
+  directConfig?: TelegramDirectConfig["autoTopicLabel"],
+  accountConfig?: TelegramAccountConfig["autoTopicLabel"],
+): boolean {
+  if (directConfig !== undefined) {
+    return resolveAutoTopicLabelKeyEnabled(directConfig) ?? true;
+  }
+  return resolveAutoTopicLabelKeyEnabled(accountConfig) ?? true;
+}
+
 export function resolveAutoTopicLabelRefineConfig(params: {
   directConfig?: TelegramDirectConfig["autoTopicLabel"];
   accountConfig?: TelegramAccountConfig["autoTopicLabel"];
@@ -36,13 +54,10 @@ export function resolveAutoTopicLabelRefineConfig(params: {
     config && typeof config === "object" ? config : undefined;
   const direct = read(params.directConfig);
   const account = read(params.accountConfig);
-  // Effective base auto-label enablement, resolved per-key first: a per-DM
-  // boolean (or enabled:false) must disable refinement even when an account
-  // default carries refine:true.
-  const baseEnabled =
-    resolveAutoTopicLabelKeyEnabled(params.directConfig) ??
-    resolveAutoTopicLabelKeyEnabled(params.accountConfig) ??
-    true;
+  // Effective base auto-label enablement, resolved per-key first (Codex
+  // 4304147110): the DM key wins whenever it is present, so an account-level
+  // false cannot disable a DM that carries its own autoTopicLabel object.
+  const baseEnabled = resolveEffectiveKeyEnabled(params.directConfig, params.accountConfig);
   const refine = direct?.refine ?? account?.refine;
   const rawAfter = direct?.refineAfterMessages ?? account?.refineAfterMessages;
   return {
@@ -59,13 +74,10 @@ export function resolveAutoTopicLabelConfig(
   accountConfig?: TelegramAccountConfig["autoTopicLabel"],
 ): { enabled: true; prompt: string } | null {
   // Effective enablement resolves per-key first, mirroring
-  // resolveAutoTopicLabelRefineConfig: a per-DM boolean or explicit
-  // enabled:false disables; an account-level false disables any per-DM
-  // object that does not explicitly opt back in with enabled:true.
-  const keyEnabled =
-    resolveAutoTopicLabelKeyEnabled(directConfig) ??
-    resolveAutoTopicLabelKeyEnabled(accountConfig) ??
-    true;
+  // resolveAutoTopicLabelRefineConfig: the DM key wins whenever it is present
+  // (Codex 4304147110), and an explicit boolean false or enabled:false
+  // disables.
+  const keyEnabled = resolveEffectiveKeyEnabled(directConfig, accountConfig);
   if (!keyEnabled) {
     return null;
   }

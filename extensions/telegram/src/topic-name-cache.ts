@@ -24,6 +24,8 @@ type TopicNameStoreState = {
   store: TopicNameStore;
   hydratePromise?: Promise<void>;
   persistentStore: PluginStateKeyedStore<TopicEntry>;
+  /** Full cache scope (store path plus account suffix) backing this state. */
+  scopeKey: string;
 };
 
 type TopicNameCacheState = {
@@ -99,6 +101,7 @@ function getTopicStoreState(scope?: string): TopicNameStoreState {
   const next: TopicNameStoreState = {
     lastUpdatedAt: 0,
     store: new Map(),
+    scopeKey: stateKey,
     persistentStore: getTelegramRuntime().state.openKeyedStore<TopicEntry>({
       namespace,
       maxEntries: TELEGRAM_TOPIC_NAME_CACHE_MAX_ENTRIES,
@@ -107,6 +110,8 @@ function getTopicStoreState(scope?: string): TopicNameStoreState {
   state.stores.set(stateKey, next);
   return next;
 }
+
+const LEGACY_ACCOUNT_SCOPE_MARKER = "\0telegram-account:";
 
 function hydrateTopicStoreState(state: TopicNameStoreState): Promise<void> {
   state.hydratePromise ??= (async () => {
@@ -120,6 +125,26 @@ function hydrateTopicStoreState(state: TopicNameStoreState): Promise<void> {
       0,
       ...Array.from(state.store.values(), (entry) => entry.updatedAt),
     );
+    // Upgrade path: pre-4302875118 installs persisted topic names under the
+    // bare session-store-path namespace. Every production caller now derives
+    // the scope with the account id appended, which would hide those entries
+    // forever (Telegram cannot recover topic ownership later). One-time import
+    // (per store state; hydrate runs once per process per scope) of the
+    // bare-path namespace when the account-scoped store is still empty.
+    if (state.scopeKey.includes(LEGACY_ACCOUNT_SCOPE_MARKER) && state.store.size === 0) {
+      const legacyScope = state.scopeKey.slice(
+        0,
+        state.scopeKey.indexOf(LEGACY_ACCOUNT_SCOPE_MARKER),
+      );
+      const legacyEntries = await getTopicStoreState(legacyScope).persistentStore.entries();
+      for (const { key, value } of legacyEntries) {
+        if (!isTopicEntry(value) || state.store.has(key)) {
+          continue;
+        }
+        state.store.set(key, value);
+        await state.persistentStore.register(key, value);
+      }
+    }
   })().catch((error: unknown) => {
     state.hydratePromise = undefined;
     throw error;

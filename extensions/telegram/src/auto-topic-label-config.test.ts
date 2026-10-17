@@ -48,12 +48,22 @@ describe("resolveAutoTopicLabelRefineConfig", () => {
 });
 
 describe("resolveAutoTopicLabelConfig per-DM precedence", () => {
-  it("account-level false disables a direct object without explicit enabled", () => {
-    // 4299713761: a DM object like { refine: true } or { prompt: "x" } must
-    // not re-enable auto-labelling when the account default is false.
+  it("a present direct object takes precedence over an account-level false (4304147110)", () => {
+    // 4304147110 supersedes 4299713761: requiring enabled:true on a per-DM
+    // object silently disabled pre-existing per-DM prompt/refine objects when
+    // the account default was false. Only an explicit boolean false or
+    // enabled:false disables.
     expect(resolveAutoTopicLabelConfig(undefined, false)).toBeNull();
-    expect(resolveAutoTopicLabelConfig({ refine: true }, false)).toBeNull();
-    expect(resolveAutoTopicLabelConfig({ prompt: "custom" }, false)).toBeNull();
+    expect(resolveAutoTopicLabelConfig({ refine: true }, false)).toEqual({
+      enabled: true,
+      prompt: expect.any(String),
+    });
+    expect(resolveAutoTopicLabelConfig({ prompt: "custom" }, false)).toEqual({
+      enabled: true,
+      prompt: "custom",
+    });
+    expect(resolveAutoTopicLabelConfig({ enabled: false }, false)).toBeNull();
+    expect(resolveAutoTopicLabelConfig(false, false)).toBeNull();
   });
 
   it("direct explicit enablement keeps precedence over the account default", () => {

@@ -260,6 +260,37 @@ describe("maybeRefineTopicLabel", () => {
     expect(call?.userMessage).toContain("follow-up two");
   });
 
+  it("defers while the first-turn label is pending even when the cache holds the original name (4304147108)", async () => {
+    // refineAfterMessages:1: a follow-up arrives while the first-turn label is
+    // still generating AND DM metadata has already cached the topic's original
+    // name. The rename guard must not treat "cached name ≠ empty armed label"
+    // as a manual rename and permanently consume the attempt.
+    await armTopicLabelRefinement({
+      botId: BOT_ID,
+      accountId: ACCOUNT,
+      chatId: CHAT,
+      threadId: THREAD,
+      label: "",
+    });
+    storeState.set("live-name", { name: "Original topic name" });
+    await maybeRefineTopicLabel({ ...base(), afterMessages: 1, userMessage: "follow-up" });
+    expect(generateTopicLabel).not.toHaveBeenCalled();
+    expect(editForumTopic).not.toHaveBeenCalled();
+    // The attempt survives: once the label lands, a later turn still refines.
+    const { attachTopicLabelRefinementLabel } = await import("./topic-label-refinement.js");
+    await attachTopicLabelRefinementLabel({
+      botId: BOT_ID,
+      accountId: ACCOUNT,
+      chatId: CHAT,
+      threadId: THREAD,
+      label: "Late Label",
+    });
+    storeState.set("live-name", { name: "Late Label" });
+    await maybeRefineTopicLabel({ ...base(), afterMessages: 1, userMessage: "follow-up two" });
+    expect(generateTopicLabel).toHaveBeenCalledTimes(1);
+    expect(editForumTopic).toHaveBeenCalledTimes(1);
+  });
+
   it("marks done without rename when model returns same label or empty", async () => {
     generateTopicLabel.mockResolvedValueOnce("Initial Label");
     await armTopicLabelRefinement({

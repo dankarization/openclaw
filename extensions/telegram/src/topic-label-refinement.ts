@@ -195,16 +195,20 @@ export async function maybeRefineTopicLabel(params: {
     // another account's cached name (4300095326).
     const cacheScope = resolveTopicNameCacheScope({ cfg: params.cfg, accountId: params.accountId });
     const currentName = await getTopicName(params.chatId, params.threadId, cacheScope);
-    if (currentName && currentName !== entry.label) {
-      await store.register(key, { ...next, done: true, outcome: "failed" });
-      params.logVerbose("auto-topic-label: refinement skipped (topic renamed manually)");
-      return;
-    }
     // A pending first-turn label (armed before the async label lands) carries no
     // name yet: claiming now would spend the single attempt on a title we never
     // actually set, racing the attaching label generation (Codex 4302875130).
+    // This defer must run BEFORE the rename guard: with refineAfterMessages:1
+    // and an already-cached original topic name, the guard's "cached name ≠
+    // empty armed label" comparison would look like a manual rename and
+    // permanently burn the one refinement attempt (Codex 4304147108).
     if (!entry.label.trim()) {
       params.logVerbose("auto-topic-label: refinement deferred (initial label still pending)");
+      return;
+    }
+    if (currentName && currentName !== entry.label) {
+      await store.register(key, { ...next, done: true, outcome: "failed" });
+      params.logVerbose("auto-topic-label: refinement skipped (topic renamed manually)");
       return;
     }
     // Service authority BEFORE consuming the attempt: a stopped/reloaded

@@ -63,4 +63,29 @@ describe("topic-name-cache", () => {
     await expect(getTopicName(-100123, 42, "first")).resolves.toBe("Deployments");
     await expect(getTopicName(-100123, 42, "second")).resolves.toBe("Incidents");
   });
+
+  it("imports legacy bare-path topic names into a fresh account scope (4304147104)", async () => {
+    // Pre-4302875118 install: entries persisted under the bare store-path
+    // namespace. After upgrade, account-scoped scopes must not hide them.
+    await updateTopicName(
+      -100123,
+      42,
+      { name: "Legacy name", creatorUserId: 7 },
+      "legacy-store-path",
+    );
+    resetTelegramTopicNameCacheForTest();
+    resetPluginStateStoreForTests();
+    const accountScope = "legacy-store-path\0telegram-account:default";
+    await expect(getTopicName(-100123, 42, accountScope)).resolves.toBe("Legacy name");
+    await expect(getTopicCreatorUserId(-100123, 42, accountScope)).resolves.toBe(7);
+    // The imported entry now persists under the account scope itself.
+    resetTelegramTopicNameCacheForTest();
+    resetPluginStateStoreForTests();
+    await expect(getTopicName(-100123, 42, accountScope)).resolves.toBe("Legacy name");
+    // A nonempty account scope does not clobber its own entries with legacy ones.
+    await updateTopicName(-100123, 42, { name: "Fresh" }, accountScope);
+    resetTelegramTopicNameCacheForTest();
+    resetPluginStateStoreForTests();
+    await expect(getTopicName(-100123, 42, accountScope)).resolves.toBe("Fresh");
+  });
 });

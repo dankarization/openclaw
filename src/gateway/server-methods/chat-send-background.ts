@@ -1,3 +1,4 @@
+import { truncateUtf16Safe } from "@openclaw/normalization-core/utf16-slice";
 import type { SessionEntry } from "../../config/sessions/types.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { runWithGatewayIndependentRootWorkContinuation } from "../../process/gateway-work-admission.js";
@@ -50,6 +51,33 @@ export function scheduleCreatedDashboardSessionTitle(
   });
 }
 
+const REFINEMENT_ATTACHMENT_SOURCE_MAX_CHARS = 160;
+const REFINEMENT_ATTACHMENT_SOURCE_MAX_ITEMS = 4;
+
+/**
+ * Bounded context for refinement counting on attachment-only turns: an
+ * accepted chat.send with empty text plus a non-text attachment (image, PDF)
+ * is a real task, but buildDashboardSessionTitleSource decodes only text/*
+ * attachments, leaving an empty source that the candidate guard would drop
+ * from the refinement threshold entirely (Codex 4304147111). The descriptor
+ * feeds refinement counting and excerpt context only — title generation is
+ * unaffected and still requires real text via the candidate check.
+ */
+function describeAttachmentsForRefinementSource(
+  attachments: NormalizedChatSendRequest["normalizedAttachments"],
+): string {
+  const parts: string[] = [];
+  for (const attachment of attachments.slice(0, REFINEMENT_ATTACHMENT_SOURCE_MAX_ITEMS)) {
+    const mime = attachment.mimeType?.trim() || "application/octet-stream";
+    if (mime.toLowerCase().startsWith("text/")) {
+      continue;
+    }
+    const fileName = attachment.fileName?.trim();
+    parts.push(`[attachment: ${mime}${fileName ? ` ${fileName}` : ""}]`);
+  }
+  return truncateUtf16Safe(parts.join("\n"), REFINEMENT_ATTACHMENT_SOURCE_MAX_CHARS);
+}
+
 export function scheduleChatDashboardSessionTitle(
   params: DashboardSessionTitleRequest,
   retryAfter?: Promise<void>,
@@ -58,8 +86,17 @@ export function scheduleChatDashboardSessionTitle(
     message: params.request.rawMessage,
     attachments: params.request.normalizedAttachments,
   });
+  // Attachment-only turns count toward refinement through the bounded
+  // attachment descriptor; turns with neither text nor attachments stay
+  // dropped (Codex 4304147111).
+  const refinementSource =
+    titleSource || describeAttachmentsForRefinementSource(params.request.normalizedAttachments);
   if (
-    !isDashboardSessionTitleCandidate({ sessionKey: params.sessionKey, userMessage: titleSource })
+    !isDashboardSessionTitleCandidate({
+      sessionKey: params.sessionKey,
+      userMessage: titleSource,
+    }) &&
+    !refinementSource
   ) {
     return;
   }
@@ -105,7 +142,9 @@ export function scheduleChatDashboardSessionTitle(
         sessionKey: params.sessionKey,
         storePath: params.storePath,
         currentUserMessage: params.request.rawMessage,
-        userMessage: titleSource,
+        // Attachment-only turns carry no text source; the bounded attachment
+        // descriptor keeps their refinement count advancing (Codex 4304147111).
+        userMessage: refinementSource,
         onTitleStateChanged: () =>
           emitSessionTitleChanged(params.context, {
             sessionKey: params.sessionKey,
