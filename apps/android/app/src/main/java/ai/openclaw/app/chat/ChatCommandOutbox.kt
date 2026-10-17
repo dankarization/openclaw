@@ -248,7 +248,7 @@ interface ChatCommandOutbox {
   suspend fun loadAttachments(id: String): List<LoadedOutboxAttachment>
 
   /** Re-assembles one stored attachment's bytes (for a queued-row preview), or null when absent. */
-  suspend fun loadAttachmentBytes(attachmentId: String): ByteArray? = null
+  suspend fun loadAttachmentBytes(attachmentId: String): ByteArray?
 
   /** Attempt-scoped transition; stale delivery callbacks must update nothing. */
   suspend fun updateStatusIfAttempt(
