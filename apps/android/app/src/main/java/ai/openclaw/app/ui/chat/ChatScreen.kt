@@ -2412,7 +2412,7 @@ internal fun ChatBubble(
     Column(Modifier.padding(horizontal = CHAT_MESSAGE_TEXT_INSET_DP.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
       if (messageId != null) {
         ChatSourcePreviews(sourcePreviews, sourcePreviewConfig, loadSourceFavicon)
-        ChatMessageLinkPreview(messageId = messageId, role = normalizedRole, content = displayableContent, excludedUrls = sourcePreviews.flatMap { it.aliases }.toSet())
+        ChatMessageLinkPreview(messageId = messageId, role = normalizedRole, content = attachmentMessage.linkPreviewContent, excludedUrls = sourcePreviews.flatMap { it.aliases }.toSet())
       }
       disclosure()
       messageSpeech?.let { speech ->
