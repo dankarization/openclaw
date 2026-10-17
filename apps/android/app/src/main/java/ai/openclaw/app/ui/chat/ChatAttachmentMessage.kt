@@ -1,6 +1,7 @@
 package ai.openclaw.app.ui.chat
 
 import ai.openclaw.app.chat.ChatMessageContent
+import ai.openclaw.app.chat.ChatOutboxAttachment
 
 /** Placeholder the send path uses when the composer text is empty but attachments exist. */
 internal const val CHAT_ATTACHMENT_PLACEHOLDER_TEXT = "See attached."
@@ -99,4 +100,39 @@ private fun splitEchoTranscript(
   val transcript = echo.removePrefix(ECHO_TRANSCRIPT_PREFIX).removeSuffix(ECHO_TRANSCRIPT_SUFFIX).trim()
   if (transcript.isEmpty()) return null
   return trimmed.take(start).joinToString("\n").trim() to transcript
+}
+
+/** One row of a queued (outbox) user bubble; [attachment] is set for stored attachments. */
+internal data class ChatOutboxBubblePart(
+  val content: ChatMessageContent,
+  val attachment: ChatOutboxAttachment? = null,
+)
+
+/**
+ * Projects a queued send into the same shape the sent bubble uses: photos and files first,
+ * then the author's text without the exact "See attached." placeholder, then voice/video rows.
+ * File names are kept as metadata; the renderer hides only recorder `voice-note-<uuid>` names.
+ */
+internal fun chatOutboxBubbleParts(
+  text: String,
+  attachments: List<ChatOutboxAttachment>,
+): List<ChatOutboxBubblePart> {
+  val attachmentParts =
+    attachments.map { attachment ->
+      ChatOutboxBubblePart(
+        content =
+          ChatMessageContent(
+            type = attachment.type,
+            mimeType = attachment.mimeType,
+            fileName = attachment.fileName,
+            sizeBytes = attachment.byteLength,
+            durationMs = attachment.durationMs,
+          ),
+        attachment = attachment,
+      )
+    }
+  val caption = if (attachments.isNotEmpty()) stripAttachmentPlaceholder(text) else text
+  val textPart = caption.takeIf { it.isNotBlank() }?.let { ChatOutboxBubblePart(ChatMessageContent(type = "text", text = it)) }
+  val (detached, inline) = attachmentParts.partition { it.content.isDetachedChatAttachment() }
+  return detached + listOfNotNull(textPart) + inline
 }

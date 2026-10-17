@@ -5133,6 +5133,17 @@ class ChatController internal constructor(
     return result.item
   }
 
+  /**
+   * Bytes for a queued row's photo thumbnail, read straight from the durable outbox chunks.
+   * Only image attachments of a row this controller currently shows qualify, and only up to the
+   * composer image ceiling, so the preview never pulls audio/video or an unbounded blob.
+   */
+  suspend fun loadOutboxImagePreview(attachment: ChatOutboxAttachment): ByteArray? {
+    if (!attachment.isOutboxPreviewImage()) return null
+    if (_outboxItems.value.none { row -> row.attachments.any { it.id == attachment.id } }) return null
+    return runCatching { commandOutbox.loadAttachmentBytes(attachment.id) }.getOrNull()?.takeIf { it.isNotEmpty() }
+  }
+
   /** Re-queues a failed outbox item and flushes immediately when the gateway is healthy. */
   fun retryOutboxCommand(id: String) {
     scope.launch {
