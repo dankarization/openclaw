@@ -247,9 +247,6 @@ export async function maybeRefineTopicLabel(params: {
       await store.register(key, { ...next, done: true, outcome: "renamed" });
       return;
     }
-    // Revalidate service authority immediately before the Bot API effect so a
-    // stopped/reloaded account never renames after shutdown.
-    params.assertServiceCurrent();
     // Re-check the manual-rename guard after the awaited inference: a human
     // may have renamed the topic while the LLM call was in flight, and the
     // refinement must never overwrite that name (Codex 4303083920).
@@ -259,6 +256,9 @@ export async function maybeRefineTopicLabel(params: {
       params.logVerbose("auto-topic-label: refinement skipped after inference (renamed manually)");
       return;
     }
+    // The cache read also awaits: the account may stop or reload while it is
+    // pending, so check this service's authority at the actual API effect.
+    params.assertServiceCurrent();
     await params.bot.api.editForumTopic(params.chatId, params.threadId, { name: label });
     await updateTopicName(params.chatId, params.threadId, { name: label }, cacheScope);
     await store.register(key, { ...next, label, done: true, outcome: "renamed" });

@@ -51,6 +51,7 @@ vi.mock("./topic-name-cache.js", () => ({
 }));
 
 import { armTopicLabelRefinement, maybeRefineTopicLabel } from "./topic-label-refinement.js";
+import { getTopicName } from "./topic-name-cache.js";
 
 const { storeState, editForumTopic, generateTopicLabel, logVerbose } = h;
 
@@ -290,6 +291,39 @@ describe("maybeRefineTopicLabel", () => {
     // exactly-once even after manual rename
     await maybeRefineTopicLabel(base());
     expect(generateTopicLabel).not.toHaveBeenCalled();
+  });
+
+  it("does not rename through a stopped account after the post-inference cache read", async () => {
+    await armTopicLabelRefinement({
+      botId: BOT_ID,
+      accountId: ACCOUNT,
+      chatId: CHAT,
+      threadId: THREAD,
+      label: "Initial Label",
+    });
+    await maybeRefineTopicLabel(base());
+    let stopped = false;
+    vi.mocked(getTopicName)
+      .mockImplementationOnce(async () => undefined)
+      .mockImplementationOnce(async () => {
+        stopped = true;
+        return undefined;
+      });
+
+    await maybeRefineTopicLabel({
+      ...base(),
+      assertServiceCurrent: () => {
+        if (stopped) {
+          throw new Error("account stopped");
+        }
+      },
+    });
+
+    expect(generateTopicLabel).toHaveBeenCalledTimes(1);
+    expect(getTopicName).toHaveBeenCalledTimes(2);
+    expect(editForumTopic).not.toHaveBeenCalled();
+    await maybeRefineTopicLabel(base());
+    expect(editForumTopic).not.toHaveBeenCalled();
   });
 
   it("marks done on generation failure (no repeated attempts)", async () => {

@@ -19,6 +19,7 @@ type DashboardSessionTitleRequest = {
   context: GatewayRequestContext;
   request: Pick<NormalizedChatSendRequest, "normalizedAttachments" | "rawMessage">;
   sessionKey: string;
+  skipNextRefinementMessage?: boolean;
   storePath: string;
 };
 
@@ -44,6 +45,7 @@ export function scheduleCreatedDashboardSessionTitle(
     context,
     request: { rawMessage: titleSource, normalizedAttachments: [] },
     sessionKey: created.key,
+    skipNextRefinementMessage: true,
     storePath: created.storePath,
   });
 }
@@ -72,6 +74,7 @@ export function scheduleChatDashboardSessionTitle(
       storePath: params.storePath,
       currentUserMessage: params.request.rawMessage,
       userMessage: titleSource,
+      ...(params.skipNextRefinementMessage ? { skipNextRefinementMessage: true } : {}),
       ...(retryAfter ? { retryAfter } : {}),
       onFallback: () =>
         params.context.logGateway.warn(
