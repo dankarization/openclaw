@@ -101,6 +101,7 @@ describe("maybeRefineDashboardSessionTitle", () => {
         refinementDone: false,
         sessionId: "session-1",
         generatedName: "First Pass Title",
+        recentMessages: ["Later task message"],
       },
     });
   });
@@ -227,6 +228,7 @@ describe("maybeRefineDashboardSessionTitle", () => {
         refinementDone: false,
         sessionId: "session-1",
         generatedName: "First Pass Title",
+        recentMessages: ["Later task message"],
       },
     });
   });
@@ -300,5 +302,39 @@ describe("maybeRefineDashboardSessionTitle", () => {
     ]);
 
     expect(current.titleRefinement?.taskMessagesSinceTitle).toBe(2);
+  });
+
+  it("skips the opening turn of a prepared title, then retains middle task context", async () => {
+    let current: SessionEntry = {
+      ...generatedEntry,
+      titleRefinement: initializeTitleRefinementState("session-1", "First Pass Title", {
+        skipNextMessage: true,
+      }),
+    };
+    updateSessionEntry.mockImplementation(async (_scope, update) => {
+      const patch = await update({ ...current });
+      current = patch ? { ...current, ...patch } : current;
+      loadSessionEntry.mockReturnValue(current);
+      return current;
+    });
+    readSessionTitleFieldsFromTranscript.mockReturnValue({
+      firstUserMessage: "Hello",
+      lastMessagePreview: "yes",
+    });
+    for (const message of ["Open the chat", "Investigate PostgreSQL migration", "yes"]) {
+      await maybeRefineDashboardSessionTitle({
+        ...refineParams(current),
+        currentUserMessage: message,
+      });
+    }
+    expect(current.titleRefinement).toMatchObject({
+      taskMessagesSinceTitle: 2,
+      refinementDone: true,
+    });
+    expect(generateConversationLabelWithFallback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userMessage: expect.stringContaining("Investigate PostgreSQL migration"),
+      }),
+    );
   });
 });

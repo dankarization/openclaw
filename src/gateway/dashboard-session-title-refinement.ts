@@ -59,6 +59,7 @@ export async function maybeRefineDashboardSessionTitle(params: SessionTitleParam
     }
     // Only real task turns advance the threshold: control-only slash messages
     // (e.g. /status, /model with no args) resolve to no source and don't count.
+    let currentSource: string | null;
     {
       const skillCommands = await prepareTitleSkillCommands({
         cfg: params.cfg,
@@ -67,10 +68,9 @@ export async function maybeRefineDashboardSessionTitle(params: SessionTitleParam
         sessionKey,
         assertCurrent: assertMemoryCurrent,
       });
-      const currentSource = resolveSessionTitleSource(
-        params.currentUserMessage ?? params.userMessage,
-        skillCommands,
-      );
+      currentSource =
+        resolveSessionTitleSource(params.currentUserMessage ?? "", skillCommands) ??
+        resolveSessionTitleSource(params.userMessage, skillCommands);
       if (!currentSource) {
         return;
       }
@@ -120,10 +120,14 @@ export async function maybeRefineDashboardSessionTitle(params: SessionTitleParam
         ) {
           return null;
         }
+        if (currentPrior.skipNextMessage) {
+          return { titleRefinement: { ...currentPrior, skipNextMessage: false } };
+        }
         const nextState = countTitleRefinementMessage(
           current.titleRefinement,
           params.sessionId,
           generatedName,
+          currentSource,
         );
         // Below threshold: persist the counter only; the claim (and inference)
         // happens on the turn that reaches afterMessages.
@@ -132,7 +136,16 @@ export async function maybeRefineDashboardSessionTitle(params: SessionTitleParam
         }
         claimed = true;
         claimedState = nextState;
-        return { titleRefinement: nextState };
+        // Consume the one allowed attempt in the same guarded write that
+        // reaches the threshold; a concurrent turn cannot start another call.
+        return {
+          titleRefinement: {
+            taskMessagesSinceTitle: nextState.taskMessagesSinceTitle,
+            refinementDone: true,
+            sessionId: nextState.sessionId,
+            generatedName,
+          },
+        };
       },
       {
         requireWriteSuccess: false,
@@ -161,36 +174,18 @@ export async function maybeRefineDashboardSessionTitle(params: SessionTitleParam
       skillCommands,
     });
     assertMemoryCurrent();
-    // The triggering turn may not be in the transcript yet (background naming
-    // raced transcript publication), so its validated source is appended.
-    const triggeringSource = resolveSessionTitleSource(
-      params.currentUserMessage ?? "",
-      skillCommands,
-    );
+    // Later task sources were captured by the entry writer, including turns
+    // that have not yet reached the transcript reader.
     const sourceText = [
       fields.firstUserMessage ?? "",
-      fields.lastMessagePreview ?? "",
-      triggeringSource && triggeringSource !== fields.lastMessagePreview ? triggeringSource : "",
+      ...(claimedTitleRefinement.recentMessages?.length
+        ? claimedTitleRefinement.recentMessages
+        : [fields.lastMessagePreview ?? "", currentSource ?? ""]),
     ]
       .filter(Boolean)
       .join("\n---\n")
       .trim();
-    // Consume the attempt when there is nothing to refine from.
     if (!sourceText) {
-      await patchSessionEntryCore(
-        scope,
-        (current) =>
-          current.sessionId === params.sessionId &&
-          current.displayName?.trim() === generatedName &&
-          current.titleRefinement?.generatedName === generatedName &&
-          !current.titleRefinement.refinementDone
-            ? { titleRefinement: { ...claimedTitleRefinement, refinementDone: true } }
-            : null,
-        {
-          requireWriteSuccess: false,
-          ...sessionEntryCommitGuardOptions(assertMemoryCurrent),
-        },
-      );
       return;
     }
     // Utility-only mode: refinement must never fall back to a random slug —
@@ -206,21 +201,6 @@ export async function maybeRefineDashboardSessionTitle(params: SessionTitleParam
       ...(memory ? { assertCurrent: assertMemoryCurrent } : {}),
     });
     if (!refined || refined === generatedName) {
-      // Attempt consumed without a rename (null/failure or unchanged label).
-      await patchSessionEntryCore(
-        scope,
-        (current) =>
-          current.sessionId === params.sessionId &&
-          current.displayName?.trim() === generatedName &&
-          current.titleRefinement?.generatedName === generatedName &&
-          !current.titleRefinement.refinementDone
-            ? { titleRefinement: { ...claimedTitleRefinement, refinementDone: true } }
-            : null,
-        {
-          requireWriteSuccess: false,
-          ...sessionEntryCommitGuardOptions(assertMemoryCurrent),
-        },
-      );
       return;
     }
     let persisted = false;
@@ -229,9 +209,12 @@ export async function maybeRefineDashboardSessionTitle(params: SessionTitleParam
       (current) => {
         if (
           current.sessionId !== params.sessionId ||
+          current.label?.trim() ||
           current.displayName?.trim() !== generatedName ||
           current.titleRefinement?.generatedName !== generatedName ||
-          current.titleRefinement.refinementDone
+          !current.titleRefinement.refinementDone ||
+          current.titleRefinement.taskMessagesSinceTitle !==
+            claimedTitleRefinement.taskMessagesSinceTitle
         ) {
           return null;
         }
@@ -239,8 +222,9 @@ export async function maybeRefineDashboardSessionTitle(params: SessionTitleParam
         return {
           displayName: refined,
           titleRefinement: {
-            ...claimedTitleRefinement,
+            taskMessagesSinceTitle: claimedTitleRefinement.taskMessagesSinceTitle,
             refinementDone: true,
+            sessionId: params.sessionId,
             generatedName: refined,
           },
         };
