@@ -107,4 +107,40 @@ class ChatAttachmentMessageTest {
     val parts = splitChatAttachmentMessage(listOf(image, text))
     assertEquals(parts.content, parts.linkPreviewContent)
   }
+
+  @Test
+  fun defaultGatewayEchoIsSplitOutOfAVoiceNoteTurn() {
+    val text = ChatMessageContent(type = "text", text = "See attached.\n\uD83D\uDCDD \"Here is the photo from today. More details are at www.github.com\"")
+    val parts = splitChatAttachmentMessage(listOf(image, text, voice))
+    assertEquals(listOf(image, voice), parts.content)
+    assertEquals("Here is the photo from today. More details are at www.github.com", parts.transcript)
+    assertEquals(
+      listOf(ChatMessageContent(type = "text", text = "Here is the photo from today. More details are at www.github.com")),
+      parts.linkPreviewContent.filter { it.type == "text" },
+    )
+  }
+
+  @Test
+  fun defaultGatewayEchoKeepsAuthoredCaptionAndMultilineTranscript() {
+    val text = ChatMessageContent(type = "text", text = "Look at this\n\uD83D\uDCDD \"line one\nline \"two\"\"\n")
+    val parts = splitChatAttachmentMessage(listOf(image, text, voice))
+    assertEquals(listOf(image, ChatMessageContent(type = "text", text = "Look at this"), voice), parts.content)
+    assertEquals("line one\nline \"two\"", parts.transcript)
+  }
+
+  @Test
+  fun echoShapedTextWithoutAVoiceNoteStaysText() {
+    val text = ChatMessageContent(type = "text", text = "\uD83D\uDCDD \"note to self\"")
+    val parts = splitChatAttachmentMessage(listOf(image, text))
+    assertEquals(listOf(image, text), parts.content)
+    assertNull(parts.transcript)
+  }
+
+  @Test
+  fun unterminatedEchoStaysText() {
+    val text = ChatMessageContent(type = "text", text = "See attached.\n\uD83D\uDCDD \"cut off")
+    val parts = splitChatAttachmentMessage(listOf(image, text, voice))
+    assertNull(parts.transcript)
+    assertEquals(listOf(image, text, voice), parts.content)
+  }
 }
