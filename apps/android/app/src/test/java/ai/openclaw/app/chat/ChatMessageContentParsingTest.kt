@@ -697,6 +697,7 @@ class ChatMessageContentParsingTest {
 
     assertEquals(
       listOf(
+        ChatMessageContent(type = "image", mimeType = "image/jpeg", url = "media://inbound/photo---af3c4068.jpg"),
         ChatMessageContent(type = "text", text = "**[Transcription]**\n> hi"),
         ChatMessageContent(
           type = "image",
@@ -755,5 +756,34 @@ class ChatMessageContentParsingTest {
       ),
       parseChatMessageContents(message),
     )
+  }
+
+  @Test
+    fun parsesSentImageFactsFromHistoryAboveTheCaption() {
+    val sent = "media://inbound/photo---af3c4068-8f30-4537-9c7b-f97cac656707.jpg"
+    val message =
+      Json
+        .parseToJsonElement(
+          """{"role":"user","content":"See attached.","__openclaw":{"media":[
+            {"url":"$sent","contentType":"image/jpeg","kind":"image","fileName":"photo.jpg","sizeBytes":52433},
+            {"url":"media://inbound/voice.m4a","contentType":"audio/mp4","kind":"audio"},
+            {"url":"media://inbound/..","contentType":"image/png"},
+            {"url":"media://inbound/diagram.svg","contentType":"image/svg+xml","kind":"image"},
+            {"path":"/home/user/.openclaw/media/inbound/raw.png","contentType":"image/png"},
+            {"url":"https://example.com/remote.png","kind":"image"}
+          ]}}""",
+        ).jsonObject
+
+    val parsed = parseChatMessageContents(message)
+
+    assertEquals(
+      listOf(
+        ChatMessageContent(type = "image", mimeType = "image/jpeg", fileName = "photo.jpg", url = sent, sizeBytes = 52433),
+        ChatMessageContent(type = "text", text = "See attached."),
+        ChatMessageContent(type = "audio", mimeType = "audio/mp4", fileName = "voice.m4a"),
+      ),
+      parsed,
+    )
+    assertEquals(sent, parsed.first().imageLoadKey())
   }
 }

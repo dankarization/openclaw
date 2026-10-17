@@ -3,6 +3,7 @@ package ai.openclaw.app.chat
 import ai.openclaw.app.asJsonStringOrNull
 import ai.openclaw.app.gateway.GatewaySession
 import ai.openclaw.app.gateway.SessionObserverDigest
+import ai.openclaw.app.gateway.isInboundMediaSource
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -195,6 +196,9 @@ data class ChatMessageContent(
   val widget: ChatWidgetPreview? = null,
   val toolActivity: ChatToolActivity? = null,
 )
+
+/** Managed images load by artifact ID; sent uploads have no artifact and load by their inbound reference. */
+internal fun ChatMessageContent.imageLoadKey(): String? = artifactId?.takeIf(String::isNotBlank) ?: url?.takeIf(::isInboundMediaSource)
 
 /** Bounded, display-safe projection of a transcript tool block. */
 @Serializable
