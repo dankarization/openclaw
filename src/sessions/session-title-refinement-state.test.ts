@@ -77,6 +77,17 @@ describe("countTitleRefinementMessage", () => {
       generatedName: NAME,
     });
   });
+
+  it("retains a bounded rolling excerpt of later tasks", () => {
+    let state: SessionTitleRefinementState | undefined;
+    for (let index = 1; index <= 10; index++) {
+      state = countTitleRefinementMessage(state, SID, NAME, `task ${index} ${"x".repeat(600)}`);
+    }
+    expect(state?.recentMessages).toHaveLength(8);
+    expect(state?.recentMessages?.[0]).toContain("task 3");
+    expect(state?.recentMessages?.at(-1)).toContain("task 10");
+    expect(state?.recentMessages?.every((message) => message.length <= 500)).toBe(true);
+  });
 });
 
 describe("shouldRunTitleRefinement", () => {

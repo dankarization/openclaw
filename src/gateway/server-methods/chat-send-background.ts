@@ -34,7 +34,7 @@ export function scheduleCreatedDashboardSessionTitle(
   context: GatewayRequestContext,
   titleSource?: string,
 ): void {
-  if (!created.isNew || created.entry.incognito || !titleSource) {
+  if (!created.isNew || created.entry.incognito || created.entry.displayName || !titleSource) {
     return;
   }
   scheduleChatDashboardSessionTitle({
