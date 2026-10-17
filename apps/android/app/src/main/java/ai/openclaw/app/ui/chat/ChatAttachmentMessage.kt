@@ -24,6 +24,13 @@ internal data class ChatAttachmentMessageParts(
 private val TRANSCRIPTION_MARKER = Regex("""^\s*\**\s*\[\s*Transcri(?:ption|pt)\s*]\s*\**\s*:?\s*$""", RegexOption.IGNORE_CASE)
 
 /**
+ * The Gateway's default transcript echo, `📝 "{transcript}"` (`DEFAULT_ECHO_TRANSCRIPT_FORMAT`
+ * in src/media-understanding/echo-transcript.ts), appended as the last line(s) of the user turn.
+ */
+private const val ECHO_TRANSCRIPT_PREFIX = "\uD83D\uDCDD \""
+private const val ECHO_TRANSCRIPT_SUFFIX = "\""
+
+/**
  * Splits `**[Transcription]**` + quoted lines (or any payload when the turn carries a
  * voice note) out of user text and drops an exact "See attached." placeholder body when
  * the message carries any attachment.
@@ -58,7 +65,7 @@ private fun splitTranscriptText(
 ): Pair<String, String?> {
   val lines = text.lines()
   val markerIndex = lines.indexOfFirst { TRANSCRIPTION_MARKER.matches(it) }
-  if (markerIndex < 0) return text to null
+  if (markerIndex < 0) return splitEchoTranscript(lines, hasVoiceNote) ?: (text to null)
   val payload = lines.drop(markerIndex + 1).dropWhile { it.isBlank() }.dropLastWhile { it.isBlank() }
   // A bare marker with no payload is not a transcript; keep the author's text as written.
   if (payload.isEmpty()) return text to null
@@ -73,4 +80,23 @@ private fun splitTranscriptText(
   if (transcript.isEmpty()) return text to null
   val body = lines.take(markerIndex).joinToString("\n").trim()
   return body to transcript
+}
+
+/**
+ * Splits the default `📝 "{transcript}"` echo off the end of a voice-note turn. Only a turn that
+ * carries a voice note qualifies, so an authored line that happens to start with 📝 stays text.
+ */
+private fun splitEchoTranscript(
+  lines: List<String>,
+  hasVoiceNote: Boolean,
+): Pair<String, String>? {
+  if (!hasVoiceNote) return null
+  val trimmed = lines.dropLastWhile { it.isBlank() }
+  val start = trimmed.indexOfFirst { it.trimStart().startsWith(ECHO_TRANSCRIPT_PREFIX) }
+  if (start < 0) return null
+  val echo = trimmed.drop(start).joinToString("\n").trim()
+  if (!echo.endsWith(ECHO_TRANSCRIPT_SUFFIX) || echo.length <= ECHO_TRANSCRIPT_PREFIX.length) return null
+  val transcript = echo.removePrefix(ECHO_TRANSCRIPT_PREFIX).removeSuffix(ECHO_TRANSCRIPT_SUFFIX).trim()
+  if (transcript.isEmpty()) return null
+  return trimmed.take(start).joinToString("\n").trim() to transcript
 }
