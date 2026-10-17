@@ -8392,14 +8392,31 @@ private fun parseHistoryMediaImages(
   }
 }
 
+/**
+ * Merges legacy `MediaPaths`/`MediaTypes` audio rows with canonical `__openclaw.media` facts.
+ * When both describe the same file, the canonical fact wins (it carries duration, size and
+ * transcription provenance) and the legacy row only fills a missing MIME type, so one audio row
+ * is emitted per voice note.
+ */
 private fun parseTranscriptAudioContents(obj: JsonObject): List<ChatMessageContent> {
   val legacy = parseLegacyTranscriptAudioContents(obj)
-  val canonical =
-    parseHistoryMediaAudio(obj).filterNot { audio ->
-      legacy.any { it.mimeType == audio.mimeType && it.fileName == audio.fileName }
+  val canonical = parseHistoryMediaAudio(obj)
+  val matched = BooleanArray(canonical.size)
+  val merged =
+    legacy.map { row ->
+      val index = canonical.indices.firstOrNull { !matched[it] && canonical[it].isSameAudioAs(row) } ?: return@map row
+      matched[index] = true
+      val fact = canonical[index]
+      fact.copy(
+        mimeType = fact.mimeType ?: row.mimeType,
+        fileName = fact.fileName ?: row.fileName,
+        transcribed = fact.transcribed || row.transcribed,
+      )
     }
-  return legacy + canonical
+  return merged + canonical.filterIndexed { index, _ -> !matched[index] }
 }
+
+private fun ChatMessageContent.isSameAudioAs(other: ChatMessageContent): Boolean = fileName == other.fileName && (mimeType == null || other.mimeType == null || mimeType == other.mimeType)
 
 private fun parseLegacyTranscriptAudioContents(obj: JsonObject): List<ChatMessageContent> {
   val paths =
@@ -8410,12 +8427,19 @@ private fun parseLegacyTranscriptAudioContents(obj: JsonObject): List<ChatMessag
     obj["MediaTypes"].asArrayOrNull()?.map { it.asStringOrNull().orEmpty() }
       ?: obj["MediaType"].asStringOrNull()?.let { listOf(it) }
       ?: emptyList()
+  val transcribedIndexes =
+    obj["MediaTranscribedIndexes"]
+      .asArrayOrNull()
+      ?.mapNotNull { it.asLongOrNull()?.toInt() }
+      ?.toSet()
+      .orEmpty()
   return paths.mapIndexedNotNull { index, path ->
     val mimeType = types.getOrNull(index)?.takeIf { it.startsWith("audio/") } ?: return@mapIndexedNotNull null
     ChatMessageContent(
       type = "audio",
       mimeType = mimeType,
       fileName = path.substringAfterLast('/').takeIf(String::isNotBlank),
+      transcribed = index in transcribedIndexes,
     )
   }
 }
@@ -8431,7 +8455,8 @@ private fun parseHistoryMediaAudio(obj: JsonObject): List<ChatMessageContent> {
     val fact = element.asObjectOrNull() ?: return@mapNotNull null
     val mimeType = fact["contentType"].asStringOrNull() ?: fact["mimeType"].asStringOrNull()
     val kind = fact["kind"].asStringOrNull() ?: mimeType?.substringBefore('/')
-    if (kind != "audio" || mimeType?.startsWith("audio/") != true) return@mapNotNull null
+    // An explicit `kind: "audio"` is enough; a MIME type, when present, must still be audio.
+    if (kind != "audio" || (mimeType != null && !mimeType.startsWith("audio/"))) return@mapNotNull null
     ChatMessageContent(
       type = "audio",
       mimeType = mimeType,
@@ -8440,6 +8465,7 @@ private fun parseHistoryMediaAudio(obj: JsonObject): List<ChatMessageContent> {
           ?: fact["url"].asStringOrNull()?.substringAfterLast('/')?.takeIf(String::isNotBlank),
       sizeBytes = fact["sizeBytes"].asLongOrNull(),
       durationMs = fact["durationMs"].asLongOrNull(),
+      transcribed = fact["transcribed"].asBooleanOrNull() == true,
     )
   }
 }

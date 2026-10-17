@@ -39,12 +39,15 @@ private const val ECHO_TRANSCRIPT_SUFFIX = "\""
  */
 internal fun splitChatAttachmentMessage(content: List<ChatMessageContent>): ChatAttachmentMessageParts {
   val hasAttachment = content.any { it.type != "text" }
-  val hasVoiceNote = content.any { it.type == "audio" || it.mimeType?.startsWith("audio/") == true }
+  val voiceNotes = content.filter { it.type == "audio" || it.mimeType?.startsWith("audio/") == true }
+  val hasVoiceNote = voiceNotes.isNotEmpty()
+  // Only Gateway-recorded transcription makes a `📝 "…"` line a transcript; otherwise it is a caption.
+  val hasTranscribedVoiceNote = voiceNotes.any { it.transcribed }
   val transcripts = mutableListOf<String>()
   val parts =
     content.mapNotNull { part ->
       if (part.type != "text") return@mapNotNull part
-      val (body, transcript) = splitTranscriptText(part.text.orEmpty(), hasVoiceNote)
+      val (body, transcript) = splitTranscriptText(part.text.orEmpty(), hasVoiceNote, hasTranscribedVoiceNote)
       transcript?.let(transcripts::add)
       val cleaned = if (hasAttachment || transcript != null) stripAttachmentPlaceholder(body) else body
       when {
@@ -63,10 +66,11 @@ private fun stripAttachmentPlaceholder(text: String): String = if (text.trim() =
 private fun splitTranscriptText(
   text: String,
   hasVoiceNote: Boolean,
+  hasTranscribedVoiceNote: Boolean,
 ): Pair<String, String?> {
   val lines = text.lines()
   val markerIndex = lines.indexOfFirst { TRANSCRIPTION_MARKER.matches(it) }
-  if (markerIndex < 0) return splitEchoTranscript(lines, hasVoiceNote) ?: (text to null)
+  if (markerIndex < 0) return splitEchoTranscript(lines, hasTranscribedVoiceNote) ?: (text to null)
   val payload = lines.drop(markerIndex + 1).dropWhile { it.isBlank() }.dropLastWhile { it.isBlank() }
   // A bare marker with no payload is not a transcript; keep the author's text as written.
   if (payload.isEmpty()) return text to null
@@ -84,14 +88,15 @@ private fun splitTranscriptText(
 }
 
 /**
- * Splits the default `📝 "{transcript}"` echo off the end of a voice-note turn. Only a turn that
- * carries a voice note qualifies, so an authored line that happens to start with 📝 stays text.
+ * Splits the default `📝 "{transcript}"` echo off the end of a voice-note turn. Only a turn whose
+ * voice note the Gateway marked as transcribed qualifies, so an authored caption shaped like the
+ * echo (for example when transcription is off or failed) stays the author's text.
  */
 private fun splitEchoTranscript(
   lines: List<String>,
-  hasVoiceNote: Boolean,
+  hasTranscribedVoiceNote: Boolean,
 ): Pair<String, String>? {
-  if (!hasVoiceNote) return null
+  if (!hasTranscribedVoiceNote) return null
   val trimmed = lines.dropLastWhile { it.isBlank() }
   val start = trimmed.indexOfFirst { it.trimStart().startsWith(ECHO_TRANSCRIPT_PREFIX) }
   if (start < 0) return null

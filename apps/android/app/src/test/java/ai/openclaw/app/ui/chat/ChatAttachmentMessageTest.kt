@@ -11,6 +11,7 @@ import org.junit.Test
 class ChatAttachmentMessageTest {
   private val image = ChatMessageContent(type = "image", mimeType = "image/jpeg", fileName = "1000186721.jpg")
   private val voice = ChatMessageContent(type = "audio", mimeType = "audio/mp4", fileName = "voice-note-b9526ed8-69ef-44d1-ad36-0123456789ab.m4a", durationMs = 76_000)
+  private val transcribedVoice = voice.copy(transcribed = true)
 
   @Test
   fun placeholderTextIsDroppedWhenTheMessageCarriesAttachments() {
@@ -112,8 +113,8 @@ class ChatAttachmentMessageTest {
   @Test
   fun defaultGatewayEchoIsSplitOutOfAVoiceNoteTurn() {
     val text = ChatMessageContent(type = "text", text = "See attached.\n\uD83D\uDCDD \"Here is the photo from today. More details are at www.github.com\"")
-    val parts = splitChatAttachmentMessage(listOf(image, text, voice))
-    assertEquals(listOf(image, voice), parts.content)
+    val parts = splitChatAttachmentMessage(listOf(image, text, transcribedVoice))
+    assertEquals(listOf(image, transcribedVoice), parts.content)
     assertEquals("Here is the photo from today. More details are at www.github.com", parts.transcript)
     assertEquals(
       listOf(ChatMessageContent(type = "text", text = "Here is the photo from today. More details are at www.github.com")),
@@ -124,8 +125,8 @@ class ChatAttachmentMessageTest {
   @Test
   fun defaultGatewayEchoKeepsAuthoredCaptionAndMultilineTranscript() {
     val text = ChatMessageContent(type = "text", text = "Look at this\n\uD83D\uDCDD \"line one\nline \"two\"\"\n")
-    val parts = splitChatAttachmentMessage(listOf(image, text, voice))
-    assertEquals(listOf(image, ChatMessageContent(type = "text", text = "Look at this"), voice), parts.content)
+    val parts = splitChatAttachmentMessage(listOf(image, text, transcribedVoice))
+    assertEquals(listOf(image, ChatMessageContent(type = "text", text = "Look at this"), transcribedVoice), parts.content)
     assertEquals("line one\nline \"two\"", parts.transcript)
   }
 
@@ -138,11 +139,20 @@ class ChatAttachmentMessageTest {
   }
 
   @Test
+  fun echoShapedCaptionWithoutTranscriptionProvenanceStaysTheAuthorsText() {
+    // Fails on 797dc1f: audio presence alone turned an authored `📝 "…"` caption into a transcript.
+    val text = ChatMessageContent(type = "text", text = "\uD83D\uDCDD \"remember this\"")
+    val parts = splitChatAttachmentMessage(listOf(image, text, voice))
+    assertEquals(listOf(image, text, voice), parts.content)
+    assertNull(parts.transcript)
+  }
+
+  @Test
   fun unterminatedEchoStaysText() {
     val text = ChatMessageContent(type = "text", text = "See attached.\n\uD83D\uDCDD \"cut off")
-    val parts = splitChatAttachmentMessage(listOf(image, text, voice))
+    val parts = splitChatAttachmentMessage(listOf(image, text, transcribedVoice))
     assertNull(parts.transcript)
-    assertEquals(listOf(image, text, voice), parts.content)
+    assertEquals(listOf(image, text, transcribedVoice), parts.content)
   }
 
   private val queuedPhoto = ChatOutboxAttachment("photo-1", "image", "image/jpeg", "1000186721.jpg", null, 91_525L)

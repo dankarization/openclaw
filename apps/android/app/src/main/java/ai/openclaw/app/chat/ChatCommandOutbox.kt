@@ -1,5 +1,6 @@
 package ai.openclaw.app.chat
 
+import ai.openclaw.app.ui.chat.CHAT_COMPOSER_MAX_IMAGE_DECODED_BYTES
 import androidx.room3.ColumnInfo
 import androidx.room3.Dao
 import androidx.room3.Entity
@@ -92,8 +93,8 @@ data class ChatOutboxAttachment(
   val byteLength: Long,
 )
 
-/** Largest stored photo a queued row decodes for its thumbnail (the composer's image ceiling). */
-internal const val OUTBOX_PREVIEW_IMAGE_MAX_BYTES = 6L * 1024L * 1024L
+/** Largest stored photo a queued row decodes for its thumbnail; owned by the composer's image ceiling. */
+internal const val OUTBOX_PREVIEW_IMAGE_MAX_BYTES = CHAT_COMPOSER_MAX_IMAGE_DECODED_BYTES
 
 /** True for a stored photo small enough to preview from its outbox chunks. */
 internal fun ChatOutboxAttachment.isOutboxPreviewImage(): Boolean =

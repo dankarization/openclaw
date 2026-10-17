@@ -2386,24 +2386,12 @@ internal fun ChatBubble(
         ChatVoiceTranscriptBlock(transcript = transcript, stateKey = messageId)
       }
     }
-    if (imageCount > CHAT_MESSAGE_IMAGE_WINDOW) {
-      val imageNavigation = rememberChatReaderAction()
-      FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        TextButton(onClick = {
-          imageNavigation.pause()
-          imagePage = currentImagePage - 1
-        }, enabled = currentImagePage > 0) { Text(nativeString("Previous images")) }
-        TextButton(onClick = {
-          imageNavigation.pause()
-          imagePage = currentImagePage + 1
-        }, enabled = currentImagePage < lastImagePage) { Text(nativeString("Next images")) }
-        Text(
-          nativeString("Images \$first–\$last of \$count", currentImagePage * CHAT_MESSAGE_IMAGE_WINDOW + 1, minOf((currentImagePage + 1) * CHAT_MESSAGE_IMAGE_WINDOW, imageCount), imageCount),
-          style = ClawTheme.type.caption,
-          color = ClawTheme.colors.textMuted,
-        )
-      }
-    }
+    ChatImagePageControls(
+      imageCount = imageCount,
+      currentPage = currentImagePage,
+      lastPage = lastImagePage,
+      onPageChange = { imagePage = it },
+    )
     Column(Modifier.padding(horizontal = CHAT_MESSAGE_TEXT_INSET_DP.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
       if (messageId != null) {
         ChatSourcePreviews(sourcePreviews, sourcePreviewConfig, loadSourceFavicon)
@@ -4810,4 +4798,31 @@ internal fun chatThinkingOptionLabel(
       rawLabel
     }
   return localizedUppercase(localizedLabel.take(1), languageTag) + localizedLabel.drop(1)
+}
+
+/** Previous/next controls for one message's image window; shown only past a single window. */
+@Composable
+internal fun ChatImagePageControls(
+  imageCount: Int,
+  currentPage: Int,
+  lastPage: Int,
+  onPageChange: (Int) -> Unit,
+) {
+  if (imageCount <= CHAT_MESSAGE_IMAGE_WINDOW) return
+  val imageNavigation = rememberChatReaderAction()
+  FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    TextButton(onClick = {
+      imageNavigation.pause()
+      onPageChange(currentPage - 1)
+    }, enabled = currentPage > 0) { Text(nativeString("Previous images")) }
+    TextButton(onClick = {
+      imageNavigation.pause()
+      onPageChange(currentPage + 1)
+    }, enabled = currentPage < lastPage) { Text(nativeString("Next images")) }
+    Text(
+      nativeString("Images \$first–\$last of \$count", currentPage * CHAT_MESSAGE_IMAGE_WINDOW + 1, minOf((currentPage + 1) * CHAT_MESSAGE_IMAGE_WINDOW, imageCount), imageCount),
+      style = ClawTheme.type.caption,
+      color = ClawTheme.colors.textMuted,
+    )
+  }
 }

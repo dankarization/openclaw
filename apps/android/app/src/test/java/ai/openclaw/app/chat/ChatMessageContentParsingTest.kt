@@ -740,18 +740,57 @@ class ChatMessageContentParsingTest {
 
   @Test
   fun legacyAndCanonicalVoiceFactsDoNotDuplicateTheVoiceRow() {
+    // Fails on 797dc1f: the legacy row won the overlap and dropped the canonical duration and size.
     val message =
       Json
         .parseToJsonElement(
           """{"role":"user","content":"hi","MediaPaths":["/tmp/voice.m4a"],"MediaTypes":["audio/mp4"],"__openclaw":{"media":[
-            {"url":"media://inbound/voice.m4a","contentType":"audio/mp4","kind":"audio","fileName":"voice.m4a"}
+            {"url":"media://inbound/voice.m4a","contentType":"audio/mp4","kind":"audio","fileName":"voice.m4a","durationMs":76000,"sizeBytes":4096,"transcribed":true}
           ]}}""",
         ).jsonObject
 
     assertEquals(
       listOf(
         ChatMessageContent(type = "text", text = "hi"),
-        ChatMessageContent(type = "audio", mimeType = "audio/mp4", fileName = "voice.m4a"),
+        ChatMessageContent(type = "audio", mimeType = "audio/mp4", fileName = "voice.m4a", sizeBytes = 4096, durationMs = 76_000, transcribed = true),
+      ),
+      parseChatMessageContents(message),
+    )
+  }
+
+  @Test
+  fun legacyOnlyVoiceRowKeepsTranscribedIndexes() {
+    val message =
+      Json
+        .parseToJsonElement(
+          """{"role":"user","content":"hi","MediaPaths":["/tmp/photo.jpg","/tmp/voice.m4a"],"MediaTypes":["image/jpeg","audio/mp4"],"MediaTranscribedIndexes":[1]}""",
+        ).jsonObject
+
+    assertEquals(
+      listOf(
+        ChatMessageContent(type = "text", text = "hi"),
+        ChatMessageContent(type = "audio", mimeType = "audio/mp4", fileName = "voice.m4a", transcribed = true),
+      ),
+      parseChatMessageContents(message),
+    )
+  }
+
+  @Test
+  fun canonicalAudioKindWithoutAMimeTypeKeepsTheVoiceRow() {
+    // Fails on 797dc1f: a bare `kind: "audio"` fact was discarded because contentType was absent.
+    val message =
+      Json
+        .parseToJsonElement(
+          """{"role":"user","content":"hi","__openclaw":{"media":[
+            {"kind":"audio","fileName":"voice.m4a","durationMs":76000},
+            {"kind":"audio","contentType":"image/jpeg","fileName":"not-audio.jpg"}
+          ]}}""",
+        ).jsonObject
+
+    assertEquals(
+      listOf(
+        ChatMessageContent(type = "text", text = "hi"),
+        ChatMessageContent(type = "audio", fileName = "voice.m4a", durationMs = 76_000),
       ),
       parseChatMessageContents(message),
     )

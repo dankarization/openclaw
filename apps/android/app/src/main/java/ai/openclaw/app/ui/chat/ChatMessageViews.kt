@@ -49,6 +49,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -393,9 +394,18 @@ fun ChatOutboxBubble(
   ) {
     // Same shape as the sent bubble: photo, the author's text (no "See attached."), voice row.
     val parts = remember(item.text, item.attachments) { chatOutboxBubbleParts(item.text, item.attachments) }
+    // Page queued photos like the sent bubble so only one window of stored previews is decoded at once.
+    val imageCount = parts.count { it.attachment != null && it.content.type == "image" }
+    var imagePage by rememberSaveable(item.id) { mutableIntStateOf(0) }
+    val lastImagePage = ((imageCount - 1) / CHAT_MESSAGE_IMAGE_WINDOW).coerceAtLeast(0)
+    val currentImagePage = imagePage.coerceIn(0, lastImagePage)
+    var imageIndex = 0
     parts.forEach { part ->
       val content = part.content
       val attachment = part.attachment
+      if (attachment != null && content.type == "image" && imageIndex++ / CHAT_MESSAGE_IMAGE_WINDOW != currentImagePage) {
+        return@forEach
+      }
       when {
         content.type == "text" -> {
           ChatMarkdown(text = content.text.orEmpty(), textColor = ClawTheme.colors.text)
@@ -418,6 +428,12 @@ fun ChatOutboxBubble(
         }
       }
     }
+    ChatImagePageControls(
+      imageCount = imageCount,
+      currentPage = currentImagePage,
+      lastPage = lastImagePage,
+      onPageChange = { imagePage = it },
+    )
     Row(
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(10.dp),

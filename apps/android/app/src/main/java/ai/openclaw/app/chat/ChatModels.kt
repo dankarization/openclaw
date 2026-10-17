@@ -193,6 +193,8 @@ data class ChatMessageContent(
   val playback: String? = null,
   val widget: ChatWidgetPreview? = null,
   val toolActivity: ChatToolActivity? = null,
+  /** True when the Gateway recorded that this audio attachment was transcribed for the turn. */
+  val transcribed: Boolean = false,
 )
 
 /** Bounded, display-safe projection of a transcript tool block. */
