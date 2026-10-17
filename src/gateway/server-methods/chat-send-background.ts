@@ -66,6 +66,7 @@ export function scheduleChatDashboardSessionTitle(
   void runWithGatewayIndependentRootWorkContinuation(async () => {
     // Naming only patches metadata under the title writer's session identity check.
     // It must not hold a turn admission while waiting on a model.
+    let joinedTitleRequest = false;
     const titled = await maybeGenerateDashboardSessionTitle({
       cfg: params.cfg,
       agentId: params.agentId,
@@ -86,12 +87,17 @@ export function scheduleChatDashboardSessionTitle(
           sessionId: params.admittedSessionId,
           agentId: params.agentId,
         }),
+      markJoined: (joined: boolean) => {
+        joinedTitleRequest = joined;
+      },
     });
     // Opt-in one-time refinement runs after the initial title pass; it never
     // creates a title, only refines an existing generated one. The turn that
     // persisted the initial title is not a "later" turn: skip counting it so
-    // the threshold counts subsequent task messages only.
-    if (!titled) {
+    // the threshold counts subsequent task messages only. A caller that joined
+    // an in-flight title request did NOT persist the title, so its message is
+    // a genuine later task and must count (Codex 4303083912).
+    if (!titled || joinedTitleRequest) {
       await maybeRefineDashboardSessionTitle({
         cfg: params.cfg,
         agentId: params.agentId,

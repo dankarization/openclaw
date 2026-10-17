@@ -1,7 +1,9 @@
 import { isChannelPartialDeliveryError } from "openclaw/plugin-sdk/channel-inbound";
 import { getGlobalHookRunner } from "openclaw/plugin-sdk/plugin-runtime";
 import { createSubsystemLogger, danger, logVerbose } from "openclaw/plugin-sdk/runtime-env";
+import { resolveStorePath } from "openclaw/plugin-sdk/session-store-runtime";
 import { truncateUtf16Safe } from "openclaw/plugin-sdk/text-utility-runtime";
+import { resolveTelegramAccountOwnerAgentId } from "./account-owner.js";
 import type { TelegramMessageContext } from "./bot-message-context.js";
 import { resolveDispatchTelegramContext } from "./bot-message-dispatch-context.js";
 import {
@@ -45,6 +47,7 @@ import {
   attachTopicLabelRefinementLabel,
   maybeRefineTopicLabel,
 } from "./topic-label-refinement.js";
+import { appendTopicNameCacheAccountScope, updateTopicName } from "./topic-name-cache.js";
 
 const EMPTY_RESPONSE_FALLBACK = "No response generated. Please try again.";
 const silentReplyDispatchLogger = createSubsystemLogger("telegram/silent-reply-dispatch");
@@ -294,6 +297,22 @@ async function scheduleDmTopicLabel(params: {
       }
       logVerbose(`auto-topic-label: generated label (len=${label.length})`);
       await params.bot.api.editForumTopic(context.chatId, topicThreadId, { name: label });
+      // Cache the automatic label so the refinement's manual-rename guard can
+      // observe later human renames of DM topics (Codex 4302875124).
+      await updateTopicName(
+        context.chatId,
+        topicThreadId,
+        { name: label },
+        appendTopicNameCacheAccountScope(
+          resolveStorePath(params.cfg.session?.store, {
+            agentId: resolveTelegramAccountOwnerAgentId({
+              cfg: params.cfg,
+              accountId: context.route.accountId,
+            }),
+          }),
+          context.route.accountId,
+        ),
+      ).catch(() => {});
       logVerbose(`auto-topic-label: renamed topic ${context.chatId}/${topicThreadId}`);
       // Attach the generated label to the already-armed refinement entry.
       if (refineCfg.enabled) {

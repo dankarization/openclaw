@@ -117,6 +117,8 @@ export type SessionTitleParams = {
   userMessage: string;
   /** A title prepared before its opening chat turn skips that turn when refining. */
   skipNextRefinementMessage?: boolean;
+  /** Reports whether this caller joined an in-flight title request instead of creating it. */
+  markJoined?: (joined: boolean) => void;
   commitGuard?: SessionSourceAssertion;
   withSource?: WorktreeSourceStage;
   retryFailedJoin?: boolean;
@@ -561,5 +563,10 @@ export async function maybeGenerateSessionTitle(params: SessionTitleParams): Pro
       { cancelOnError: true },
     );
   };
-  return await sessionTitleRequests.run(requestTarget, run, params.onTitleStateChanged);
+  return await sessionTitleRequests.run(
+    requestTarget,
+    run,
+    params.onTitleStateChanged,
+    params.markJoined,
+  );
 }

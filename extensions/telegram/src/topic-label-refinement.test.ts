@@ -43,7 +43,9 @@ vi.mock("./runtime.js", () => ({
   }),
 }));
 // mock-isolation: live topic-name cache writes go to real Telegram state; tests drive the double directly.
-vi.mock("./topic-name-cache.js", () => ({
+// The real account-scope helper stays imported so the scope builder matches production.
+vi.mock("./topic-name-cache.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./topic-name-cache.js")>()),
   getTopicName: vi.fn(async () => h.storeState.get("live-name")?.name),
   updateTopicName: vi.fn(async (_chatId: unknown, _threadId: unknown, patch: { name?: string }) => {
     h.storeState.set("live-name", { ...h.storeState.get("live-name"), ...patch });

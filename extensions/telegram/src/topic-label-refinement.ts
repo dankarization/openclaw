@@ -6,7 +6,11 @@ import { AUTO_TOPIC_LABEL_REFINE_PROMPT } from "./auto-topic-label-config.js";
 import { resolveAgentDir } from "./bot-message-dispatch.agent.runtime.js";
 import { generateTopicLabel } from "./bot-message-dispatch.runtime.js";
 import { getTelegramRuntime } from "./runtime.js";
-import { getTopicName, updateTopicName } from "./topic-name-cache.js";
+import {
+  appendTopicNameCacheAccountScope,
+  getTopicName,
+  updateTopicName,
+} from "./topic-name-cache.js";
 
 /**
  * Durable, bounded state for the opt-in one-time DM topic label refinement.
@@ -123,12 +127,15 @@ function resolveTopicNameCacheScope(params: {
   cfg: Parameters<typeof resolveAgentDir>[0];
   accountId: string;
 }): string {
-  return resolveStorePath(params.cfg.session?.store, {
-    agentId: resolveTelegramAccountOwnerAgentId({
-      cfg: params.cfg,
-      accountId: params.accountId,
+  return appendTopicNameCacheAccountScope(
+    resolveStorePath(params.cfg.session?.store, {
+      agentId: resolveTelegramAccountOwnerAgentId({
+        cfg: params.cfg,
+        accountId: params.accountId,
+      }),
     }),
-  });
+    params.accountId,
+  );
 }
 
 export async function maybeRefineTopicLabel(params: {
