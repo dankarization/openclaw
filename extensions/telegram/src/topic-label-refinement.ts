@@ -187,6 +187,13 @@ export async function maybeRefineTopicLabel(params: {
       params.logVerbose("auto-topic-label: refinement skipped (topic renamed manually)");
       return;
     }
+    // A pending first-turn label (armed before the async label lands) carries no
+    // name yet: claiming now would spend the single attempt on a title we never
+    // actually set, racing the attaching label generation (Codex 4302875130).
+    if (!entry.label.trim()) {
+      params.logVerbose("auto-topic-label: refinement deferred (initial label still pending)");
+      return;
+    }
     // Service authority BEFORE consuming the attempt: a stopped/reloaded
     // account must not have its single refinement spent on a turn that can
     // never reach the Bot API (Codex 4300799472).
@@ -237,6 +244,15 @@ export async function maybeRefineTopicLabel(params: {
     // Revalidate service authority immediately before the Bot API effect so a
     // stopped/reloaded account never renames after shutdown.
     params.assertServiceCurrent();
+    // Re-check the manual-rename guard after the awaited inference: a human
+    // may have renamed the topic while the LLM call was in flight, and the
+    // refinement must never overwrite that name (Codex 4303083920).
+    const postInferenceName = await getTopicName(params.chatId, params.threadId, cacheScope);
+    if (postInferenceName && postInferenceName !== entry.label) {
+      await store.register(key, { ...next, excerpts, done: true, outcome: "failed" });
+      params.logVerbose("auto-topic-label: refinement skipped after inference (renamed manually)");
+      return;
+    }
     await params.bot.api.editForumTopic(params.chatId, params.threadId, { name: label });
     await updateTopicName(params.chatId, params.threadId, { name: label }, cacheScope);
     await store.register(key, { ...next, label, done: true, outcome: "renamed" });
