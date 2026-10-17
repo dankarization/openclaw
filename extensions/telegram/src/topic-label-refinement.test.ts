@@ -197,10 +197,10 @@ describe("maybeRefineTopicLabel", () => {
     generateTopicLabel.mockClear();
     await maybeRefineTopicLabel({ ...base(), userMessage: "second detail" });
     expect(generateTopicLabel).toHaveBeenCalledTimes(1);
-    const call = generateTopicLabel.mock.calls[0][0];
-    expect(call.userMessage).toContain("Initial Label");
-    expect(call.userMessage).toContain("first detail");
-    expect(call.userMessage).toContain("second detail");
+    const call = generateTopicLabel.mock.calls[0]?.[0];
+    expect(call?.userMessage).toContain("Initial Label");
+    expect(call?.userMessage).toContain("first detail");
+    expect(call?.userMessage).toContain("second detail");
   });
 
   it("counts a follow-up that arrives while the first-turn label is generating (arm-before-async)", async () => {
@@ -228,10 +228,10 @@ describe("maybeRefineTopicLabel", () => {
     await maybeRefineTopicLabel({ ...base(), userMessage: "follow-up two" });
     expect(generateTopicLabel).toHaveBeenCalledTimes(1);
     expect(editForumTopic).toHaveBeenCalledTimes(1);
-    const call = generateTopicLabel.mock.calls[0][0];
-    expect(call.userMessage).toContain("Late Label");
-    expect(call.userMessage).toContain("follow-up one");
-    expect(call.userMessage).toContain("follow-up two");
+    const call = generateTopicLabel.mock.calls[0]?.[0];
+    expect(call?.userMessage).toContain("Late Label");
+    expect(call?.userMessage).toContain("follow-up one");
+    expect(call?.userMessage).toContain("follow-up two");
   });
 
   it("marks done without rename when model returns same label or empty", async () => {
@@ -300,6 +300,7 @@ describe("maybeRefineTopicLabel", () => {
     // Same topic after /reset: a new first turn re-arms, but the completed
     // refinement must not be reset for a second paid attempt.
     await armTopicLabelRefinement({
+      botId: BOT_ID,
       accountId: ACCOUNT,
       chatId: CHAT,
       threadId: THREAD,

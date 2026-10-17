@@ -14,10 +14,7 @@ export const AUTO_TOPIC_LABEL_REFINE_AFTER_MESSAGES_DEFAULT = 6;
 
 /** Per-key enablement: false disables, true enables, undefined inherits the next scope. */
 function resolveAutoTopicLabelKeyEnabled(
-  config:
-    | TelegramDirectConfig["autoTopicLabel"]
-    | TelegramAccountConfig["autoTopicLabel"]
-    | undefined,
+  config: TelegramDirectConfig["autoTopicLabel"] | undefined,
 ): boolean | undefined {
   const obj = config && typeof config === "object" ? config : undefined;
   if (config === false || obj?.enabled === false) {
