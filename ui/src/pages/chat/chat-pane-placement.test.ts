@@ -6,6 +6,7 @@ import type {
   WorkerEnvironmentProfileSummary,
 } from "../../../../packages/gateway-protocol/src/index.js";
 import type { GatewaySessionRow } from "../../api/types.ts";
+import type { SessionCapability } from "../../lib/sessions/session-capability.ts";
 import { createSessionsListResult } from "../../test-helpers/chat-model.ts";
 import { gatewayHelloForMethods } from "../../test-helpers/gateway-methods.ts";
 import {
@@ -24,6 +25,7 @@ import {
   offlineDeviceSession,
   createTestChatPane,
   createGatewayBrowserClientFixture,
+  createSessionCapabilityFixture,
 } from "./chat-pane.test-support.ts";
 
 function activePlacementSession() {
@@ -538,5 +540,85 @@ describe("local session placement actions", () => {
     answerWorkerPicker("Continue on worker");
     await moving;
     expect(request).not.toHaveBeenCalledWith("sessions.dispatch", expect.anything());
+  });
+});
+
+describe("cloud placement stop confirmation authority", () => {
+  it.each([
+    "unchanged",
+    "read-only",
+    "method-removed",
+    "replacement",
+    "busy",
+    "offline-device",
+    "new-placement",
+    "removed",
+  ] as const)("uses the current owner state after confirmation (%s)", async (change) => {
+    const request = dialogs.mockRequest(async (_method: string) => ({ ok: true }));
+    const reconcileMutation = vi.fn<SessionCapability["reconcileMutation"]>(async () => ({
+      status: "refreshed",
+    }));
+    const client = createGatewayBrowserClientFixture({ request });
+    const { pane, state } = createTestChatPane({
+      client,
+      sessions: createSessionCapabilityFixture({ reconcileMutation }),
+    });
+    pane.context.gateway.snapshot.hello = gatewayHelloForMethods(
+      ["sessions.reclaim"],
+      ["operator.write"],
+    );
+    const session = activePlacementSession();
+    state.sessionKey = session.key;
+    state.currentSessionId = session.sessionId;
+    state.sessionsResult = { ...createSessionsListResult(), sessions: [session] };
+    const stopping = dialogs.track(pane.changeHeaderPlacement(session, "reclaim"));
+    const actions = await waitForConfirmDialogActions();
+    const current = { ...session };
+    if (change === "read-only" || change === "method-removed") {
+      pane.context.gateway.snapshot.hello = gatewayHelloForMethods(
+        change === "method-removed" ? [] : ["sessions.reclaim"],
+        change === "read-only" ? ["operator.read"] : ["operator.write"],
+      );
+    }
+    if (change === "replacement") {
+      current.sessionId = "replacement-session";
+    }
+    if (change === "busy") {
+      current.hasActiveRun = true;
+    }
+    if (change === "offline-device") {
+      current.placement = {
+        ...current.placement,
+        runner: { kind: "device", status: "offline" },
+      };
+    }
+    if (change === "new-placement") {
+      current.placement = { ...current.placement, generation: 2 };
+    }
+    state.sessionsResult = {
+      ...createSessionsListResult(),
+      sessions: change === "removed" ? [] : [current],
+    };
+    expect(pane.context.gateway.snapshot.client).toBe(client);
+    answerConfirmDialog(actions, "confirm");
+    await stopping;
+    if (change === "unchanged") {
+      expect(pane.context.placementStartup.pause).toHaveBeenCalledOnce();
+      expect(request).toHaveBeenCalledWith(
+        "sessions.reclaim",
+        { key: session.key, agentId: "main" },
+        { timeoutMs: null },
+      );
+      expect(reconcileMutation).toHaveBeenCalledWith("main");
+    } else {
+      expect(pane.context.placementStartup.pause).not.toHaveBeenCalled();
+      expect(request).not.toHaveBeenCalledWith(
+        "sessions.reclaim",
+        expect.anything(),
+        expect.anything(),
+      );
+      expect(reconcileMutation).not.toHaveBeenCalled();
+      expect(state.chatError).toBeTruthy();
+    }
   });
 });
