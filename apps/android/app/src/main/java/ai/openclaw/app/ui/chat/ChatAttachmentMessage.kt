@@ -1,10 +1,8 @@
 package ai.openclaw.app.ui.chat
 
+import ai.openclaw.app.chat.CHAT_ATTACHMENT_PLACEHOLDER_TEXT
 import ai.openclaw.app.chat.ChatMessageContent
 import ai.openclaw.app.chat.ChatOutboxAttachment
-
-/** Placeholder the send path uses when the composer text is empty but attachments exist. */
-internal const val CHAT_ATTACHMENT_PLACEHOLDER_TEXT = "See attached."
 
 /**
  * One user message as rendered: attachments plus the author's own text, with any

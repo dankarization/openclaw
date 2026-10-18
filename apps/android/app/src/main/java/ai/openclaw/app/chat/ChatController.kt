@@ -3080,7 +3080,7 @@ class ChatController internal constructor(
       } else {
         "off"
       }
-    val text = if (trimmed.isEmpty() && attachments.isNotEmpty()) "See attached." else trimmed
+    val text = if (trimmed.isEmpty() && attachments.isNotEmpty()) CHAT_ATTACHMENT_PLACEHOLDER_TEXT else trimmed
 
     // Every send is journaled before the composer clears or any network attempt can lose
     // ownership; the durable row is the single recovery owner across process death.
