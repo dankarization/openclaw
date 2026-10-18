@@ -1,6 +1,6 @@
 import { resetPluginStateStoreForTests } from "openclaw/plugin-sdk/plugin-state-test-runtime";
 import { createOpenClawTestState, type OpenClawTestState } from "openclaw/plugin-sdk/test-state";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setTelegramPluginStateRuntimeForTests } from "./runtime-state.test-support.js";
 import {
   clearTelegramRuntimeForTest,
@@ -76,6 +76,15 @@ describe("topic-name-cache", () => {
     resetTelegramTopicNameCacheForTest();
     resetPluginStateStoreForTests();
     const accountScope = "legacy-store-path\0telegram-account:default";
+    // The upgrade copy runs off the inbound path (4304709769): lookups resolve
+    // without awaiting it, and the imported row lands shortly after.
+    await expect(getTopicName(-100123, 424242, accountScope)).resolves.toBeUndefined();
+    await vi.waitFor(
+      async () => {
+        await expect(getTopicName(-100123, 42, accountScope)).resolves.toBe("Legacy name");
+      },
+      { timeout: 10_000 },
+    );
     await expect(getTopicName(-100123, 42, accountScope)).resolves.toBe("Legacy name");
     await expect(getTopicCreatorUserId(-100123, 42, accountScope)).resolves.toBe(7);
     // The imported entry now persists under the account scope itself.
@@ -87,5 +96,41 @@ describe("topic-name-cache", () => {
     resetTelegramTopicNameCacheForTest();
     resetPluginStateStoreForTests();
     await expect(getTopicName(-100123, 42, accountScope)).resolves.toBe("Fresh");
+  });
+
+  it("resumes a partial legacy import without clobbering copied rows (4304709767)", async () => {
+    await updateTopicName(
+      -100123,
+      42,
+      { name: "Legacy 42", creatorUserId: 7 },
+      "legacy-store-path",
+    );
+    await updateTopicName(
+      -100123,
+      43,
+      { name: "Legacy 43", creatorUserId: 8 },
+      "legacy-store-path",
+    );
+    // Simulate a prior process that crashed after copying only topic 42 (and
+    // renaming it): the account-scoped store already persists that row. The
+    // old emptiness gate would skip the whole import and lose topic 43.
+    await updateTopicName(
+      -100123,
+      42,
+      { name: "Fresh 42" },
+      "legacy-store-path\0telegram-account:default",
+    );
+    resetTelegramTopicNameCacheForTest();
+    resetPluginStateStoreForTests();
+    const accountScope = "legacy-store-path\0telegram-account:default";
+    await vi.waitFor(
+      async () => {
+        await expect(getTopicName(-100123, 43, accountScope)).resolves.toBe("Legacy 43");
+      },
+      { timeout: 10_000 },
+    );
+    // The already-copied row survives idempotently with its newer values.
+    await expect(getTopicName(-100123, 42, accountScope)).resolves.toBe("Fresh 42");
+    await expect(getTopicCreatorUserId(-100123, 43, accountScope)).resolves.toBe(8);
   });
 });

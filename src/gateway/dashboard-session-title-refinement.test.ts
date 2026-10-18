@@ -337,4 +337,88 @@ describe("maybeRefineDashboardSessionTitle", () => {
       }),
     );
   });
+
+  it("consumes a pre-generated title's opening-turn marker while refinement is disabled (4305281873)", async () => {
+    let current: SessionEntry = {
+      ...baseEntry,
+      displayName: "First Pass Title",
+      titleRefinement: initializeTitleRefinementState("session-1", "First Pass Title", {
+        skipNextMessage: true,
+      }),
+    };
+    updateSessionEntry.mockImplementation(async (_scope, update) => {
+      const patch = await update({ ...current });
+      current = patch ? { ...current, ...patch } : current;
+      loadSessionEntry.mockReturnValue(current);
+      return current;
+    });
+    await maybeRefineDashboardSessionTitle({
+      ...refineParams(current),
+      cfg,
+      currentUserMessage: "Plan the database migration",
+    });
+    expect(generateConversationLabelWithFallback).not.toHaveBeenCalled();
+    expect(current.titleRefinement).toMatchObject({
+      skipNextMessage: false,
+      refinementDone: false,
+      taskMessagesSinceTitle: 0,
+    });
+  });
+
+  it("after a disabled run consumed the marker, the first enabled task counts as message one (4305281873)", async () => {
+    let current: SessionEntry = {
+      ...baseEntry,
+      displayName: "First Pass Title",
+      titleRefinement: initializeTitleRefinementState("session-1", "First Pass Title", {
+        skipNextMessage: true,
+      }),
+    };
+    updateSessionEntry.mockImplementation(async (_scope, update) => {
+      const patch = await update({ ...current });
+      current = patch ? { ...current, ...patch } : current;
+      loadSessionEntry.mockReturnValue(current);
+      return current;
+    });
+    await maybeRefineDashboardSessionTitle({
+      ...refineParams(current),
+      cfg,
+      currentUserMessage: "Plan the database migration",
+    });
+    await maybeRefineDashboardSessionTitle({
+      ...refineParams(current),
+      currentUserMessage: "Investigate PostgreSQL migration",
+    });
+    expect(current.titleRefinement).toMatchObject({
+      taskMessagesSinceTitle: 1,
+      refinementDone: false,
+    });
+    expect(generateConversationLabelWithFallback).not.toHaveBeenCalled();
+  });
+
+  it("refinement allows the regular model when no utility model is configured (4305281869)", async () => {
+    resolveUtilityModelRefForAgent.mockReturnValue(undefined);
+    let current: SessionEntry = {
+      ...baseEntry,
+      displayName: "First Pass Title",
+      titleRefinement: {
+        taskMessagesSinceTitle: 1,
+        refinementDone: false,
+        sessionId: "session-1",
+        generatedName: "First Pass Title",
+      },
+    };
+    updateSessionEntry.mockImplementation(async (_scope, update) => {
+      const patch = await update({ ...current });
+      current = patch ? { ...current, ...patch } : current;
+      loadSessionEntry.mockReturnValue(current);
+      return current;
+    });
+    await maybeRefineDashboardSessionTitle(refineParams(current));
+    expect(generateConversationLabelWithFallback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        utilityOnly: true,
+        allowRegularFallbackWithoutUtility: true,
+      }),
+    );
+  });
 });

@@ -262,6 +262,12 @@ export async function generateDashboardSessionTitle(params: {
   entry?: DashboardSessionTitleModelEntry;
   sourceText: string;
   utilityOnly?: boolean;
+  /**
+   * With utilityOnly, allows the regular model when no utility model is
+   * configured at all; the random-slug fallback stays suppressed (refinement
+   * must not no-op on an unconfigured utilityModel — Codex 4305281869).
+   */
+  allowRegularFallbackWithoutUtility?: boolean;
   abortSignal?: AbortSignal;
   assertCurrent?: () => void;
   operatorAuthority?: AdmittedRunOperatorAuthority;
@@ -312,6 +318,9 @@ export async function generateDashboardSessionTitle(params: {
         assertCurrent: params.assertCurrent,
         operatorAuthority: params.operatorAuthority,
         ...(params.utilityOnly ? { utilityOnly: true } : {}),
+        ...(params.allowRegularFallbackWithoutUtility
+          ? { allowRegularFallbackWithoutUtility: true }
+          : {}),
       });
     } catch {
       params.assertCurrent?.();

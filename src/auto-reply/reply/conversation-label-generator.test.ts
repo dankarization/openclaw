@@ -434,6 +434,28 @@ describe("generateConversationLabelWithFallback", () => {
     expect(runIsolatedCompletion).not.toHaveBeenCalled();
   });
 
+  it("utilityOnly without any utility ref stays null without inference by default", async () => {
+    const { utilityModelRef: _utilityModelRef, ...noUtilityParams } = params;
+    await expect(
+      generateConversationLabelWithFallback({ ...noUtilityParams, utilityOnly: true }),
+    ).resolves.toBeNull();
+    expect(runIsolatedCompletion).not.toHaveBeenCalled();
+  });
+
+  it("utilityOnly without any utility ref runs the regular model when allowRegularFallbackWithoutUtility is set (4305281869)", async () => {
+    const { utilityModelRef: _utilityModelRef, ...noUtilityParams } = params;
+    runIsolatedCompletion.mockResolvedValueOnce({ text: "Invoice help" });
+    await expect(
+      generateConversationLabelWithFallback({
+        ...noUtilityParams,
+        utilityOnly: true,
+        allowRegularFallbackWithoutUtility: true,
+      }),
+    ).resolves.toBe("Invoice help");
+    expect(runIsolatedCompletion).toHaveBeenCalledTimes(1);
+    expect(runIsolatedCompletion.mock.calls[0]?.[0]?.model).toBe("gpt-main");
+  });
+
   it("uses the regular candidate directly when no utility model exists", async () => {
     const { utilityModelRef: _utilityModelRef, ...regularOnlyParams } = params;
     await generateConversationLabelWithFallback(regularOnlyParams);

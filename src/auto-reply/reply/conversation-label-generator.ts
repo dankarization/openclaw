@@ -49,6 +49,13 @@ type ConversationLabelFallbackParams = ConversationLabelParams & {
   normalizeLabel?: (label: string) => string | null;
   /** Speculative callers use only the utility chain, without regular-model recovery. */
   utilityOnly?: boolean;
+  /**
+   * Utility-only callers may run the regular model when no utility model is
+   * configured at all; the random-slug fallback stays suppressed. Refinement
+   * sets this so an unconfigured utilityModel is not a permanent no-op
+   * (Codex 4305281869); speculative naming does not.
+   */
+  allowRegularFallbackWithoutUtility?: boolean;
 };
 
 function resolvePositiveInteger(value: number | undefined, fallback: number): number {
@@ -265,12 +272,19 @@ export async function generateConversationLabelWithFallback(
       : candidate;
   }
   const utilityAttempts = utilityAttempt ? [utilityAttempt] : [];
+  // Utility-only runs stay on the utility route, except a refinement caller
+  // may fall back to the regular model when no utility model is configured at
+  // all — otherwise an unconfigured utilityModel would permanently no-op the
+  // opt-in refinement (Codex 4305281869).
+  const regularAllowed =
+    !params.utilityOnly ||
+    (utilityAttempts.length === 0 && params.allowRegularFallbackWithoutUtility === true);
   return await runLabelAttempts({
     ...params,
     agentId,
     // Utility-only callers pre-claim the regular selection so a utility ref that
     // resolves onto the primary model is skipped instead of spending on it.
-    attempts: params.utilityOnly ? utilityAttempts : [...utilityAttempts, regularAttempt],
-    ...(params.utilityOnly ? { skipAttempts: [regularAttempt] } : {}),
+    attempts: regularAllowed ? [...utilityAttempts, regularAttempt] : utilityAttempts,
+    ...(regularAllowed ? {} : { skipAttempts: [regularAttempt] }),
   });
 }

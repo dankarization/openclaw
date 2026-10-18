@@ -23,6 +23,7 @@ type TopicNameStoreState = {
   lastUpdatedAt: number;
   store: TopicNameStore;
   hydratePromise?: Promise<void>;
+  legacyImportAttempts?: number;
   persistentStore: PluginStateKeyedStore<TopicEntry>;
   /** Full cache scope (store path plus account suffix) backing this state. */
   scopeKey: string;
@@ -128,28 +129,81 @@ function hydrateTopicStoreState(state: TopicNameStoreState): Promise<void> {
     // Upgrade path: pre-4302875118 installs persisted topic names under the
     // bare session-store-path namespace. Every production caller now derives
     // the scope with the account id appended, which would hide those entries
-    // forever (Telegram cannot recover topic ownership later). One-time import
-    // (per store state; hydrate runs once per process per scope) of the
-    // bare-path namespace when the account-scoped store is still empty.
-    if (state.scopeKey.includes(LEGACY_ACCOUNT_SCOPE_MARKER) && state.store.size === 0) {
-      const legacyScope = state.scopeKey.slice(
-        0,
-        state.scopeKey.indexOf(LEGACY_ACCOUNT_SCOPE_MARKER),
-      );
-      const legacyEntries = await getTopicStoreState(legacyScope).persistentStore.entries();
-      for (const { key, value } of legacyEntries) {
-        if (!isTopicEntry(value) || state.store.has(key)) {
-          continue;
-        }
-        state.store.set(key, value);
-        await state.persistentStore.register(key, value);
-      }
+    // forever (Telegram cannot recover topic ownership later). The copy is
+    // resumable, idempotent, and chunked, and it runs off the inbound path so
+    // lookups below never await it (Codex 4304709767, 4304709769).
+    if (state.scopeKey.includes(LEGACY_ACCOUNT_SCOPE_MARKER)) {
+      kickLegacyTopicEntryImport(state);
     }
   })().catch((error: unknown) => {
     state.hydratePromise = undefined;
     throw error;
   });
   return state.hydratePromise;
+}
+
+const LEGACY_IMPORT_CHUNK = 32;
+const LEGACY_IMPORT_YIELD_MS = 25;
+const LEGACY_IMPORT_MAX_ATTEMPTS = 3;
+
+/**
+ * Resumable, idempotent upgrade copy of the pre-account-scoped topic
+ * namespace (Codex 4304709767): a crash or a rejected register after some
+ * rows were copied must not lose the remaining rows (their creatorUserId
+ * facts are unrecoverable from Telegram), so the copy skips rows the
+ * account-scoped store already holds instead of gating on emptiness. Copies
+ * in bounded chunks with pauses between them so bulk legacy writes never
+ * monopolise the state store's write lane against concurrent inbound lookups
+ * (Codex 4304709769).
+ */
+async function importLegacyTopicEntries(state: TopicNameStoreState): Promise<void> {
+  const markerIndex = state.scopeKey.indexOf(LEGACY_ACCOUNT_SCOPE_MARKER);
+  if (markerIndex <= 0) {
+    return;
+  }
+  const legacyScope = state.scopeKey.slice(0, markerIndex);
+  const legacyEntries = await getTopicStoreState(legacyScope).persistentStore.entries();
+  let copied = 0;
+  for (const { key, value } of legacyEntries) {
+    if (!isTopicEntry(value) || state.store.has(key)) {
+      continue;
+    }
+    // Durable idempotency: a row copied by a previous (possibly crashed) run
+    // persists in the account-scoped store even when this run's memory map
+    // has not observed it; re-copying would clobber a newer rename.
+    const durable = await state.persistentStore.lookup(key);
+    if (isTopicEntry(durable)) {
+      state.store.set(key, durable);
+      continue;
+    }
+    state.store.set(key, value);
+    await state.persistentStore.register(key, value);
+    copied += 1;
+    if (copied % LEGACY_IMPORT_CHUNK === 0) {
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, LEGACY_IMPORT_YIELD_MS);
+      });
+    }
+  }
+}
+
+/** Runs the background legacy import once per hydration, attempt-capped. */
+function kickLegacyTopicEntryImport(state: TopicNameStoreState): void {
+  if ((state.legacyImportAttempts ?? 0) >= LEGACY_IMPORT_MAX_ATTEMPTS) {
+    return;
+  }
+  state.legacyImportAttempts = (state.legacyImportAttempts ?? 0) + 1;
+  void importLegacyTopicEntries(state)
+    .then(() => {
+      // Completed: the cap check makes later hydrations skip re-kicking.
+      state.legacyImportAttempts = LEGACY_IMPORT_MAX_ATTEMPTS;
+    })
+    .catch((error: unknown) => {
+      // Resumable per key: the next cache operation re-hydrates and retries
+      // the remaining rows, bounded by the attempt cap.
+      console.warn(`telegram topic-name-cache: legacy import attempt failed: ${String(error)}`);
+      state.hydratePromise = undefined;
+    });
 }
 
 function nextUpdatedAt(scope?: string): number {

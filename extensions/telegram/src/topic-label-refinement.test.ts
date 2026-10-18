@@ -452,4 +452,24 @@ describe("maybeRefineTopicLabel", () => {
     expect(generateTopicLabel).toHaveBeenCalledTimes(1);
     expect(editForumTopic).toHaveBeenCalledTimes(1);
   });
+
+  it("serializes concurrent turns so the single attempt is claimed exactly once (4304709772)", async () => {
+    await armTopicLabelRefinement({
+      botId: BOT_ID,
+      accountId: ACCOUNT,
+      chatId: CHAT,
+      threadId: THREAD,
+      label: "Initial Label",
+    });
+    await Promise.all([
+      maybeRefineTopicLabel({ ...base(), afterMessages: 1, userMessage: "First task" }),
+      maybeRefineTopicLabel({ ...base(), afterMessages: 1, userMessage: "Second task" }),
+    ]);
+    expect(generateTopicLabel).toHaveBeenCalledTimes(1);
+    expect(editForumTopic).toHaveBeenCalledTimes(1);
+    expect(storeState.get(`${BOT_ID}:${ACCOUNT}:${CHAT}:${THREAD}`)).toMatchObject({
+      done: true,
+      count: 1,
+    });
+  });
 });

@@ -53,8 +53,59 @@ export async function maybeRefineDashboardSessionTitle(params: SessionTitleParam
     if (entry.label?.trim() || !entry.displayName?.trim()) {
       return;
     }
+    const generatedName = entry.displayName.trim();
+    const priorState = entry.titleRefinement;
     const refineConfig = resolveSessionTitleRefineConfig({ cfgSession: params.cfg.session });
     if (!refineConfig.enabled) {
+      // Consume a pre-generated title's opening-turn marker even while
+      // refinement is disabled: a marker that survives until the feature is
+      // enabled would discard the first post-enable task as a repeat of the
+      // opening turn and fire every threshold one message late
+      // (Codex 4305281873). Only a real task turn consumes it, so control-only
+      // messages still leave the marker armed.
+      if (
+        !priorState?.skipNextMessage ||
+        priorState.refinementDone ||
+        priorState.sessionId !== params.sessionId ||
+        priorState.generatedName !== generatedName
+      ) {
+        return;
+      }
+      const skillCommands = await prepareTitleSkillCommands({
+        cfg: params.cfg,
+        agentId: params.agentId,
+        entry,
+        sessionKey,
+        assertCurrent: assertMemoryCurrent,
+      });
+      const source =
+        resolveSessionTitleSource(params.currentUserMessage ?? "", skillCommands) ??
+        resolveSessionTitleSource(params.userMessage, skillCommands);
+      if (!source) {
+        return;
+      }
+      await patchSessionEntryCore(
+        scope,
+        (current) => {
+          if (
+            current.sessionId !== params.sessionId ||
+            current.label?.trim() ||
+            current.displayName?.trim() !== generatedName ||
+            !current.titleRefinement ||
+            current.titleRefinement.sessionId !== params.sessionId ||
+            current.titleRefinement.generatedName !== generatedName ||
+            current.titleRefinement.refinementDone ||
+            !current.titleRefinement.skipNextMessage
+          ) {
+            return null;
+          }
+          return { titleRefinement: { ...current.titleRefinement, skipNextMessage: false } };
+        },
+        {
+          requireWriteSuccess: false,
+          ...sessionEntryCommitGuardOptions(assertMemoryCurrent),
+        },
+      );
       return;
     }
     // Only real task turns advance the threshold: control-only slash messages
@@ -75,8 +126,6 @@ export async function maybeRefineDashboardSessionTitle(params: SessionTitleParam
         return;
       }
     }
-    const generatedName = entry.displayName.trim();
-    const priorState = entry.titleRefinement;
     // Provenance: only names the automatic title writer marked (via
     // initializeTitleRefinementState) may be refined. A displayName that
     // exists without this state was set explicitly by the user/operator and
@@ -189,7 +238,9 @@ export async function maybeRefineDashboardSessionTitle(params: SessionTitleParam
       return;
     }
     // Utility-only mode: refinement must never fall back to a random slug —
-    // a provider outage consumes the optional attempt without a rename.
+    // a provider outage consumes the optional attempt without a rename. When
+    // no utility model is configured at all, the regular model may still run
+    // so the opt-in refinement is not a permanent no-op (Codex 4305281869).
     const refined = await generateDashboardSessionTitle({
       cfg: params.cfg,
       agentId: params.agentId,
@@ -197,6 +248,7 @@ export async function maybeRefineDashboardSessionTitle(params: SessionTitleParam
       sourceText,
       promptOverride: SESSION_TITLE_REFINEMENT_PROMPT,
       utilityOnly: true,
+      allowRegularFallbackWithoutUtility: true,
       operatorAuthority: params.operatorAuthority,
       ...(memory ? { assertCurrent: assertMemoryCurrent } : {}),
       // A single-concurrency/local model queues the refinement behind the

@@ -64,6 +64,29 @@ async function loadRefinementStore() {
   });
 }
 
+type MaybeRefineTopicLabelParams = Parameters<typeof maybeRefineTopicLabel>[0];
+
+/**
+ * Per-topic serialization for the refinement's read-modify-write sequences:
+ * the durable counter increment and the one-attempt claim each read the entry,
+ * decide, and write back, and the store serialises individual writes but not
+ * the lookups between them (Codex 4304709772).
+ */
+const refinementLocks = new Map<string, Promise<unknown>>();
+
+async function withRefinementLock(key: string, run: () => Promise<void>): Promise<void> {
+  const prior = refinementLocks.get(key) ?? Promise.resolve();
+  const next = prior.catch(() => undefined).then(run);
+  refinementLocks.set(key, next);
+  try {
+    await next;
+  } finally {
+    if (refinementLocks.get(key) === next) {
+      refinementLocks.delete(key);
+    }
+  }
+}
+
 /** Records that this bot generated the initial label; arms the refinement counter. */
 export async function armTopicLabelRefinement(params: {
   botId: number | string | undefined;
@@ -169,6 +192,23 @@ export async function maybeRefineTopicLabel(params: {
     if (isControlCommandMessage(params.userMessage, params.cfg)) {
       return;
     }
+    // Serialize the lookup-modify-write sequence per topic: the store
+    // serialises individual writes but not the reads between them, so
+    // overlapping dispatch turns would lose a counter increment below the
+    // threshold or spend the single refinement attempt twice at it
+    // (Codex 4304709772).
+    await withRefinementLock(refinementKey(params), () => runRefinementTurn(params));
+  } catch (err) {
+    params.logVerbose(`auto-topic-label: refinement failed: ${String(err)}`);
+  }
+}
+
+/**
+ * One refinement turn for a single topic, serialized per refinement key by
+ * withRefinementLock (Codex 4304709772).
+ */
+async function runRefinementTurn(params: MaybeRefineTopicLabelParams): Promise<void> {
+  try {
     const key = refinementKey(params);
     const store = await loadRefinementStore();
     const entry = await store.lookup(key);
