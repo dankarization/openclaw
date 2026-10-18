@@ -43,6 +43,15 @@ class ChatAttachmentMessageTest {
   }
 
   @Test
+  fun transcriptionMarkerKeepsAuthoredMarkdownIndentationAndTrailingSpaces() {
+    val caption = "    val answer = 42  "
+    val text = ChatMessageContent(type = "text", text = "$caption\n\n**[Transcription]**\n> spoken")
+    val parts = splitChatAttachmentMessage(listOf(text, transcribedVoice))
+    assertEquals(listOf(ChatMessageContent(type = "text", text = caption), transcribedVoice), parts.content)
+    assertEquals("spoken", parts.transcript)
+  }
+
+  @Test
   fun ordinaryMarkdownIsUntouched() {
     val text = ChatMessageContent(type = "text", text = "**bold** and > not a transcript")
     val parts = splitChatAttachmentMessage(listOf(text))
@@ -130,6 +139,15 @@ class ChatAttachmentMessageTest {
     val parts = splitChatAttachmentMessage(listOf(image, text, transcribedVoice))
     assertEquals(listOf(image, ChatMessageContent(type = "text", text = caption), transcribedVoice), parts.content)
     assertEquals("actual spoken words", parts.transcript)
+  }
+
+  @Test
+  fun defaultGatewayEchoKeepsAuthoredMarkdownIndentationAndTrailingSpaces() {
+    val caption = "    val answer = 42  "
+    val text = ChatMessageContent(type = "text", text = "$caption\n\n\uD83D\uDCDD \"spoken\"")
+    val parts = splitChatAttachmentMessage(listOf(text, transcribedVoice))
+    assertEquals(listOf(ChatMessageContent(type = "text", text = caption), transcribedVoice), parts.content)
+    assertEquals("spoken", parts.transcript)
   }
 
   @Test

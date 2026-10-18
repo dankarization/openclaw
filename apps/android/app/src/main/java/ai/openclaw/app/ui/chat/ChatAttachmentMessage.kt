@@ -83,7 +83,7 @@ private fun splitTranscriptText(
       .joinToString("\n") { line -> line.trimStart().removePrefix(">").removePrefix(" ") }
       .trim()
   if (transcript.isEmpty()) return text to null
-  val body = lines.take(markerIndex).joinToString("\n").trim()
+  val body = authoredTextBeforeTranscript(lines, markerIndex)
   return body to transcript
 }
 
@@ -106,8 +106,15 @@ private fun splitEchoTranscript(
   if (!echo.endsWith(ECHO_TRANSCRIPT_SUFFIX) || echo.length <= ECHO_TRANSCRIPT_PREFIX.length) return null
   val transcript = echo.removePrefix(ECHO_TRANSCRIPT_PREFIX).removeSuffix(ECHO_TRANSCRIPT_SUFFIX).trim()
   if (transcript.isEmpty()) return null
-  return trimmed.take(start).joinToString("\n").trim() to transcript
+  return authoredTextBeforeTranscript(trimmed, start) to transcript
 }
+
+// An empty line before an appended transcript is its separator. Keep the author's
+// indentation and trailing spaces, which can be meaningful Markdown.
+private fun authoredTextBeforeTranscript(
+  lines: List<String>,
+  markerIndex: Int,
+): String = lines.take(markerIndex).joinToString("\n").removeSuffix("\n")
 
 /** One row of a queued (outbox) user bubble; [attachment] is set for stored attachments. */
 internal data class ChatOutboxBubblePart(
