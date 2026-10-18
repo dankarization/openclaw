@@ -63,14 +63,6 @@ async function transcribeAudio(
     return undefined;
   }
 
-  if (shouldLogVerbose()) {
-    logVerbose(
-      firstOnly
-        ? `audio-preflight: transcribing attachment ${firstAudio.index} for mention check`
-        : "audio-preflight: transcribing configured audio selection",
-    );
-  }
-
   try {
     const media = firstOnly ? [firstAudio] : attachments;
     const { agentDir, providers, activeModel } = params;
@@ -134,10 +126,6 @@ async function transcribeAudio(
       }
     }
     ctx.media = facts;
-
-    if (shouldLogVerbose()) {
-      logVerbose(`audio-preflight: transcribed ${transcript.length} chars`);
-    }
 
     return transcript;
   } catch (err) {

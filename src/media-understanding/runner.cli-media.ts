@@ -1,4 +1,3 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 import { normalizeLowercaseStringOrEmpty } from "@openclaw/normalization-core/string-coerce";
 import { writeExternalFileWithinRoot } from "../infra/fs-safe.js";
@@ -25,7 +24,6 @@ export async function resolveCliMediaPath(params: {
   }
 
   const wavPath = path.join(params.outputDir, `${path.parse(params.mediaPath).name}.wav`);
-  await fs.mkdir(params.outputDir, { recursive: true });
   await writeExternalFileWithinRoot({
     rootDir: params.outputDir,
     path: path.basename(wavPath),
