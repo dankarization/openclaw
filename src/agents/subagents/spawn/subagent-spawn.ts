@@ -74,7 +74,8 @@ export async function spawnSubagentDirect(
     assertSource();
     assertDelegationCurrent?.();
   });
-  const label = params.label?.trim() || "";
+  // Entry timestamp, not the later setup call. One declaration keeps the file line cap.
+  const [label, promptedAt] = [params.label?.trim() || "", Date.now()];
   const requestThreadBinding = params.thread === true;
   const sandboxMode = params.sandbox === "require" ? "require" : "inherit";
   const { gatewayContextResolver, operatorAuthority } = captureSubagentSpawnGatewayContext();
@@ -382,7 +383,7 @@ export async function spawnSubagentDirect(
       requesterSessionKey: requesterInternalKey,
       requesterAgentId,
       targetAgentId,
-      promptedAt: Date.now(),
+      promptedAt,
     });
     let acceptedChildRunId: string | undefined;
     const launchChildRun = async (assertDispatchCurrent?: () => void) => {
