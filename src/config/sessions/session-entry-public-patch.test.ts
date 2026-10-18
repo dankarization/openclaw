@@ -6,6 +6,7 @@ describe("preserveGenerationPrivateFields", () => {
   it("restores titleRefinement across same-session plugin upserts (4304147107)", () => {
     const persistedEntry: InternalSessionEntry = {
       sessionId: "session-1",
+      updatedAt: 123,
       lifecycleRevision: "rev-1",
       titleRefinement: {
         sessionId: "session-1",
@@ -27,6 +28,7 @@ describe("preserveGenerationPrivateFields", () => {
   it("does not restore private fields when the session rotates", () => {
     const persistedEntry: InternalSessionEntry = {
       sessionId: "session-1",
+      updatedAt: 123,
       lifecycleRevision: "rev-1",
       titleRefinement: {
         sessionId: "session-1",

@@ -111,7 +111,9 @@ test("turns with neither text nor attachments are still not scheduled", async ()
     sessionKey: "agent:main:dashboard:empty",
     storePath: "/tmp/sessions.json",
   });
-  await new Promise((resolve) => setTimeout(resolve, 25));
+  await new Promise((resolve) => {
+    setTimeout(resolve, 25);
+  });
   expect(title.generate).not.toHaveBeenCalled();
   expect(title.refine).not.toHaveBeenCalled();
 });
