@@ -34,6 +34,8 @@ private data class CachedMessageContent(
   val sizeBytes: Long? = null,
   val durationMs: Long? = null,
   val playback: String? = null,
+  // Older cached payloads omit this key and load as untranscribed.
+  val transcribed: Boolean = false,
   val toolActivity: ChatToolActivity? = null,
 )
 
@@ -343,6 +345,7 @@ class RoomChatTranscriptCache internal constructor(
               sizeBytes = part.sizeBytes,
               durationMs = part.durationMs,
               playback = part.playback,
+              transcribed = part.transcribed,
               toolActivity = part.toolActivity,
             )
           },
@@ -447,6 +450,7 @@ class RoomChatTranscriptCache internal constructor(
                     sizeBytes = part.sizeBytes,
                     durationMs = part.durationMs.takeUnless { isImage },
                     playback = part.playback.takeUnless { isImage },
+                    transcribed = part.transcribed,
                   )
                 }
 

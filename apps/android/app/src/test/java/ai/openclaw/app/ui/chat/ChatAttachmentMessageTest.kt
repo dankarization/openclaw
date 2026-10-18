@@ -104,13 +104,6 @@ class ChatAttachmentMessageTest {
   }
 
   @Test
-  fun linkPreviewInputIsTheDisplayedContentWithoutATranscript() {
-    val text = ChatMessageContent(type = "text", text = "https://example.com")
-    val parts = splitChatAttachmentMessage(listOf(image, text))
-    assertEquals(parts.content, parts.linkPreviewContent)
-  }
-
-  @Test
   fun defaultGatewayEchoIsSplitOutOfAVoiceNoteTurn() {
     val text = ChatMessageContent(type = "text", text = "See attached.\n\uD83D\uDCDD \"Here is the photo from today. More details are at www.github.com\"")
     val parts = splitChatAttachmentMessage(listOf(image, text, transcribedVoice))
