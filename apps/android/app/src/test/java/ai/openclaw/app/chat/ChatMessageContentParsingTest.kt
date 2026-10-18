@@ -759,6 +759,36 @@ class ChatMessageContentParsingTest {
   }
 
   @Test
+  fun structuredVoiceContentRetainsCanonicalTranscriptionAndMetadata() {
+    val message =
+      Json
+        .parseToJsonElement(
+          """{"role":"user","content":[
+            {"type":"text","text":"📝 \"actual spoken words\""},
+            {"type":"audio","mimeType":"audio/mp4","fileName":"voice.m4a","url":"media://inbound/voice.m4a"}
+          ],"__openclaw":{"media":[
+            {"kind":"audio","contentType":"audio/mp4","fileName":"voice.m4a","durationMs":76000,"sizeBytes":4096,"transcribed":true}
+          ]}}""",
+        ).jsonObject
+
+    assertEquals(
+      listOf(
+        ChatMessageContent(type = "text", text = "📝 \"actual spoken words\""),
+        ChatMessageContent(
+          type = "audio",
+          mimeType = "audio/mp4",
+          fileName = "voice.m4a",
+          url = "media://inbound/voice.m4a",
+          sizeBytes = 4096,
+          durationMs = 76_000,
+          transcribed = true,
+        ),
+      ),
+      parseChatMessageContents(message),
+    )
+  }
+
+  @Test
   fun legacyOnlyVoiceRowKeepsTranscribedIndexes() {
     val message =
       Json

@@ -8310,8 +8310,27 @@ internal fun parseChatMessageContents(obj: JsonObject): List<ChatMessageContent>
   val content = parsed + parseHistoryMediaImages(obj, parsed)
   val transcriptAudio = parseTranscriptAudioContents(obj)
   if (transcriptAudio.isEmpty()) return content
-  return content +
-    transcriptAudio.filterNot { audio -> content.any { it.isSameAttachmentAs(audio) } }
+  val matched = BooleanArray(transcriptAudio.size)
+  val mergedContent =
+    content.map { part ->
+      if (part.type != "audio") return@map part
+      val index =
+        transcriptAudio.indices.firstOrNull { !matched[it] && part.isSameAttachmentAs(transcriptAudio[it]) }
+          ?: return@map part
+      matched[index] = true
+      val fact = transcriptAudio[index]
+      part.copy(
+        mimeType = part.mimeType ?: fact.mimeType,
+        fileName = part.fileName ?: fact.fileName,
+        sizeBytes = fact.sizeBytes ?: part.sizeBytes,
+        durationMs = fact.durationMs ?: part.durationMs,
+        transcribed = part.transcribed || fact.transcribed,
+      )
+    }
+  return mergedContent +
+    transcriptAudio.filterIndexed { index, audio ->
+      !matched[index] && mergedContent.none { it.isSameAttachmentAs(audio) }
+    }
 }
 
 /**
