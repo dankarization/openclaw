@@ -98,7 +98,9 @@ private fun splitEchoTranscript(
 ): Pair<String, String>? {
   if (!hasTranscribedVoiceNote) return null
   val trimmed = lines.dropLastWhile { it.isBlank() }
-  val start = trimmed.indexOfFirst { it.trimStart().startsWith(ECHO_TRANSCRIPT_PREFIX) }
+  // The generated echo is appended after the author's caption. A caption can itself start
+  // with the same marker, so use the last echo-shaped line rather than consuming it as speech.
+  val start = trimmed.indexOfLast { it.trimStart().startsWith(ECHO_TRANSCRIPT_PREFIX) }
   if (start < 0) return null
   val echo = trimmed.drop(start).joinToString("\n").trim()
   if (!echo.endsWith(ECHO_TRANSCRIPT_SUFFIX) || echo.length <= ECHO_TRANSCRIPT_PREFIX.length) return null

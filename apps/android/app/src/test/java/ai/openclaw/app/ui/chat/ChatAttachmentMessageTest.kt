@@ -124,6 +124,15 @@ class ChatAttachmentMessageTest {
   }
 
   @Test
+  fun defaultGatewayEchoKeepsEarlierEchoShapedCaption() {
+    val caption = "\uD83D\uDCDD \"remember this\""
+    val text = ChatMessageContent(type = "text", text = "$caption\n\uD83D\uDCDD \"actual spoken words\"")
+    val parts = splitChatAttachmentMessage(listOf(image, text, transcribedVoice))
+    assertEquals(listOf(image, ChatMessageContent(type = "text", text = caption), transcribedVoice), parts.content)
+    assertEquals("actual spoken words", parts.transcript)
+  }
+
+  @Test
   fun echoShapedTextWithoutAVoiceNoteStaysText() {
     val text = ChatMessageContent(type = "text", text = "\uD83D\uDCDD \"note to self\"")
     val parts = splitChatAttachmentMessage(listOf(image, text))
