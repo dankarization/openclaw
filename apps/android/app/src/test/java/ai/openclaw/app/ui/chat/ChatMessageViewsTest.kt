@@ -48,6 +48,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -905,6 +906,45 @@ class ChatMessageViewsTest {
     composeRule.onNode(hasContentDescription("Photo"), useUnmergedTree = true).assertExists()
     composeRule.onNodeWithText("Voice note", useUnmergedTree = true).assertIsDisplayed()
     assertEquals(listOf("photo-1"), requested)
+  }
+
+  @Test
+  @GraphicsMode(GraphicsMode.Mode.NATIVE)
+  fun queuedPhotoReassemblyRunsOnTheDecodeDispatcher() {
+    // Fails on 9a45be72: the stored-chunk loader ran on Main and only the decode moved off it.
+    val bitmap = android.graphics.Bitmap.createBitmap(8, 8, android.graphics.Bitmap.Config.ARGB_8888)
+    val jpeg =
+      java.io
+        .ByteArrayOutputStream()
+        .also { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, it) }
+        .toByteArray()
+    val decodeDispatcher =
+      java.util.concurrent.Executors
+        .newSingleThreadExecutor { Thread(it, "outbox-decode-test") }
+        .asCoroutineDispatcher()
+    val loaderThreads = java.util.Collections.synchronizedList(mutableListOf<String>())
+    try {
+      composeRule.setContent {
+        CompositionLocalProvider(LocalChatImageDecodeDispatcher provides decodeDispatcher) {
+          ClawDesignTheme {
+            ChatOutboxBubble(
+              queuedPhotoAndVoiceNote(),
+              loadImagePreview = {
+                loaderThreads += Thread.currentThread().name.substringBefore(" @")
+                jpeg
+              },
+              onRetry = {},
+              onDelete = {},
+            )
+          }
+        }
+      }
+
+      composeRule.waitUntil(5_000) { loaderThreads.isNotEmpty() }
+      assertEquals(listOf("outbox-decode-test"), loaderThreads.toList())
+    } finally {
+      decodeDispatcher.close()
+    }
   }
 
   @Test

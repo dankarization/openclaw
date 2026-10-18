@@ -795,4 +795,22 @@ class ChatMessageContentParsingTest {
       parseChatMessageContents(message),
     )
   }
+
+  @Test
+  fun bareCanonicalAudioFactIsNotDedupedAgainstTheTextPart() {
+    // Fails on 9a45be72: the text part's null MIME/filename matched the bare audio fact and dropped it.
+    val message =
+      Json
+        .parseToJsonElement(
+          """{"role":"user","content":"hi","__openclaw":{"media":[{"kind":"audio","durationMs":76000}]}}""",
+        ).jsonObject
+
+    assertEquals(
+      listOf(
+        ChatMessageContent(type = "text", text = "hi"),
+        ChatMessageContent(type = "audio", durationMs = 76_000),
+      ),
+      parseChatMessageContents(message),
+    )
+  }
 }

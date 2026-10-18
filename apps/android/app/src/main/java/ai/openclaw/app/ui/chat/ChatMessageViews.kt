@@ -465,8 +465,13 @@ private fun ChatOutboxImage(
   var image by remember(attachment.id) { mutableStateOf<ImageBitmap?>(null) }
   val decodeDispatcher = LocalChatImageDecodeDispatcher.current
   LaunchedEffect(attachment.id, decodeDispatcher) {
-    val bytes = runCatching { loadImagePreview(attachment) }.getOrNull() ?: return@LaunchedEffect
-    image = withContext(decodeDispatcher) { decodeImageBytes(bytes)?.asImageBitmap() }
+    // Reassembling stored chunks can copy several MiB per photo, so it stays off Main with the decode.
+    val loaded =
+      withContext(decodeDispatcher) {
+        val bytes = runCatching { loadImagePreview(attachment) }.getOrNull() ?: return@withContext null
+        decodeImageBytes(bytes)?.asImageBitmap()
+      } ?: return@LaunchedEffect
+    image = loaded
   }
   val loaded = image
   if (loaded != null) {

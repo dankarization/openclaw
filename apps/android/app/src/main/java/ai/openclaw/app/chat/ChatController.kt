@@ -8311,9 +8311,16 @@ internal fun parseChatMessageContents(obj: JsonObject): List<ChatMessageContent>
   val transcriptAudio = parseTranscriptAudioContents(obj)
   if (transcriptAudio.isEmpty()) return content
   return content +
-    transcriptAudio.filterNot { audio ->
-      content.any { it.mimeType == audio.mimeType && it.fileName == audio.fileName }
-    }
+    transcriptAudio.filterNot { audio -> content.any { it.isSameAttachmentAs(audio) } }
+}
+
+/**
+ * Text and other identity-less parts also carry null MIME and filename, so a bare audio fact
+ * (`kind: "audio"` only) may stand in only for an existing audio part, never for the text.
+ */
+private fun ChatMessageContent.isSameAttachmentAs(audio: ChatMessageContent): Boolean {
+  if (mimeType != audio.mimeType || fileName != audio.fileName) return false
+  return type == "audio" || mimeType != null || fileName != null
 }
 
 internal fun parseChatMessageUsage(obj: JsonObject): ChatMessageUsage? {
