@@ -732,6 +732,7 @@ it.each([
         root: "/synthetic",
         configInputHash: "hash",
         repair: true,
+        fullIntegrityCheck: true,
         databaseGenerations: { "/synthetic/agent.sqlite": null },
       },
       "--doctor",
@@ -746,7 +747,7 @@ it.each([
   } else {
     expect(doctor, stderr.join("\n")).toHaveBeenCalledExactlyOnceWith(
       expect.anything(),
-      expect.anything(),
+      expect.objectContaining({ fullIntegrityCheck: true }),
       expect.objectContaining({ databaseGenerations: { "/synthetic/agent.sqlite": null } }),
     );
   }

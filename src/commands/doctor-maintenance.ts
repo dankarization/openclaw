@@ -24,7 +24,7 @@ import { createUpdateFailureFact, type UpdateFailureFact } from "../infra/update
 import { hasCommandProcessCleanupError } from "../process/exec-result.js";
 import { resolveCommandProcessSignal, withCommandProcessScope } from "../process/exec-spawn.js";
 import {
-  assertDoctorAgentLeaseAdmission,
+  admitDoctorAgentLeases,
   preflightExternalDoctorAgentLease,
 } from "./doctor-agent-lease-refusal.js";
 import { resolveDoctorUpdateAdmission } from "./doctor-maintenance-admission.js";
@@ -68,9 +68,8 @@ export async function beginDoctorMaintenance(params: DoctorMaintenanceParams) {
   const env = { ...process.env, ...(params.runId ? { [UPDATE_RUN_ID_ENV]: params.runId } : {}) };
   // Ordinary activation remains with the parent. Stale-instance recovery below
   // retains custody through offline repair and verified restoration.
-  const parentActivation = isDoctorUpdateRepairMode(resolveDoctorRepairMode(params.options))
-    ? resolveUpdateParentGatewayActivation(env)
-    : undefined;
+  const updateRepair = isDoctorUpdateRepairMode(resolveDoctorRepairMode(params.options));
+  const parentActivation = updateRepair ? resolveUpdateParentGatewayActivation(env) : undefined;
   // Repair discovery can execute plugins and open writable state. Establish
   // ownership for every admitted repair before running those inspections.
   let stopped: PreManagedServiceStop | undefined;
@@ -352,10 +351,19 @@ export async function beginDoctorMaintenance(params: DoctorMaintenanceParams) {
     inspectingActivation = false;
     await assertLegacyGatewayStoppedForMaintenance(state.env);
     // Retain one process owner across every migration and its resource drainage.
-    await acquireStoppedMaintenanceResources();
-    assertUpdateAdmissionCurrent?.();
-    await assertDoctorAgentLeaseAdmission(state.env);
-    // Admission can wait on ownership longer than the parent Doctor phase allows.
+    await admitDoctorAgentLeases({
+      state,
+      wait: updateRepair,
+      acquire: () =>
+        acquireStoppedMaintenanceResources().then(() => assertUpdateAdmissionCurrent?.()),
+      assertCurrent: () => {
+        assertCallerCurrent?.();
+        assertDeadline();
+      },
+      signal: exit.signal,
+      log: params.runtime.log,
+    });
+    // Lease admission can wait longer than the parent Doctor phase allows.
     assertDeadline();
     repairStoresMayBeOpen = true;
   };
@@ -439,7 +447,7 @@ export async function beginDoctorMaintenance(params: DoctorMaintenanceParams) {
     await settle(async () => {
       const externallyManaged = isServiceRepairExternallyManaged();
       if (externallyManaged) {
-        await preflightExternalDoctorAgentLease(env);
+        await preflightExternalDoctorAgentLease(env, updateRepair);
       }
       if (
         params.root &&

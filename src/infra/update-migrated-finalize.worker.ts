@@ -343,6 +343,7 @@ async function runDelegatedDoctor(input: UpdateDoctorInput): Promise<void> {
         },
         {
           repair: input.repair,
+          fullIntegrityCheck: input.fullIntegrityCheck,
           nonInteractive: true,
           ...(input.yes !== undefined ? { yes: input.yes } : {}),
           ...(input.workspaceSuggestions !== undefined
@@ -359,6 +360,9 @@ async function runDelegatedDoctor(input: UpdateDoctorInput): Promise<void> {
             ref: input.originalRecoveryCapture,
           },
           ...(input.databaseGenerations ? { databaseGenerations: input.databaseGenerations } : {}),
+          ...(input.databasePluginOwners
+            ? { databasePluginOwners: input.databasePluginOwners }
+            : {}),
           ...(input.serviceInspectionDeadlineAtMs !== undefined
             ? { serviceInspectionDeadlineAtMs: input.serviceInspectionDeadlineAtMs }
             : {}),
