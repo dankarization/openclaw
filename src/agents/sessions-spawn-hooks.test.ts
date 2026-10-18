@@ -389,6 +389,7 @@ describe("sessions_spawn subagent lifecycle hooks", () => {
           channelId: "source-native",
           messageId: "message-789",
         },
+        publicPresentation: true,
       },
       ctx,
     );

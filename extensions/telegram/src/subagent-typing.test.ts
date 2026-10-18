@@ -13,6 +13,11 @@ function createController() {
   return { controller, sendTyping };
 }
 
+const enabledPresentation = {
+  enabled: true,
+  intervalMs: TELEGRAM_CHAT_ACTION_INTERVAL_MS,
+};
+
 function startEvent(
   runId: string,
   requester: {
@@ -21,12 +26,29 @@ function startEvent(
     to?: string;
     threadId?: string | number;
   },
+  publicPresentation = true,
 ) {
   return {
     phase: "started" as const,
     runId,
+    publicPresentation,
     requester,
   };
+}
+
+function startRun(
+  controller: ReturnType<typeof createTelegramSubagentTyping>,
+  runId: string,
+  requester: {
+    channel?: string;
+    accountId?: string;
+    to?: string;
+    threadId?: string | number;
+  },
+  presentation = enabledPresentation,
+  publicPresentation = true,
+) {
+  controller.handle(startEvent(runId, requester, publicPresentation), presentation);
 }
 
 async function flushTypingStart(): Promise<void> {
@@ -52,9 +74,9 @@ describe("Telegram detached-subagent typing", () => {
       threadId: 7,
     };
 
-    controller.handle(startEvent("run-1", requester));
-    controller.handle(startEvent("run-1", requester));
-    controller.handle(startEvent("run-2", requester));
+    startRun(controller, "run-1", requester);
+    startRun(controller, "run-1", requester);
+    startRun(controller, "run-2", requester);
     await flushTypingStart();
     expect(sendTyping).toHaveBeenCalledOnce();
 
@@ -70,30 +92,24 @@ describe("Telegram detached-subagent typing", () => {
   it("isolates typing by account, chat, and topic", async () => {
     const { controller, sendTyping } = createController();
 
-    controller.handle(
-      startEvent("run-work", {
-        channel: "telegram",
-        accountId: "work",
-        to: "-100123",
-        threadId: 7,
-      }),
-    );
-    controller.handle(
-      startEvent("run-ops", {
-        channel: "telegram",
-        accountId: "ops",
-        to: "-100123",
-        threadId: 7,
-      }),
-    );
-    controller.handle(
-      startEvent("run-topic", {
-        channel: "telegram",
-        accountId: "work",
-        to: "-100123",
-        threadId: "8",
-      }),
-    );
+    startRun(controller, "run-work", {
+      channel: "telegram",
+      accountId: "work",
+      to: "-100123",
+      threadId: 7,
+    });
+    startRun(controller, "run-ops", {
+      channel: "telegram",
+      accountId: "ops",
+      to: "-100123",
+      threadId: 7,
+    });
+    startRun(controller, "run-topic", {
+      channel: "telegram",
+      accountId: "work",
+      to: "-100123",
+      threadId: "8",
+    });
     await flushTypingStart();
 
     expect(sendTyping).toHaveBeenCalledTimes(3);
@@ -108,7 +124,7 @@ describe("Telegram detached-subagent typing", () => {
 
   it("expires a run whose terminal event never arrives", async () => {
     const { controller, sendTyping } = createController();
-    controller.handle(startEvent("lost-run", { channel: "telegram", to: "42" }));
+    startRun(controller, "lost-run", { channel: "telegram", to: "42" });
     await flushTypingStart();
 
     await vi.advanceTimersByTimeAsync(TELEGRAM_SUBAGENT_TYPING_MAX_DURATION_MS);
@@ -122,8 +138,8 @@ describe("Telegram detached-subagent typing", () => {
   it("ignores progress without a routable Telegram requester", async () => {
     const { controller, sendTyping } = createController();
 
-    controller.handle(startEvent("discord-run", { channel: "discord", to: "42" }));
-    controller.handle(startEvent("missing-target", { channel: "telegram" }));
+    startRun(controller, "discord-run", { channel: "discord", to: "42" });
+    startRun(controller, "missing-target", { channel: "telegram" });
     await vi.advanceTimersByTimeAsync(TELEGRAM_CHAT_ACTION_INTERVAL_MS);
 
     expect(sendTyping).not.toHaveBeenCalled();
@@ -132,12 +148,10 @@ describe("Telegram detached-subagent typing", () => {
   it("ignores channel Direct Messages because Telegram does not support typing there", async () => {
     const { controller, sendTyping } = createController();
 
-    controller.handle(
-      startEvent("direct-topic-run", {
-        channel: "telegram",
-        to: "telegram:group:-100123:direct-topic:77",
-      }),
-    );
+    startRun(controller, "direct-topic-run", {
+      channel: "telegram",
+      to: "telegram:group:-100123:direct-topic:77",
+    });
     await vi.advanceTimersByTimeAsync(TELEGRAM_CHAT_ACTION_INTERVAL_MS);
 
     expect(sendTyping).not.toHaveBeenCalled();
@@ -145,7 +159,7 @@ describe("Telegram detached-subagent typing", () => {
 
   it("stops all route timers when the plugin runtime is disposed", async () => {
     const { controller, sendTyping } = createController();
-    controller.handle(startEvent("run-1", { channel: "telegram", to: "42" }));
+    startRun(controller, "run-1", { channel: "telegram", to: "42" });
     await flushTypingStart();
     expect(sendTyping).toHaveBeenCalledOnce();
 
@@ -153,5 +167,37 @@ describe("Telegram detached-subagent typing", () => {
     await vi.advanceTimersByTimeAsync(TELEGRAM_CHAT_ACTION_INTERVAL_MS);
 
     expect(sendTyping).toHaveBeenCalledOnce();
+  });
+
+  it("does not start when typing is disabled or the run is not publicly eligible", async () => {
+    const { controller, sendTyping } = createController();
+    const requester = { channel: "telegram", to: "42" };
+
+    startRun(controller, "never", requester, { enabled: false, intervalMs: 10_000 });
+    startRun(controller, "quiet", requester, enabledPresentation, false);
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(sendTyping).not.toHaveBeenCalled();
+  });
+
+  it("renews on the supplied cadence instead of the transport floor", async () => {
+    const { controller, sendTyping } = createController();
+    startRun(
+      controller,
+      "slow",
+      { channel: "telegram", to: "42" },
+      {
+        enabled: true,
+        intervalMs: 10_000,
+      },
+    );
+    await flushTypingStart();
+    expect(sendTyping).toHaveBeenCalledOnce();
+
+    await vi.advanceTimersByTimeAsync(TELEGRAM_CHAT_ACTION_INTERVAL_MS);
+    expect(sendTyping).toHaveBeenCalledOnce();
+
+    await vi.advanceTimersByTimeAsync(10_000 - TELEGRAM_CHAT_ACTION_INTERVAL_MS);
+    expect(sendTyping).toHaveBeenCalledTimes(2);
   });
 });

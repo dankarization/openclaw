@@ -1,9 +1,7 @@
 // Telegram plugin module owns detached-subagent typing lifecycle state.
 import { createTypingCallbacks } from "openclaw/plugin-sdk/channel-outbound";
-import {
-  TELEGRAM_CHAT_ACTION_INTERVAL_MS,
-  TELEGRAM_SUBAGENT_TYPING_MAX_DURATION_MS,
-} from "./chat-action-timing.js";
+import { TELEGRAM_SUBAGENT_TYPING_MAX_DURATION_MS } from "./chat-action-timing.js";
+import type { TelegramSubagentTypingPresentation } from "./subagent-typing-policy.js";
 import { parseTelegramTarget } from "./targets.js";
 
 type TelegramSubagentTypingRoute = {
@@ -15,6 +13,8 @@ type TelegramSubagentTypingRoute = {
 type TelegramSubagentProgressEvent = {
   phase: "started" | "ended";
   runId: string;
+  /** Core-owned. Missing or false must not allocate public typing. */
+  publicPresentation?: boolean;
   requester?: {
     channel?: string;
     accountId?: string;
@@ -82,7 +82,10 @@ export function createTelegramSubagentTyping(params: {
     routes.delete(activeRoute.key);
   };
 
-  const handle = (event: TelegramSubagentProgressEvent): void => {
+  const handle = (
+    event: TelegramSubagentProgressEvent,
+    presentation?: TelegramSubagentTypingPresentation,
+  ): void => {
     if (disposed) {
       return;
     }
@@ -91,6 +94,11 @@ export function createTelegramSubagentTyping(params: {
       return;
     }
     if (runs.has(event.runId)) {
+      return;
+    }
+    // Quiet/internal runs and typingMode "never" must not allocate a route.
+    // Authority lifetime remains a maintainer decision; do not reconstruct it here.
+    if (event.publicPresentation !== true || presentation?.enabled !== true) {
       return;
     }
 
@@ -106,7 +114,7 @@ export function createTelegramSubagentTyping(params: {
         typing: createTypingCallbacks({
           start: () => params.sendTyping(route),
           onStartError: (err) => params.onTypingError(err, route),
-          keepaliveIntervalMs: TELEGRAM_CHAT_ACTION_INTERVAL_MS,
+          keepaliveIntervalMs: presentation.intervalMs,
           maxDurationMs: 0,
         }),
         runIds: new Set(),

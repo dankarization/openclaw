@@ -204,6 +204,11 @@ export type SubagentRunRecord = Omit<SubagentRunReadRecord, "execution" | "colle
   /** Durable requester-delivery closure until silent completion cleanup finishes. */
   suppressCompletionDelivery?: boolean;
   expectsCompletionMessage?: boolean;
+  /**
+   * Recorded at registration. True only when core expects requester-visible
+   * follow-up. Absent on rows written before this field existed.
+   */
+  publicPresentation?: boolean;
   completionTarget?: "parent";
   completionRequesterSessionId?: string;
   completionRequesterLifecycleRevision?: string;

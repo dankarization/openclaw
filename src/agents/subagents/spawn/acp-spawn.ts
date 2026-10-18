@@ -59,6 +59,7 @@ import {
 } from "../../spawn-plan.js";
 import { resolveSpawnedWorkspaceInheritance } from "../../spawned-context.js";
 import type { PreparedSessionPermissionPolicy } from "../../tool-fs-policy.types.js";
+import { resolveSubagentPublicPresentation } from "../public-presentation.js";
 import { prepareSubagentSessionListReadCache } from "../registry/subagent-registry-state.js";
 import { countUntrackedActiveAcpRunsForOwner } from "./acp-spawn-admission.js";
 import {
@@ -696,6 +697,7 @@ export async function spawnAcpDirect(
         label: params.label,
         runTimeoutSeconds,
         expectsCompletionMessage,
+        publicPresentation: resolveSubagentPublicPresentation({ expectsCompletionMessage }),
         spawnMode,
         // ACP's Gateway manager publishes the task; avoid a second registry projection.
       };

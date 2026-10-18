@@ -58,6 +58,8 @@ export function createSubagentSpawnLifecycleEmitter(params: {
   requesterOrigin?: DeliveryContext;
   requestThreadBinding: boolean;
   spawnMode: SpawnSubagentMode;
+  /** Recorded with the run; do not recompute from the route snapshot. */
+  publicPresentation: boolean;
   resolvedModelMetadata: {
     resolvedModel?: string;
     resolvedProvider?: string;
@@ -83,6 +85,7 @@ export function createSubagentSpawnLifecycleEmitter(params: {
               runId: hookRunId,
               childSessionKey: params.childSessionKey,
               requester: params.progressOrigin,
+              publicPresentation: params.publicPresentation,
             },
             hookContext(hookRunId),
           );

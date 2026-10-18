@@ -4,6 +4,7 @@ import { logTypingFailure } from "openclaw/plugin-sdk/channel-feedback";
 import { createLazyRuntimeModule } from "openclaw/plugin-sdk/lazy-runtime";
 import { parseTelegramThreadId } from "./src/outbound-params.js";
 import { loadTelegramSendModule } from "./src/send-runtime.js";
+import { resolveTelegramSubagentTypingPresentation } from "./src/subagent-typing-policy.js";
 
 const loadTelegramSubagentTyping = createLazyRuntimeModule(
   () => import("./src/subagent-typing.js"),
@@ -38,9 +39,13 @@ export function registerTelegramSubagentTyping(api: OpenClawPluginApi): void {
     return controllerPromise;
   };
 
-  api.on("subagent_progress", (event) => {
+  api.on("subagent_progress", (event, ctx) => {
+    const presentation = resolveTelegramSubagentTypingPresentation({
+      config: api.config,
+      requesterSessionKey: ctx?.requesterSessionKey,
+    });
     void getController()
-      .then((controller) => controller.handle(event))
+      .then((controller) => controller.handle(event, presentation))
       .catch((err: unknown) => {
         api.logger.debug?.(`telegram subagent typing unavailable: ${String(err)}`);
       });

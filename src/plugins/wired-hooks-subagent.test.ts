@@ -71,6 +71,7 @@ describe("subagent hook runner methods", () => {
         runId: "run-1",
         childSessionKey: "agent:main:subagent:child",
         requester: { ...baseRequester, messageId: "message-1" },
+        publicPresentation: true,
       },
       ctx: baseSubagentCtx,
     },

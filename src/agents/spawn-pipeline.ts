@@ -108,6 +108,8 @@ export async function runSpawnPipeline<TState>(
             runId,
             childSessionKey: registration.childSessionKey,
             requester: params.progressOrigin,
+            // Fail closed when registration did not record eligibility.
+            publicPresentation: registration.publicPresentation === true,
           },
           {
             runId,

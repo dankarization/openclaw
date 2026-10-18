@@ -112,6 +112,8 @@ export async function emitSubagentProgressEndedHook(entry: SubagentRunRecord): P
         childSessionKey: entry.childSessionKey,
         outcome,
         requester: entry.progressOrigin,
+        // Older rows omit the field. Do not reconstruct eligibility from the route.
+        publicPresentation: entry.publicPresentation === true,
       },
       {
         runId: entry.runId,

@@ -74,8 +74,6 @@ export async function spawnSubagentDirect(
     assertSource();
     assertDelegationCurrent?.();
   });
-  const promptedAt = Date.now();
-  const task = params.task;
   const label = params.label?.trim() || "";
   const requestThreadBinding = params.thread === true;
   const sandboxMode = params.sandbox === "require" ? "require" : "inherit";
@@ -309,7 +307,7 @@ export async function spawnSubagentDirect(
       completionTarget: params.completionTarget,
       soleCollectorChild: soleImplicitMember,
       spawnMode,
-      task,
+      task: params.task,
       requesterSessionKey: ctx.agentSessionKey,
       requesterOrigin: childSessionOrigin,
       childSessionKey,
@@ -384,7 +382,7 @@ export async function spawnSubagentDirect(
       requesterSessionKey: requesterInternalKey,
       requesterAgentId,
       targetAgentId,
-      promptedAt,
+      promptedAt: Date.now(),
     });
     let acceptedChildRunId: string | undefined;
     const launchChildRun = async (assertDispatchCurrent?: () => void) => {
@@ -442,6 +440,7 @@ export async function spawnSubagentDirect(
       requesterOrigin,
       requestThreadBinding,
       spawnMode,
+      publicPresentation: !["quiet", "collector"].includes(completionMode),
       resolvedModelMetadata,
     });
     const childTarget = { childSessionKey, childAgentId: targetAgentId };
@@ -561,7 +560,7 @@ export async function spawnSubagentDirect(
           requesterOrigin,
           progressOrigin,
           requesterDisplayKey: ownership.completionRequesterDisplayKey,
-          task,
+          task: params.task,
           taskName,
           requesterAgentId,
           cleanup,
@@ -575,6 +574,7 @@ export async function spawnSubagentDirect(
           completionRequesterSessionId,
           completionRequesterLifecycleRevision,
           spawnMode,
+          publicPresentation: !["quiet", "collector"].includes(completionMode),
           collect: params.collect === true,
           swarmRequesterSessionKey: params.collect ? requesterInternalKey : undefined,
           swarmLaunchIdempotencyKey: params.collect ? childIdem : undefined,

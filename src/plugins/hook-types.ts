@@ -707,6 +707,11 @@ type PluginHookSubagentProgressEvent =
       runId: string;
       childSessionKey: string;
       requester?: PluginHookSubagentRequester;
+      /**
+       * Core-owned eligibility for requester-visible activity. Quiet, collector,
+       * and internal runs are false. Listeners must not infer this themselves.
+       */
+      publicPresentation: boolean;
     }
   | {
       phase: "ended";
@@ -714,6 +719,8 @@ type PluginHookSubagentProgressEvent =
       childSessionKey: string;
       outcome: "ok" | "error" | "timeout" | "killed" | "unknown";
       requester?: PluginHookSubagentRequester;
+      /** Same recorded eligibility as the matching started event. Missing stored facts are false. */
+      publicPresentation: boolean;
     };
 
 type PluginHookSubagentEndedEvent = {

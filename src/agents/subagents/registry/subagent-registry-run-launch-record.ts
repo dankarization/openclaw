@@ -46,6 +46,7 @@ export type RegisterSubagentRunParams = {
   workspaceDir?: string;
   runTimeoutSeconds?: number;
   expectsCompletionMessage?: boolean;
+  publicPresentation?: boolean;
   completionTarget?: "parent";
   completionRequesterSessionId?: string;
   completionRequesterLifecycleRevision?: string;
@@ -104,6 +105,7 @@ export function createSubagentRegistrationRecord(
     taskName: registerParams.taskName,
     cleanup: registerParams.cleanup,
     expectsCompletionMessage: registerParams.expectsCompletionMessage,
+    publicPresentation: registerParams.publicPresentation === true,
     completionTarget: registerParams.completionTarget,
     completionRequesterSessionId: registerParams.completionRequesterSessionId,
     completionRequesterLifecycleRevision: registerParams.completionRequesterLifecycleRevision,
