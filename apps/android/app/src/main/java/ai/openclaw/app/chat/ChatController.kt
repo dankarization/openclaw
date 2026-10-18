@@ -25,6 +25,7 @@ import ai.openclaw.app.gateway.SessionReactionsListParams
 import ai.openclaw.app.gateway.SessionReactionsListResult
 import ai.openclaw.app.gateway.SessionReactionsSetParams
 import ai.openclaw.app.gateway.SessionReactionsSetResult
+import ai.openclaw.app.gateway.isInboundMediaSource
 import ai.openclaw.app.gateway.parseChatSendAck
 import ai.openclaw.app.i18n.NativeText
 import ai.openclaw.app.i18n.nativeText
@@ -218,6 +219,12 @@ class ChatController internal constructor(
     agentId: String?,
     artifactId: String,
   ) -> GatewayLoadedImage? = { _, _, _, _ -> null },
+  private val loadGatewayInboundImage: suspend (
+    gatewayId: String?,
+    sessionKey: String,
+    agentId: String?,
+    source: String,
+  ) -> GatewayLoadedImage? = { _, _, _, _ -> null },
   private val loadGatewayMediaArtifact: suspend (
     gatewayId: String?,
     sessionKey: String,
@@ -243,6 +250,7 @@ class ChatController internal constructor(
     gatewayAdvertisesMethod: (method: String) -> Boolean? = { null },
     gatewayAdvertisesCapability: (capability: String) -> Boolean? = { null },
     currentGatewayCatalogRevision: () -> Long = { 0L },
+    inboundMediaBasePath: () -> String? = { null },
     commandOutbox: ChatCommandOutbox,
     recordModelRecent: (String) -> Unit = {},
     onSessionDeleted: (ChatSessionDeletion) -> Unit = {},
@@ -267,6 +275,9 @@ class ChatController internal constructor(
     currentDefaultAgentId = currentDefaultAgentId,
     currentDefaultAgentRevision = currentDefaultAgentRevision,
     loadGatewayImageArtifact = session::loadImageArtifact,
+    loadGatewayInboundImage = { gatewayId, sessionKey, agentId, source ->
+      session.loadInboundImage(gatewayId, inboundMediaBasePath(), sessionKey, agentId, source)
+    },
     loadGatewayMediaArtifact = session::loadMediaArtifact,
     commandOutbox = commandOutbox,
     recordModelRecent = recordModelRecent,
@@ -275,14 +286,17 @@ class ChatController internal constructor(
     onAssistantReplyFinalized = onAssistantReplyFinalized,
   )
 
-  suspend fun loadImageArtifact(artifactId: String): GatewayLoadedImage? {
-    val normalizedArtifactId = artifactId.trim().takeIf(String::isNotEmpty) ?: return null
+  /** Loads either a managed artifact or a canonical Gateway-owned inbound image. */
+  suspend fun loadImageArtifact(imageLoadKey: String): GatewayLoadedImage? {
+    val normalizedKey = imageLoadKey.trim().takeIf(String::isNotEmpty) ?: return null
+    if (normalizedKey.startsWith("media://", ignoreCase = true) && !isInboundMediaSource(normalizedKey)) return null
     val sessionKey = normalizeRequestedSessionKey(_sessionKey.value)
-    return loadGatewayImageArtifact(
+    val load = if (isInboundMediaSource(normalizedKey)) loadGatewayInboundImage else loadGatewayImageArtifact
+    return load(
       currentCacheScope()?.gatewayId,
       sessionKey,
       resolveAgentIdForSessionKey(sessionKey),
-      normalizedArtifactId,
+      normalizedKey,
     )
   }
 
@@ -8382,9 +8396,8 @@ internal fun parseChatMessageCost(obj: JsonObject): ChatMessageCost? {
 
 /**
  * When the Gateway rewrites a user turn (e.g. with a voice transcription) the photo can survive
- * only in `__openclaw.media`. Restore it when that fact carries bytes the chat can already draw:
- * inline base64 or a managed artifact. Inbound-upload references (`media://inbound/...`) are left
- * to the authenticated inbound loader (openclaw/openclaw#169470) and are not guessed at here.
+ * only in `__openclaw.media`. Restore inline, managed, and canonical inbound images; inbound
+ * references are loaded through the Gateway's authenticated assistant-media route.
  */
 private fun parseHistoryMediaImages(
   obj: JsonObject,
@@ -8396,12 +8409,12 @@ private fun parseHistoryMediaImages(
     val mimeType = fact["contentType"].asStringOrNull() ?: fact["mimeType"].asStringOrNull()
     val kind = fact["kind"].asStringOrNull() ?: mimeType?.substringBefore('/')
     if (kind != "image" || mimeType.equals("image/svg+xml", ignoreCase = true)) return@mapNotNull null
-    val url = fact["url"].asStringOrNull()?.trim()
+    val url = (fact["url"] ?: fact["path"]).asStringOrNull()?.trim()
     val artifactId = fact.nonBlankString("artifactId") ?: managedImageArtifactId(url)
     val base64 =
       (fact["base64"] ?: fact["content"]).asStringOrNull()?.takeIf { it.isNotBlank() && it.length <= CHAT_IMAGE_MAX_BASE64_CHARS }
-    if (artifactId == null && base64 == null) return@mapNotNull null
-    if (existing.any { it.type == "image" && ((artifactId != null && it.artifactId == artifactId) || (base64 != null && it.base64 == base64)) }) {
+    if (artifactId == null && base64 == null && !isInboundMediaSource(url)) return@mapNotNull null
+    if (existing.any { it.type == "image" && ((artifactId != null && it.artifactId == artifactId) || (base64 != null && it.base64 == base64) || (url != null && it.url == url)) }) {
       return@mapNotNull null
     }
     ChatMessageContent(

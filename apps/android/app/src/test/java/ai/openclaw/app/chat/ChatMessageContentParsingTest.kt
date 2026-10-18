@@ -706,10 +706,39 @@ class ChatMessageContentParsingTest {
           url = "/api/chat/media/outgoing/main/55555555-5555-4555-8555-555555555555/full",
         ),
         ChatMessageContent(type = "image", mimeType = "image/png", base64 = "iVBORw0KGgo="),
+        ChatMessageContent(type = "image", mimeType = "image/jpeg", url = "media://inbound/photo---af3c4068.jpg"),
         ChatMessageContent(type = "audio", mimeType = "audio/mp4", fileName = "voice.m4a"),
       ),
       parseChatMessageContents(message),
     )
+  }
+
+  @Test
+  fun inboundPhotoRequiresCanonicalReferenceAndBecomesLoadable() {
+    val source = "media://inbound/photo---af3c4068.jpg"
+    val pathSource = "media://inbound/path-photo.jpg"
+    val message =
+      Json
+        .parseToJsonElement(
+          """{"content":"See attached.","__openclaw":{"media":[
+        {"url":"$source","kind":"image","contentType":"image/jpeg","fileName":"photo.jpg"},
+        {"path":"$pathSource","kind":"image","contentType":"image/png","fileName":"path-photo.jpg"},
+        {"url":"media://inbound/..","kind":"image","contentType":"image/png"},
+        {"url":"media://inbound/%2e%2e","kind":"image","contentType":"image/png"},
+        {"url":"https://example.com/photo.png","kind":"image","contentType":"image/png"},
+        {"url":"media://inbound/diagram.svg","kind":"image","contentType":"image/svg+xml"}
+      ]}}""",
+        ).jsonObject
+    val parsed = parseChatMessageContents(message)
+    assertEquals(
+      listOf(
+        ChatMessageContent(type = "text", text = "See attached."),
+        ChatMessageContent(type = "image", mimeType = "image/jpeg", fileName = "photo.jpg", url = source),
+        ChatMessageContent(type = "image", mimeType = "image/png", fileName = "path-photo.jpg", url = pathSource),
+      ),
+      parsed,
+    )
+    assertEquals(listOf(source, pathSource), parsed.drop(1).map { it.imageLoadKey() })
   }
 
   @Test

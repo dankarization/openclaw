@@ -2,6 +2,7 @@ package ai.openclaw.app.chat
 
 import ai.openclaw.app.asJsonStringOrNull
 import ai.openclaw.app.gateway.SessionObserverDigest
+import ai.openclaw.app.gateway.isInboundMediaSource
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -196,6 +197,9 @@ data class ChatMessageContent(
   /** True when the Gateway recorded that this audio attachment was transcribed for the turn. */
   val transcribed: Boolean = false,
 )
+
+/** Managed images load by artifact ID; sent uploads load by their canonical inbound reference. */
+internal fun ChatMessageContent.imageLoadKey(): String? = artifactId?.takeIf(String::isNotBlank) ?: url?.takeIf(::isInboundMediaSource)
 
 /** Bounded, display-safe projection of a transcript tool block. */
 @Serializable

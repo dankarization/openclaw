@@ -382,6 +382,18 @@ class RoomChatTranscriptCacheTest {
     }
 
   @Test
+  fun canonicalInboundPhotoSurvivesOfflineTranscriptReopen() =
+    runTest {
+      val source = "media://inbound/photo---af3c4068.jpg"
+      val photo = ChatMessageContent(type = "image", mimeType = "image/jpeg", fileName = "photo.jpg", url = source)
+      saveTranscript(messages = listOf(message("See attached.", role = "user", timestampMs = 10, extraParts = listOf(photo))))
+
+      val content = loadTranscript().single().content
+      assertEquals(listOf(ChatMessageContent(type = "text", text = "See attached."), photo), content)
+      assertEquals(source, content.last().imageLoadKey())
+    }
+
+  @Test
   fun transcriptRoundTripKeepsManagedAudioVideoAndDocumentMetadata() =
     runTest {
       val audio =

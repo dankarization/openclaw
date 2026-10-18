@@ -6,8 +6,10 @@ import ai.openclaw.app.chat.ChatOutboxItem
 import ai.openclaw.app.chat.ChatOutboxStatus
 import ai.openclaw.app.chat.OUTBOX_BRANCH_CHANGED_ERROR
 import ai.openclaw.app.chat.chatOutboxDisplayError
+import ai.openclaw.app.chat.imageLoadKey
 import ai.openclaw.app.chat.normalizeVisibleChatMessageRole
 import ai.openclaw.app.gateway.GatewayLoadedImage
+import ai.openclaw.app.gateway.isInboundMediaSource
 import ai.openclaw.app.i18n.nativeString
 import ai.openclaw.app.i18n.nativeStringResource
 import ai.openclaw.app.ui.design.ClawTheme
@@ -74,6 +76,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -540,6 +544,7 @@ internal fun ChatMessageAttachmentGroup(
   firstImageIndex: Int,
   imagePage: Int,
   resolverReady: Boolean,
+  inboundMediaBasePath: String?,
   loadImage: suspend (String) -> GatewayLoadedImage?,
 ) {
   val compact = parts.count { it.type == "image" } > 1
@@ -552,18 +557,20 @@ internal fun ChatMessageAttachmentGroup(
     parts.forEachIndexed { index, part ->
       val visible = part.type != "image" || imageIndex++ / CHAT_MESSAGE_IMAGE_WINDOW == imagePage
       if (visible) {
-        key(index, part.artifactId, part.base64) {
+        val imageLoadKey = part.imageLoadKey().takeIf { part.type == "image" }
+        key(index, imageLoadKey, part.base64) {
           Box(Modifier.widthIn(max = if (compact && part.type == "image") 136.dp else 360.dp)) {
             when {
               part.type == "image" && !part.base64.isNullOrBlank() -> {
                 ChatBase64Image(part.base64, part.mimeType, compact = compact)
               }
 
-              part.type == "image" && !part.artifactId.isNullOrBlank() -> {
+              imageLoadKey != null -> {
                 ChatManagedImage(
-                  artifactId = part.artifactId,
+                  artifactId = imageLoadKey,
                   label = part.alt?.takeIf(String::isNotBlank) ?: part.fileName ?: nativeString("Image"),
                   resolverReady = resolverReady,
+                  inboundMediaBasePath = inboundMediaBasePath,
                   loadImage = loadImage,
                   compact = compact,
                 )
@@ -602,6 +609,7 @@ internal fun ChatManagedImage(
   artifactId: String,
   label: String,
   resolverReady: Boolean,
+  inboundMediaBasePath: String? = null,
   compact: Boolean = false,
   loadImage: suspend (String) -> GatewayLoadedImage?,
 ) {
@@ -609,8 +617,9 @@ internal fun ChatManagedImage(
   var failed by remember(artifactId) { mutableStateOf(false) }
   var retryGeneration by rememberSaveable(artifactId) { mutableStateOf(0) }
   val decodeDispatcher = LocalChatImageDecodeDispatcher.current
+  val reloadPath = if (isInboundMediaSource(artifactId)) inboundMediaBasePath else null
 
-  LaunchedEffect(artifactId, resolverReady, retryGeneration, decodeDispatcher) {
+  LaunchedEffect(artifactId, resolverReady, retryGeneration, decodeDispatcher, reloadPath) {
     if (!resolverReady) {
       failed = true
       image = null
@@ -619,6 +628,8 @@ internal fun ChatManagedImage(
     failed = false
     image = null
     val loaded = runCatching { loadImage(artifactId) }.getOrNull()
+    // A path change cancels the previous load; its late result must not replace the new image.
+    currentCoroutineContext().ensureActive()
     image =
       loaded?.let { value ->
         withContext(decodeDispatcher) { decodeImageBytes(value.bytes)?.asImageBitmap() }
