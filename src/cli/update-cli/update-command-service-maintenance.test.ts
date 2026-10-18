@@ -69,7 +69,7 @@ it.each(["update", "doctor"] as const)(
       mocks.service.mockReturnValue(service);
       mocks.prepareStop.mockImplementationOnce(async () => {
         wallNow = deadlineAtMs + 1;
-        return true;
+        return { kind: "unchanged" as const };
       });
       const expectedService = await maybeStopManagedServiceBeforeMutableUpdate({
         root: process.cwd(),

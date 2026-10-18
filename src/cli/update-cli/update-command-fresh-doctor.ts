@@ -114,9 +114,7 @@ export async function runUpdateFinalizationDoctorInFreshProcess(params: {
   /** Propagate a refused child authority to the finalization owner without retrying it. */
   onAuthorityRefused?: () => void;
 }): Promise<PluginUpdateWarning | void> {
-  const requestedTimeoutMs = params.opts
-    ? parseUpdateTimeoutMs(params.opts.timeout)
-    : params.timeoutMs;
+  const requestedTimeoutMs = parseUpdateTimeoutMs(params.opts?.timeout) ?? params.timeoutMs;
   const serviceInspectionDeadlineAtMs =
     params.serviceInspectionDeadlineAtMs ??
     (requestedTimeoutMs === undefined ? undefined : Date.now() + requestedTimeoutMs);
@@ -163,8 +161,8 @@ export async function runUpdateFinalizationDoctorInFreshProcess(params: {
   try {
     const commandOptions: CommandOptions = {
       cwd: params.root,
-      // Normal updates also carry a default step allowance. Only operator opts
-      // may impose a Doctor deadline; standalone finalization supplies its own.
+      // An operator timeout takes priority; otherwise finalization may supply
+      // the remaining allowance for this Doctor invocation.
       timeoutMs,
       maxOutputBytes: 4 * 1024 * 1024,
       terminateOnOutputLimit: true,
