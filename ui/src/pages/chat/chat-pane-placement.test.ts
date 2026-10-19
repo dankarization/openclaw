@@ -6,7 +6,6 @@ import type {
   WorkerEnvironmentProfileSummary,
 } from "../../../../packages/gateway-protocol/src/index.js";
 import type { GatewaySessionRow } from "../../api/types.ts";
-import type { SessionCapability } from "../../lib/sessions/session-capability.ts";
 import { createSessionsListResult } from "../../test-helpers/chat-model.ts";
 import { gatewayHelloForMethods } from "../../test-helpers/gateway-methods.ts";
 import {
@@ -25,7 +24,6 @@ import {
   offlineDeviceSession,
   createTestChatPane,
   createGatewayBrowserClientFixture,
-  createSessionCapabilityFixture,
 } from "./chat-pane.test-support.ts";
 
 function activePlacementSession() {
@@ -554,19 +552,13 @@ describe("cloud placement stop confirmation authority", () => {
     "new-placement",
     "removed",
   ] as const)("uses the current owner state after confirmation (%s)", async (change) => {
-    const request = dialogs.mockRequest(async (_method: string) => ({ ok: true }));
-    const reconcileMutation = vi.fn<SessionCapability["reconcileMutation"]>(async () => ({
-      status: "refreshed",
-    }));
-    const client = createGatewayBrowserClientFixture({ request });
-    const { pane, state } = createTestChatPane({
-      client,
-      sessions: createSessionCapabilityFixture({ reconcileMutation }),
-    });
-    pane.context.gateway.snapshot.hello = gatewayHelloForMethods(
-      ["sessions.reclaim"],
+    const { pane, state, request, reconcileMutation } = createPlacementPane(
+      dialogs,
+      undefined,
       ["operator.write"],
+      ["sessions.reclaim"],
     );
+    const client = pane.context.gateway.snapshot.client;
     const session = activePlacementSession();
     state.sessionKey = session.key;
     state.currentSessionId = session.sessionId;
