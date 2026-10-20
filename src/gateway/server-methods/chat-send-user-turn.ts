@@ -23,6 +23,7 @@ import {
   discardPreparedInboundMedia,
   persistInboundImagesForTranscript,
 } from "../chat-attachments.js";
+import { readChatInputRecoveryAdmission } from "../chat-input-recovery-source.js";
 import { transferGatewayLocalUserIngress } from "../local-user-ingress.js";
 import { resolveCreatorSandbox } from "../operator-role-policy.js";
 import { resolveOperatorSessionCreation } from "../session-creation-provenance.js";
@@ -298,13 +299,17 @@ export function prepareChatSendUserTurn(params: {
     GatewayRunToolBindings: request.toolBindings,
     GatewayUiCommandTarget: gatewayUiCommandTarget,
   };
+  const recoveredRequester = readChatInputRecoveryAdmission(session.clientRunId)?.requesterProfile;
   const requester = client?.authenticatedUserProfile;
+  const externalInput =
+    !request.systemInputProvenance || request.systemInputProvenance.kind === "external_user";
   if (
+    client &&
     requester &&
-    (client.authenticatedUserId || client.internal?.authenticatedOperator) &&
+    (recoveredRequester || client.authenticatedUserId || client.internal?.authenticatedOperator) &&
     isBrowserOperatorUiClient(request.clientInfo) &&
-    !isSyntheticGatewayCaller(client) &&
-    (!request.systemInputProvenance || request.systemInputProvenance.kind === "external_user")
+    (recoveredRequester || !isSyntheticGatewayCaller(client)) &&
+    externalInput
   ) {
     const authenticatedUserId = client.authenticatedUserId;
     const { profileId, displayName } = requester;
@@ -316,6 +321,9 @@ export function prepareChatSendUserTurn(params: {
           admission.assertWorkAdmissionCurrent?.();
         } catch {
           return false;
+        }
+        if (recoveredRequester) {
+          return recoveredRequester.id === profileId && recoveredRequester.isCurrent();
         }
         return (
           !client.invalidated &&
@@ -383,7 +391,11 @@ export function prepareChatSendUserTurn(params: {
       };
     }),
   );
-  const participant = resolveGatewayInputParticipant(client, request.systemInputProvenance);
+  // Only this exact replay admission can attribute a synthetic caller to a person.
+  const participant =
+    recoveredRequester && externalInput && recoveredRequester.isCurrent()
+      ? { type: "profile" as const, id: recoveredRequester.id }
+      : resolveGatewayInputParticipant(client, request.systemInputProvenance);
   if (participant) {
     prepareSessionParticipantInput(ctx, participant, userTurn.baseInput.timestamp);
   }
