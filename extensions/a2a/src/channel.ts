@@ -39,6 +39,7 @@ import {
 import { DEFAULT_ACCOUNT_ID } from "./accounts.js";
 import { A2A_CHANNEL_ID, a2aChannelSetupPlugin } from "./channel-base.js";
 import { dispatchA2aInbound } from "./inbound.js";
+import { isLoopbackRemoteAddress } from "./ingress-locality.js";
 import { a2aMessageActions } from "./message-actions.js";
 import { sendA2aChannelText } from "./outbound.js";
 import {
@@ -143,6 +144,7 @@ const a2aChannelMessageAdapter = defineChannelMessageAdapter({
         accountId: ctx.accountId,
         to: ctx.to,
         text: ctx.text,
+        sessionKey: ctx.sessionKey,
         assertDirectAdapterHandoff: ctx.assertDirectAdapterHandoff,
       });
       return {
@@ -267,6 +269,7 @@ export const a2aChannelPlugin: ChannelPlugin<ResolvedA2aChannelAccount> = create
 
         const runtime = getA2aChannelRuntime();
         const a2aConfig = account.config;
+        const localIngressOnly = a2aConfig.localIngressOnly === true;
         const version = runtime.version;
         // SAFETY: Gateway injects its full runtime despite the narrowed public contract.
         const channelRuntime = (ctx.channelRuntime ?? runtime.channel) as PluginRuntime["channel"];
@@ -465,6 +468,16 @@ export const a2aChannelPlugin: ChannelPlugin<ResolvedA2aChannelAccount> = create
             request: IncomingMessage,
             response: ServerResponse,
           ): Promise<boolean> => {
+            // A Gateway bound to a LAN address also publishes this route there, so an
+            // operator can pin inbound A2A traffic to the local host without changing
+            // the Gateway bind. Peer tokens stay the message authentication boundary.
+            if (localIngressOnly && !isLoopbackRemoteAddress(request.socket?.remoteAddress)) {
+              writeJsonResponse(response, 403, {
+                error: "A2A ingress is restricted to loopback",
+              });
+              return true;
+            }
+
             const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
             if (
               request.method === "GET" &&

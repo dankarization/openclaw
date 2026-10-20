@@ -139,7 +139,7 @@ Add a peer URL when OpenClaw should send messages to another A2A agent. Set `out
 }
 ```
 
-Address outbound messages to `a2a:hermes`. The plugin sends `SendMessage` directly to the configured URL without performing Agent Card discovery. Outbound messages reuse a stable conversation context per peer. A peer without a configured `url` cannot receive outbound messages.
+Address outbound messages to `a2a:hermes`. The plugin sends `SendMessage` directly to the configured URL without performing Agent Card discovery. A peer without a configured `url` cannot receive outbound messages. Outbound messages reuse a stable conversation context per peer.
 
 Agent replies, including queued followups, deliver only terminal reply content to A2A peers.
 Host status notices, including metadata-only diagnostics, and run-failure messages are not
@@ -205,6 +205,22 @@ message-tool read receipt. This is not durable execution or an exactly-once guar
 | `peers.<name>.token`         | string   | required | Bearer token required when this peer sends requests to OpenClaw.               |
 | `peers.<name>.url`           | string   | -        | Peer JSON-RPC endpoint for outbound messages.                                  |
 | `peers.<name>.outboundToken` | string   | -        | Bearer token OpenClaw sends to the configured peer URL.                        |
+| `peers.<name>.allowedAgents` | string[] | -        | Agents allowed to start new outbound tasks for this peer.                      |
+| `localIngressOnly`           | boolean  | `false`  | Refuse `/a2a/v1` requests whose socket peer is not loopback.                   |
+
+A2A serves its route on the shared Gateway listener, so a Gateway bound to a LAN
+address also publishes `/a2a/v1` there; the peer bearer token stays the
+authentication boundary. Set `localIngressOnly` to also refuse requests whose
+socket peer is not loopback (the check uses the raw socket address and never a
+forwarded header).
+
+A peer without `allowedAgents` keeps the account-level behavior: any agent that
+can address the peer may start a task. Once a peer lists agents, only those
+agents may start a NEW task, and the decision uses the host-resolved
+agent-scoped session key rather than tool or model arguments. A send with no
+attested agent scope fails closed instead of borrowing another agent's grant.
+Replying to an inbound task is not an outbound send, so listing agents never
+blocks replies to that task.
 
 Peer names must begin with a lowercase letter or number and can also contain periods, underscores, and hyphens.
 

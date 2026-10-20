@@ -12,6 +12,8 @@ const a2aPeerConfigSchema = z
     token: z.string().min(1),
     url: a2aHttpUrlSchema.optional(),
     outboundToken: z.string().min(1).optional(),
+    /** Agents allowed to start new tasks for this peer; omitted keeps every agent. */
+    allowedAgents: z.array(z.string().min(1)).optional(),
   })
   .strict();
 
@@ -23,6 +25,8 @@ const a2aChannelConfigSchema = z
     replyTimeoutMs: z.number().int().min(5_000).max(600_000).optional(),
     rateLimitPerMinute: z.number().int().min(0).optional(),
     exposeAgents: z.array(z.string()).optional(),
+    /** Refuse `/a2a/v1` requests whose socket peer is not loopback. */
+    localIngressOnly: z.boolean().optional(),
     peers: z.record(z.string().regex(a2aPeerNamePattern), a2aPeerConfigSchema).optional(),
   })
   .strict();
@@ -41,5 +45,7 @@ export const a2aPluginConfigSchema = buildChannelConfigSchema(a2aChannelConfigSc
     exposeAgents: { label: "Exposed Agent IDs" },
     "peers.*.token": { label: "Inbound Bearer Token", sensitive: true },
     "peers.*.outboundToken": { label: "Outbound Bearer Token", sensitive: true },
+    "peers.*.allowedAgents": { label: "Agents Allowed to Start Tasks" },
+    localIngressOnly: { label: "Loopback-Only A2A Ingress" },
   },
 });

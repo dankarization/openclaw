@@ -7,6 +7,7 @@ import {
 } from "openclaw/plugin-sdk/ssrf-runtime";
 import { z } from "zod";
 import { DEFAULT_ACCOUNT_ID, resolveA2aChannelAccount } from "./accounts.js";
+import { assertA2aOutboundAgentAllowed } from "./outbound-acl.js";
 
 const A2A_OUTBOUND_TIMEOUT_MS = 30_000;
 
@@ -31,6 +32,8 @@ type A2aOutboundSendParams = {
   accountId?: string | null;
   to: string;
   text: string;
+  /** Host-resolved session key of the agent that issued this send. */
+  sessionKey?: string | null;
   assertDirectAdapterHandoff?: () => void;
 };
 
@@ -156,7 +159,10 @@ export async function sendA2aChannelText(params: A2aOutboundSendParams): Promise
   contextId: string;
 }> {
   const messageId = randomUUID();
-  const { peerName } = resolveA2aOutboundPeer(params);
+  const { peerName, peer } = resolveA2aOutboundPeer(params);
+  // Only a NEW task needs source-agent authority; reads keep their receipt or
+  // operator authority, so the guard lives on the send path alone.
+  assertA2aOutboundAgentAllowed({ peerName, peer, sessionKey: params.sessionKey });
   const contextId = `ctx-oc-${peerName}`;
   const response = await requestA2aPeer({
     ...params,

@@ -99,6 +99,7 @@ export async function handleA2aTaskAction(ctx: ChannelMessageActionContext) {
       accountId: ctx.accountId,
       to,
       text,
+      sessionKey: ctx.sessionKey,
       assertDirectAdapterHandoff: ctx.assertDirectAdapterHandoff,
     });
     let readAvailable = false;
