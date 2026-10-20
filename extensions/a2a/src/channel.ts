@@ -39,7 +39,7 @@ import {
 import { DEFAULT_ACCOUNT_ID } from "./accounts.js";
 import { A2A_CHANNEL_ID, a2aChannelSetupPlugin } from "./channel-base.js";
 import { dispatchA2aInbound } from "./inbound.js";
-import { isLoopbackRemoteAddress } from "./ingress-locality.js";
+import { describeA2aIngressDenial } from "./ingress-locality.js";
 import { a2aMessageActions } from "./message-actions.js";
 import { sendA2aChannelText } from "./outbound.js";
 import {
@@ -468,14 +468,19 @@ export const a2aChannelPlugin: ChannelPlugin<ResolvedA2aChannelAccount> = create
             request: IncomingMessage,
             response: ServerResponse,
           ): Promise<boolean> => {
-            // A Gateway bound to a LAN address also publishes this route there, so an
+            // A Gateway bound to a LAN address also publishes this route there, and a
+            // reverse proxy in front of it reaches the listener from loopback, so an
             // operator can pin inbound A2A traffic to the local host without changing
             // the Gateway bind. Peer tokens stay the message authentication boundary.
-            if (localIngressOnly && !isLoopbackRemoteAddress(request.socket?.remoteAddress)) {
-              writeJsonResponse(response, 403, {
-                error: "A2A ingress is restricted to loopback",
+            if (localIngressOnly) {
+              const denial = describeA2aIngressDenial({
+                remoteAddress: request.socket?.remoteAddress,
+                headers: request.headers,
               });
-              return true;
+              if (denial) {
+                writeJsonResponse(response, 403, { error: denial });
+                return true;
+              }
             }
 
             const pathname = new URL(request.url ?? "/", "http://localhost").pathname;

@@ -206,13 +206,20 @@ message-tool read receipt. This is not durable execution or an exactly-once guar
 | `peers.<name>.url`           | string   | -        | Peer JSON-RPC endpoint for outbound messages.                                  |
 | `peers.<name>.outboundToken` | string   | -        | Bearer token OpenClaw sends to the configured peer URL.                        |
 | `peers.<name>.allowedAgents` | string[] | -        | Agents allowed to start new outbound tasks for this peer.                      |
-| `localIngressOnly`           | boolean  | `false`  | Refuse `/a2a/v1` requests whose socket peer is not loopback.                   |
+| `localIngressOnly`           | boolean  | `false`  | Refuse `/a2a/v1` requests that are not direct local traffic.                   |
 
 A2A serves its route on the shared Gateway listener, so a Gateway bound to a LAN
 address also publishes `/a2a/v1` there; the peer bearer token stays the
-authentication boundary. Set `localIngressOnly` to also refuse requests whose
-socket peer is not loopback (the check uses the raw socket address and never a
-forwarded header).
+authentication boundary. Set `localIngressOnly` to also refuse any request that is
+not direct local traffic. The check runs before the body is read and before any peer
+token is resolved, and it uses the raw socket address together with the absence of
+forwarding headers (`Forwarded`, `X-Forwarded-For`, `X-Forwarded-Host`,
+`X-Forwarded-Proto`, `X-Real-IP`). A reverse proxy in front of the listener connects
+from loopback, so a forwarded request would otherwise look local; the forwarding
+headers are only ever a reason to refuse, never a way to gain access. A proxy that
+strips every forwarding header is therefore indistinguishable from a direct local
+client, and a remote client that can reach the listener through a header-stripping
+proxy is out of scope for this setting.
 
 A peer without `allowedAgents` keeps the account-level behavior: any agent that
 can address the peer may start a task. Once a peer lists agents, only those
