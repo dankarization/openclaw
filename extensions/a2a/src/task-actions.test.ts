@@ -183,10 +183,14 @@ describe("A2A source-bound task reads", () => {
     expect(f.methods).toEqual(["SendMessage", ...Array<string>(8).fill("GetTask")]);
   });
 
-  it("isolates parallel task results within the existing peer conversation", async () => {
+  it("keeps parallel new tasks in their own conversation with their own result", async () => {
     const f = fixture();
     await Promise.all([handleA2aTaskAction(f.context), handleA2aTaskAction(f.context)]);
-    expect(f.tasks.get("task-1")!.contextId).toBe(f.tasks.get("task-2")!.contextId);
+    const firstContext = f.tasks.get("task-1")!.contextId;
+    const secondContext = f.tasks.get("task-2")!.contextId;
+    expect(firstContext).toMatch(/^ctx-oc-alpha-[0-9a-f-]{36}$/);
+    expect(secondContext).toMatch(/^ctx-oc-alpha-[0-9a-f-]{36}$/);
+    expect(firstContext).not.toBe(secondContext);
     for (const task of f.tasks.values()) {
       task.status.state = "completed";
       task.artifacts = [{ parts: [{ text: task.id }] }];

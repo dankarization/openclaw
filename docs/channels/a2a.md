@@ -139,7 +139,7 @@ Add a peer URL when OpenClaw should send messages to another A2A agent. Set `out
 }
 ```
 
-Address outbound messages to `a2a:hermes`. The plugin sends `SendMessage` directly to the configured URL without performing Agent Card discovery. A peer without a configured `url` cannot receive outbound messages. Outbound messages reuse a stable conversation context per peer.
+Address outbound messages to `a2a:hermes`. The plugin sends `SendMessage` directly to the configured URL without performing Agent Card discovery. A peer without a configured `url` cannot receive outbound messages. Each new task gets its own `contextId`, so independent tasks stay independent on the peer; pass an explicit `contextId` to continue an existing conversation, and the peer-reported context is what later receipt reads compare against.
 
 Agent replies, including queued followups, deliver only terminal reply content to A2A peers.
 Host status notices, including metadata-only diagnostics, and run-failure messages are not

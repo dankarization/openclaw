@@ -34,6 +34,8 @@ type A2aOutboundSendParams = {
   text: string;
   /** Host-resolved session key of the agent that issued this send. */
   sessionKey?: string | null;
+  /** Continuation context for a task that belongs to an existing conversation. */
+  contextId?: string | null;
   assertDirectAdapterHandoff?: () => void;
 };
 
@@ -163,7 +165,9 @@ export async function sendA2aChannelText(params: A2aOutboundSendParams): Promise
   // Only a NEW task needs source-agent authority; reads keep their receipt or
   // operator authority, so the guard lives on the send path alone.
   assertA2aOutboundAgentAllowed({ peerName, peer, sessionKey: params.sessionKey });
-  const contextId = `ctx-oc-${peerName}`;
+  // Independent tasks must not share one remote conversation; a caller that
+  // continues an existing conversation passes its contextId instead.
+  const contextId = params.contextId?.trim() || `ctx-oc-${peerName}-${randomUUID()}`;
   const response = await requestA2aPeer({
     ...params,
     method: "SendMessage",

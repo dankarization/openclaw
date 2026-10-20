@@ -174,7 +174,7 @@ describe("A2A channel message adapter", () => {
         message: {
           messageId: expect.any(String),
           role: "ROLE_USER",
-          contextId: "ctx-oc-hermes",
+          contextId: expect.stringMatching(/^ctx-oc-hermes-[0-9a-f-]{36}$/),
           parts: [{ text: "hello" }],
         },
         configuration: { returnImmediately: true },
