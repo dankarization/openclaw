@@ -183,14 +183,14 @@ describe("A2A task reads through real host action admission", () => {
     const release = createDeferred();
     const original = f.fetch.getMockImplementation()!;
     f.fetch.mockImplementationOnce(async (...args) => {
-      started.resolve();
+      started.resolve(undefined);
       await release.promise;
       return await original(...args);
     });
     const read = dispatchChannelMessageAction(f.readContext);
     await awaitGateBeforeSettlement(started.promise, read, "read settled before provider I/O");
     revokePluginRecord(f.registry, f.record);
-    release.resolve();
+    release.resolve(undefined);
     await expect(read).rejects.toThrow(/authority|revoked|active/);
   });
 

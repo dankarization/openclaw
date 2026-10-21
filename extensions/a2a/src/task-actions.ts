@@ -10,30 +10,32 @@ type TaskReceipt = { source: string; contextId: string; createdAt: number };
 const receipts = new Map<string, TaskReceipt>();
 const MAX_RECEIPTS = 500;
 const RECEIPT_TTL_MS = 24 * 60 * 60 * 1000;
+/**
+ * Bound on the peer-supplied conversation context retained with a receipt. The value
+ * comes from the remote task, so an unbounded copy would let one peer pin memory far
+ * beyond the entry count cap; an over-long or non-printable value simply stores no
+ * receipt, which fails the later read closed.
+ */
+const MAX_CONTEXT_ID_BYTES = 512;
 let receiptGeneration = 0;
+
+function isStorableContextId(value: string | undefined | null): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    Buffer.byteLength(value, "utf8") <= MAX_CONTEXT_ID_BYTES &&
+    /^[\x20-\x7e]+$/.test(value)
+  );
+}
 
 const TaskSchema = z.object({
   id: z.string().min(1),
   contextId: z.string().min(1),
   status: z.object({
-    state: z.enum([
-      "TASK_STATE_SUBMITTED",
-      "TASK_STATE_WORKING",
-      "TASK_STATE_COMPLETED",
-      "TASK_STATE_FAILED",
-      "TASK_STATE_CANCELED",
-      "TASK_STATE_REJECTED",
-      "TASK_STATE_INPUT_REQUIRED",
-      "TASK_STATE_AUTH_REQUIRED",
-      "submitted",
-      "working",
-      "completed",
-      "failed",
-      "canceled",
-      "rejected",
-      "input-required",
-      "auth-required",
-    ]),
+    // Conforming peers may report a state this build does not enumerate (for example
+    // TASK_STATE_UNSPECIFIED); the reader normalizes any value and treats only the known
+    // terminal states as terminal instead of rejecting the whole task.
+    state: z.string().min(1),
     message: z.object({ parts: z.array(z.unknown()) }).optional(),
   }),
   artifacts: z.array(z.object({ parts: z.array(z.unknown()) })).optional(),
@@ -105,6 +107,9 @@ export async function handleA2aTaskAction(ctx: ChannelMessageActionContext) {
     let readAvailable = false;
     if (sent.taskId && source && generation === receiptGeneration) {
       const key = taskKey(scope, sent.taskId);
+      // Prune before the collision lookup: an entry that outlived its TTL must not block
+      // a replacement receipt for the same task ID.
+      pruneReceipts();
       const previous = receipts.get(key);
       if (previous && previous.source !== source) {
         // A peer that reuses a task ID for another source must not leave the earlier
@@ -112,7 +117,7 @@ export async function handleA2aTaskAction(ctx: ChannelMessageActionContext) {
         // remote context, so the stale receipt would pass the source-independent
         // context check. Revoke it instead of retaining authority for the old source.
         receipts.delete(key);
-      } else {
+      } else if (isStorableContextId(sent.contextId)) {
         receipts.set(key, { source, contextId: sent.contextId, createdAt: Date.now() });
         pruneReceipts();
         readAvailable = true;

@@ -302,7 +302,9 @@ describe("A2A source-bound task reads", () => {
           task.contextId = "other-context";
         }
         if (kind === "invalid-state") {
-          task.status.state = "unknown";
+          // A malformed state (not a string) is still rejected; a conforming but
+          // unenumerated state is normalized instead, covered separately.
+          (task.status as { state?: unknown }).state = 42;
         }
         return reply(kind === "rpc-id" ? "other-request" : rpc.id, task);
       });
@@ -356,7 +358,7 @@ describe("A2A source-bound task reads", () => {
     const started = createDeferred();
     const response = createDeferred<Response>();
     f.fetchMock.mockImplementationOnce(async () => {
-      started.resolve();
+      started.resolve(undefined);
       return await response.promise;
     });
     const read = f.read();
@@ -375,14 +377,14 @@ describe("A2A source-bound task reads", () => {
     const release = createDeferred();
     const original = f.fetchMock.getMockImplementation()!;
     f.fetchMock.mockImplementationOnce(async (...args) => {
-      started.resolve();
+      started.resolve(undefined);
       await release.promise;
       return await original(...args);
     });
     const send = handleA2aTaskAction(f.context);
     await started.promise;
     clearA2aTaskReadReceipts();
-    release.resolve();
+    release.resolve(undefined);
     expect((await send).details).toMatchObject({ messageId: "task-1", readAvailable: false });
     await expect(f.read()).rejects.toThrow("do not resend");
     expect(f.methods).toEqual(["SendMessage"]);
@@ -419,5 +421,65 @@ describe("A2A source-bound task reads", () => {
     ).rejects.toThrow("SendMessage receipt");
     expect(f.fetchMock).not.toHaveBeenCalled();
     expect(f.methods).toEqual(["SendMessage", "SendMessage"]);
+  });
+
+  it("lets an expired receipt be replaced instead of blocking the next send", async () => {
+    vi.useFakeTimers();
+    try {
+      const f = fixture();
+      expect((await handleA2aTaskAction(f.context)).details).toMatchObject({ readAvailable: true });
+      vi.advanceTimersByTime(24 * 60 * 60 * 1000 + 1);
+      f.tasks.clear();
+      const other = {
+        agentId: "yougile",
+        sessionKey: "agent:yougile:webchat:fixture",
+        sessionId: "incarnation-3",
+      };
+      expect((await handleA2aTaskAction({ ...f.context, ...other })).details).toMatchObject({
+        messageId: "task-1",
+        readAvailable: true,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stores no receipt when the peer reports an unbounded context id", async () => {
+    const f = fixture();
+    f.fetchMock.mockImplementationOnce(async (_url, init) => {
+      const rpc = JSON.parse(requestBodyText(init?.body)) as { id: string };
+      return reply(rpc.id, {
+        task: {
+          id: "task-big",
+          contextId: "c".repeat(4096),
+          status: { state: "TASK_STATE_WORKING" },
+          artifacts: [],
+        },
+      });
+    });
+    expect((await handleA2aTaskAction(f.context)).details).toMatchObject({
+      messageId: "task-big",
+      readAvailable: false,
+    });
+    await expect(f.read("task-big")).rejects.toThrow("SendMessage receipt");
+  });
+
+  it("normalizes a conforming unknown state as nonterminal instead of rejecting the task", async () => {
+    const f = fixture();
+    await handleA2aTaskAction(f.context);
+    f.fetchMock.mockImplementationOnce(async (_url, init) => {
+      const rpc = JSON.parse(requestBodyText(init?.body)) as { id: string };
+      return reply(rpc.id, {
+        id: "task-1",
+        contextId: "ctx-oc-alpha",
+        status: { state: "TASK_STATE_UNSPECIFIED" },
+        artifacts: [],
+      });
+    });
+    expect((await f.read()).details).toMatchObject({
+      taskId: "task-1",
+      state: "unspecified",
+      terminal: false,
+    });
   });
 });
