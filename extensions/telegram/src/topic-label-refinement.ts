@@ -1,10 +1,10 @@
+import { resolveAgentDir } from "openclaw/plugin-sdk/agent-runtime";
 import { isControlCommandMessage } from "openclaw/plugin-sdk/command-detection";
+import { generateConversationLabel as generateTopicLabel } from "openclaw/plugin-sdk/reply-dispatch-runtime";
 import { resolveStorePath } from "openclaw/plugin-sdk/session-store-runtime";
 import { truncateUtf16Safe } from "openclaw/plugin-sdk/text-utility-runtime";
 import { resolveTelegramAccountOwnerAgentId } from "./account-owner.js";
 import { AUTO_TOPIC_LABEL_REFINE_PROMPT } from "./auto-topic-label-config.js";
-import { resolveAgentDir } from "./bot-message-dispatch.agent.runtime.js";
-import { generateTopicLabel } from "./bot-message-dispatch.runtime.js";
 import { getTelegramRuntime } from "./runtime.js";
 import {
   appendTopicNameCacheAccountScope,

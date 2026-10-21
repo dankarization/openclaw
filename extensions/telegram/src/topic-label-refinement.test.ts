@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type GenerateTopicLabelParams = Parameters<
-  typeof import("./bot-message-dispatch.runtime.js").generateTopicLabel
+  typeof import("openclaw/plugin-sdk/reply-dispatch-runtime").generateConversationLabel
 >[0];
 
 const h = vi.hoisted(() => {
@@ -29,11 +29,11 @@ vi.mock("openclaw/plugin-sdk/text-utility-runtime", () => ({
   truncateUtf16Safe: (text: string, max: number) => text.slice(0, max),
 }));
 // mock-isolation: label generation needs a controlled LLM double; real generator would call live model providers.
-vi.mock("./bot-message-dispatch.runtime.js", () => ({
-  generateTopicLabel: h.generateTopicLabel,
+vi.mock("openclaw/plugin-sdk/reply-dispatch-runtime", () => ({
+  generateConversationLabel: h.generateTopicLabel,
 }));
 // mock-isolation: agent dir resolution must not touch real workspace layout in unit tests.
-vi.mock("./bot-message-dispatch.agent.runtime.js", () => ({
+vi.mock("openclaw/plugin-sdk/agent-runtime", () => ({
   resolveAgentDir: () => "/tmp/agent",
 }));
 // mock-isolation: keyed store is replaced by an in-memory double; real runtime owns persistent plugin state.
