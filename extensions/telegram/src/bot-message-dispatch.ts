@@ -3,6 +3,7 @@ import {
   formatMediaPlaceholderText,
   isChannelPartialDeliveryError,
 } from "openclaw/plugin-sdk/channel-inbound";
+import { captureAsyncWorkTracker } from "openclaw/plugin-sdk/concurrency-runtime";
 import { getAgentScopedMediaLocalRoots } from "openclaw/plugin-sdk/media-runtime";
 import { getGlobalHookRunner } from "openclaw/plugin-sdk/plugin-runtime";
 import {
@@ -166,7 +167,7 @@ async function scheduleDmTopicLabel(params: {
     if (!refineCfg.enabled || !params.userMessage.trim()) {
       return;
     }
-    void maybeRefineTopicLabel({
+    await maybeRefineTopicLabel({
       botId: params.bot.botInfo?.id,
       accountId: context.route.accountId,
       bot: params.bot,
@@ -210,8 +211,9 @@ async function scheduleDmTopicLabel(params: {
       label: "",
     });
   }
-  void (async () => {
+  await (async () => {
     try {
+      assertAccountCurrent();
       const label = await generateTopicLabel({
         userMessage,
         prompt: autoTopicConfig.prompt,
@@ -219,12 +221,14 @@ async function scheduleDmTopicLabel(params: {
         cfg: params.cfg,
         agentId: context.route.agentId,
         agentDir: resolveAgentDir(params.cfg, context.route.agentId),
+        assertCurrent: assertAccountCurrent,
       });
       if (!label) {
         logVerbose("auto-topic-label: LLM returned empty label");
         return;
       }
       logVerbose(`auto-topic-label: generated label (len=${label.length})`);
+      assertAccountCurrent();
       await params.bot.api.editForumTopic(context.chatId, topicThreadId, { name: label });
       // Cache the automatic label so the refinement's manual-rename guard can
       // observe later human renames of DM topics (Codex 4302875124).
@@ -268,6 +272,9 @@ async function scheduleDmTopicLabel(params: {
 export const dispatchTelegramMessage = async (
   dispatchParams: DispatchTelegramMessageParams,
 ): Promise<TelegramDispatchResult> => {
+  // Retain naming under the existing ingress owner, before the foreground turn
+  // enters nested scopes. This captures work ownership, never authorization.
+  const trackTopicLabelWork = captureAsyncWorkTracker();
   const {
     context,
     bot,
@@ -574,19 +581,21 @@ export const dispatchTelegramMessage = async (
     return { kind: "completed" };
   }
 
-  void scheduleDmTopicLabel({
-    bot,
-    cfg,
-    context: dispatchContext,
-    isFirstTurnInSession,
-    telegramCfg,
-    userMessage: truncateUtf16Safe(
-      (dispatchContext.ctxPayload.RawBody ?? dispatchContext.ctxPayload.Body ?? "").trim() ||
-        formatMediaPlaceholderText(dispatchContext.ctxPayload.media ?? []),
-      500,
-    ),
-    ...(opts.accountAbortSignal ? { accountAbortSignal: opts.accountAbortSignal } : {}),
-  });
+  void trackTopicLabelWork(() =>
+    scheduleDmTopicLabel({
+      bot,
+      cfg,
+      context: dispatchContext,
+      isFirstTurnInSession,
+      telegramCfg,
+      userMessage: truncateUtf16Safe(
+        (dispatchContext.ctxPayload.RawBody ?? dispatchContext.ctxPayload.Body ?? "").trim() ||
+          formatMediaPlaceholderText(dispatchContext.ctxPayload.media ?? []),
+        500,
+      ),
+      ...(opts.accountAbortSignal ? { accountAbortSignal: opts.accountAbortSignal } : {}),
+    }),
+  ).catch((error: unknown) => logVerbose(`auto-topic-label: failed: ${String(error)}`));
   if (statusReactionController) {
     finalizeStatusInBackground(
       turn.agentRunFailed ||

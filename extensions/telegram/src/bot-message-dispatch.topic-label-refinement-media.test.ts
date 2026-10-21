@@ -1,3 +1,4 @@
+import { AsyncWorkScope } from "openclaw/plugin-sdk/concurrency-runtime";
 import { beforeEach, expect, it, vi } from "vitest";
 import {
   createBot,
@@ -5,6 +6,7 @@ import {
   describeTelegramDispatch,
   dispatchReplyWithBufferedBlockDispatcher,
   dispatchWithContext,
+  generateTopicLabel,
   loadSessionStore,
 } from "./bot-message-dispatch.test-harness.js";
 
@@ -74,4 +76,155 @@ describeTelegramDispatch("DM topic naming for captionless media", () => {
     expect(editForumTopic).toHaveBeenCalledWith(123, 777, { name: "Topic label" });
     expect(naming.arm).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ label: "" }));
   });
+
+  it("retains first-turn naming while the foreground settles before refinement arming finishes", async () => {
+    const scope = new AsyncWorkScope();
+    const release = Promise.withResolvers<void>();
+    naming.arm.mockImplementationOnce(async () => {
+      await release.promise;
+    });
+    // The model boundary admits work only while its foreground owner is live.
+    generateTopicLabel.mockImplementation(() => scope.track(async () => "Owned topic label"));
+    const bot = createBot();
+    const edit = vi.fn<typeof bot.api.editForumTopic>().mockResolvedValue(true);
+    bot.api.editForumTopic = edit;
+    const context = createContext();
+    context.ctxPayload.RawBody = "";
+    context.ctxPayload.media = [{ kind: "image" }];
+    const runtime = {
+      log: vi.fn(),
+      error: vi.fn(),
+      exit: () => {
+        throw new Error("exit");
+      },
+    };
+    let foregroundSettled = false;
+    const dispatched = scope.track(() =>
+      dispatchWithContext({
+        context,
+        bot,
+        runtime,
+        telegramCfg: { autoTopicLabel: { refine: true, refineAfterMessages: 2 } },
+      }).then(() => {
+        foregroundSettled = true;
+      }),
+    );
+    try {
+      await vi.waitFor(() => expect(naming.arm).toHaveBeenCalledTimes(1), { timeout: 5000 });
+      await vi.waitFor(
+        () =>
+          expect({ foregroundSettled, errors: runtime.error.mock.calls }).toEqual({
+            foregroundSettled: true,
+            errors: [],
+          }),
+        { timeout: 5000 },
+      );
+      expect(runtime.error.mock.calls).toEqual([]);
+      await vi.waitFor(() => expect(naming.arm).toHaveBeenCalledTimes(1));
+      const settled = AsyncWorkScope.runWhenAllIdle(
+        () => [scope],
+        () => scope.drain(),
+      );
+      release.resolve();
+      await settled;
+      await vi.waitFor(() =>
+        expect(edit).toHaveBeenCalledWith(123, 777, { name: "Owned topic label" }),
+      );
+      expect(naming.attach).toHaveBeenCalledTimes(1);
+    } finally {
+      release.resolve();
+      await dispatched;
+      await AsyncWorkScope.runWhenAllIdle(
+        () => [scope],
+        () => scope.drain(),
+      );
+    }
+  });
+
+  it("retains a later refinement after foreground dispatch settles", async () => {
+    const scope = new AsyncWorkScope();
+    const release = Promise.withResolvers<void>();
+    naming.refine.mockImplementationOnce(async () => {
+      await release.promise;
+    });
+    const context = createContext();
+    context.ctxPayload.RawBody = "";
+    context.ctxPayload.media = [{ kind: "image" }];
+    loadSessionStore.mockReturnValue({ [context.ctxPayload.SessionKey!]: { systemSent: true } });
+    try {
+      await scope.track(() =>
+        dispatchWithContext({
+          context,
+          telegramCfg: { autoTopicLabel: { refine: true, refineAfterMessages: 2 } },
+        }),
+      );
+      expect(naming.refine).toHaveBeenCalledTimes(1);
+      let drained = false;
+      const settled = AsyncWorkScope.runWhenAllIdle(
+        () => [scope],
+        () => scope.drain(),
+      ).then(() => {
+        drained = true;
+      });
+      await Promise.resolve();
+      expect(drained).toBe(false);
+      release.resolve();
+      await settled;
+      expect(drained).toBe(true);
+    } finally {
+      release.resolve();
+      await AsyncWorkScope.runWhenAllIdle(
+        () => [scope],
+        () => scope.drain(),
+      );
+    }
+  });
+
+  it.each(["before generation", "during generation"] as const)(
+    "does not rename when the account stops %s",
+    async (timing) => {
+      const scope = new AsyncWorkScope();
+      const stopped = new AbortController();
+      const release = Promise.withResolvers<string>();
+      generateTopicLabel.mockImplementation(() => release.promise);
+      if (timing === "before generation") {
+        stopped.abort();
+      }
+      const context = createContext();
+      context.ctxPayload.RawBody = "";
+      context.ctxPayload.media = [{ kind: "image" }];
+      const bot = createBot();
+      const edit = vi.fn<typeof bot.api.editForumTopic>().mockResolvedValue(true);
+      bot.api.editForumTopic = edit;
+      try {
+        await scope.track(() =>
+          dispatchWithContext({
+            context,
+            bot,
+            opts: { token: "token", accountAbortSignal: stopped.signal },
+            telegramCfg: { autoTopicLabel: { refine: true, refineAfterMessages: 2 } },
+          }),
+        );
+        if (timing === "during generation") {
+          await vi.waitFor(() => expect(generateTopicLabel).toHaveBeenCalledTimes(1));
+          stopped.abort();
+        } else {
+          expect(generateTopicLabel).not.toHaveBeenCalled();
+        }
+        release.resolve("Late model label");
+        await AsyncWorkScope.runWhenAllIdle(
+          () => [scope],
+          () => scope.drain(),
+        );
+        expect(edit).not.toHaveBeenCalled();
+        expect(naming.attach).not.toHaveBeenCalled();
+      } finally {
+        release.resolve("Late model label");
+        await AsyncWorkScope.runWhenAllIdle(
+          () => [scope],
+          () => scope.drain(),
+        );
+      }
+    },
+  );
 });
