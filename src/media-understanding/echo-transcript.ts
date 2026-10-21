@@ -1,5 +1,3 @@
-// Transcript echo delivery sends best-effort preflight audio transcripts back
-// through deliverable message channels.
 import { createHash } from "node:crypto";
 import { normalizeLowercaseStringOrEmpty } from "@openclaw/normalization-core/string-coerce";
 import type { MsgContext } from "../auto-reply/templating.js";
