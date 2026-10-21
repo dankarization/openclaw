@@ -15,7 +15,8 @@ const naming = vi.hoisted(() => ({
 }));
 // mock-isolation: this suite owns dispatch-to-naming selection; durable claims
 // and rename guards are covered by the refinement owner's tests.
-vi.mock("./topic-label-refinement.js", () => ({
+vi.mock("./topic-label-refinement.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./topic-label-refinement.js")>()),
   armTopicLabelRefinement: naming.arm,
   attachTopicLabelRefinementLabel: naming.attach,
   maybeRefineTopicLabel: naming.refine,
