@@ -25,7 +25,7 @@ import {
 type TopicLabelRefinementEntry = {
   /** Label this bot generated for the first turn. */
   label: string;
-  /** User task messages observed after the label was generated. */
+  /** Later user task messages, including those received during initial generation. */
   count: number;
   /** Intermediate user excerpts retained for the refinement source. */
   excerpts?: string[];
@@ -119,21 +119,13 @@ export async function armTopicLabelRefinement(params: {
  * (arm-before-async-label ordering). Without an armed entry this is a no-op,
  * matching the previous arm-after-label behavior.
  */
-export async function attachTopicLabelRefinementLabel(params: {
-  botId: number | string | undefined;
-  accountId: string;
-  chatId: number | string;
-  threadId: number;
-  label: string;
-}): Promise<void> {
+export async function attachTopicLabelRefinementLabel(
+  params: Omit<MaybeRefineTopicLabelParams, "userMessage"> & { label: string },
+): Promise<void> {
   try {
-    const store = await loadRefinementStore();
-    const key = refinementKey(params);
-    const existing = await store.lookup(key);
-    if (!existing || existing.done) {
-      return;
-    }
-    await store.register(key, { ...existing, label: params.label });
+    await withRefinementLock(refinementKey(params), () =>
+      runRefinementTurn(params, { label: params.label }),
+    );
   } catch (err) {
     console.warn(`auto-topic-label: refinement label attach failed: ${String(err)}`);
   }
@@ -197,7 +189,9 @@ export async function maybeRefineTopicLabel(params: {
     // overlapping dispatch turns would lose a counter increment below the
     // threshold or spend the single refinement attempt twice at it
     // (Codex 4304709772).
-    await withRefinementLock(refinementKey(params), () => runRefinementTurn(params));
+    await withRefinementLock(refinementKey(params), () =>
+      runRefinementTurn(params, { userMessage: params.userMessage }),
+    );
   } catch (err) {
     params.logVerbose(`auto-topic-label: refinement failed: ${String(err)}`);
   }
@@ -207,7 +201,10 @@ export async function maybeRefineTopicLabel(params: {
  * One refinement turn for a single topic, serialized per refinement key by
  * withRefinementLock (Codex 4304709772).
  */
-async function runRefinementTurn(params: MaybeRefineTopicLabelParams): Promise<void> {
+async function runRefinementTurn(
+  params: Omit<MaybeRefineTopicLabelParams, "userMessage">,
+  event: { userMessage: string } | { label: string },
+): Promise<void> {
   try {
     const key = refinementKey(params);
     const store = await loadRefinementStore();
@@ -215,27 +212,27 @@ async function runRefinementTurn(params: MaybeRefineTopicLabelParams): Promise<v
     if (!entry || entry.done) {
       return;
     }
-    const next: TopicLabelRefinementEntry = { ...entry, count: entry.count + 1 };
-    if (next.count < params.afterMessages) {
-      const excerpt = truncateUtf16Safe(params.userMessage, REFINEMENT_SOURCE_MAX_CHARS);
+    const next: TopicLabelRefinementEntry = { ...entry };
+    if ("label" in event) {
+      next.label = event.label;
+    } else {
+      const excerpt = truncateUtf16Safe(event.userMessage, REFINEMENT_SOURCE_MAX_CHARS);
       if (!excerpt.trim()) {
         return;
       }
-      // Retain intermediate turns below the threshold so the refinement prompt
-      // carries the full task context, not only the final message
-      // (Codex 4300799475). The retained window is capped independently of the
-      // threshold: with refineAfterMessages: 100 and CJK/long messages this
-      // would otherwise send ~50k chars to the label model and reject the only
-      // refinement attempt on smaller-context providers (Codex 4304532547).
+      next.count += 1;
+      // Keep a bounded task window even when the threshold is reached before
+      // initial inference finishes. Attaching its label resumes the same owner
+      // without requiring or counting an additional user turn.
       const retained = [...(entry.excerpts ?? []), excerpt];
       let kept: string[] = retained.slice(-MAX_TOPIC_REFINEMENT_EXCERPTS);
       while (kept.join("").length > MAX_TOPIC_REFINEMENT_EXCERPT_CHARS && kept.length > 1) {
         kept = kept.slice(1);
       }
-      await store.register(key, {
-        ...next,
-        excerpts: kept,
-      });
+      next.excerpts = kept;
+    }
+    await store.register(key, next);
+    if (next.count < params.afterMessages || !next.label.trim()) {
       return;
     }
     // Manual-rename guard: refine only while the topic still carries our label.
@@ -244,17 +241,6 @@ async function runRefinementTurn(params: MaybeRefineTopicLabelParams): Promise<v
     // another account's cached name (4300095326).
     const cacheScope = resolveTopicNameCacheScope({ cfg: params.cfg, accountId: params.accountId });
     const currentName = await getTopicName(params.chatId, params.threadId, cacheScope);
-    // A pending first-turn label (armed before the async label lands) carries no
-    // name yet: claiming now would spend the single attempt on a title we never
-    // actually set, racing the attaching label generation (Codex 4302875130).
-    // This defer must run BEFORE the rename guard: with refineAfterMessages:1
-    // and an already-cached original topic name, the guard's "cached name ≠
-    // empty armed label" comparison would look like a manual rename and
-    // permanently burn the one refinement attempt (Codex 4304147108).
-    if (!entry.label.trim()) {
-      params.logVerbose("auto-topic-label: refinement deferred (initial label still pending)");
-      return;
-    }
     if (currentName === undefined) {
       // The topic's cached name is unavailable (evicted by unrelated topic
       // churn or a failed cache write): its current name is unknown, so
@@ -264,7 +250,7 @@ async function runRefinementTurn(params: MaybeRefineTopicLabelParams): Promise<v
       params.logVerbose("auto-topic-label: refinement skipped (cached topic name unavailable)");
       return;
     }
-    if (currentName !== entry.label) {
+    if (currentName !== next.label) {
       await store.register(key, { ...next, excerpts: [], done: true, outcome: "failed" });
       params.logVerbose("auto-topic-label: refinement skipped (topic renamed manually)");
       return;
@@ -273,10 +259,6 @@ async function runRefinementTurn(params: MaybeRefineTopicLabelParams): Promise<v
     // account must not have its single refinement spent on a turn that can
     // never reach the Bot API (Codex 4300799472).
     params.assertServiceCurrent();
-    const excerpt = truncateUtf16Safe(params.userMessage, REFINEMENT_SOURCE_MAX_CHARS);
-    if (!excerpt.trim()) {
-      return;
-    }
     // Durable attempt claim BEFORE any external effect: a crash after the Bot
     // API edit (or a rejected edit) must never re-run the LLM and re-rename on
     // a later turn. Outcome is recorded best-effort afterwards. The claim does
@@ -293,9 +275,7 @@ async function runRefinementTurn(params: MaybeRefineTopicLabelParams): Promise<v
     let label: string | null;
     try {
       label = await generateTopicLabel({
-        userMessage: [entry.label, ...(entry.excerpts ?? []), excerpt]
-          .filter(Boolean)
-          .join("\n---\n"),
+        userMessage: [next.label, ...(next.excerpts ?? [])].filter(Boolean).join("\n---\n"),
         prompt: AUTO_TOPIC_LABEL_REFINE_PROMPT,
         maxLength: 128,
         cfg: params.cfg,
@@ -311,7 +291,7 @@ async function runRefinementTurn(params: MaybeRefineTopicLabelParams): Promise<v
       params.logVerbose("auto-topic-label: refinement produced empty label");
       return;
     }
-    if (label === entry.label) {
+    if (label === next.label) {
       await store.register(key, { ...next, excerpts: [], done: true, outcome: "renamed" });
       return;
     }
@@ -319,7 +299,7 @@ async function runRefinementTurn(params: MaybeRefineTopicLabelParams): Promise<v
     // may have renamed the topic while the LLM call was in flight, and the
     // refinement must never overwrite that name (Codex 4303083920).
     const postInferenceName = await getTopicName(params.chatId, params.threadId, cacheScope);
-    if (postInferenceName && postInferenceName !== entry.label) {
+    if (postInferenceName && postInferenceName !== next.label) {
       await store.register(key, { ...next, excerpts: [], done: true, outcome: "failed" });
       params.logVerbose("auto-topic-label: refinement skipped after inference (renamed manually)");
       return;

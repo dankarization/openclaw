@@ -233,36 +233,43 @@ describe("maybeRefineTopicLabel", () => {
     expect(call?.userMessage).toContain("second detail");
   });
 
-  it("counts a follow-up that arrives while the first-turn label is generating (arm-before-async)", async () => {
-    // Arm without a label simulates the dispatch ordering: arming happens
-    // before the async first-turn label resolves, and the follow-up is counted
-    // against the armed entry rather than racing past an empty arming window.
-    await armTopicLabelRefinement({
-      botId: BOT_ID,
-      accountId: ACCOUNT,
-      chatId: CHAT,
-      threadId: THREAD,
-      label: "",
-    });
-    // attach the generated label (as dispatch does after the async label lands)
-    const { attachTopicLabelRefinementLabel } = await import("./topic-label-refinement.js");
-    await attachTopicLabelRefinementLabel({
-      botId: BOT_ID,
-      accountId: ACCOUNT,
-      chatId: CHAT,
-      threadId: THREAD,
-      label: "Late Label",
-    });
-    storeState.set("live-name", { name: "Late Label" });
-    await maybeRefineTopicLabel({ ...base(), userMessage: "follow-up one" });
-    await maybeRefineTopicLabel({ ...base(), userMessage: "follow-up two" });
-    expect(generateTopicLabel).toHaveBeenCalledTimes(1);
-    expect(editForumTopic).toHaveBeenCalledTimes(1);
-    const call = generateTopicLabel.mock.calls[0]?.[0];
-    expect(call?.userMessage).toContain("Late Label");
-    expect(call?.userMessage).toContain("follow-up one");
-    expect(call?.userMessage).toContain("follow-up two");
-  });
+  it.each([1, 2])(
+    "resumes a threshold of %i reached before the initial label lands",
+    async (afterMessages) => {
+      await armTopicLabelRefinement({
+        botId: BOT_ID,
+        accountId: ACCOUNT,
+        chatId: CHAT,
+        threadId: THREAD,
+        label: "",
+      });
+      storeState.set("live-name", { name: "Original topic name" });
+      for (let turn = 1; turn <= afterMessages; turn++) {
+        await maybeRefineTopicLabel({ ...base(), afterMessages, userMessage: `follow-up ${turn}` });
+      }
+      expect(generateTopicLabel).not.toHaveBeenCalled();
+      expect(editForumTopic).not.toHaveBeenCalled();
+      // Dispatch caches the generated name before attaching it. No additional
+      // task message should be needed to resume an already-reached threshold.
+      storeState.set("live-name", { name: "Late Label" });
+      const { attachTopicLabelRefinementLabel } = await import("./topic-label-refinement.js");
+      await attachTopicLabelRefinementLabel({
+        ...base(),
+        afterMessages,
+        label: "Late Label",
+      });
+      expect(generateTopicLabel).toHaveBeenCalledTimes(1);
+      expect(editForumTopic).toHaveBeenCalledTimes(1);
+      const call = generateTopicLabel.mock.calls[0]?.[0];
+      expect(call?.userMessage).toContain("Late Label");
+      for (let turn = 1; turn <= afterMessages; turn++) {
+        expect(call?.userMessage).toContain(`follow-up ${turn}`);
+      }
+      await maybeRefineTopicLabel({ ...base(), afterMessages, userMessage: "another task" });
+      expect(generateTopicLabel).toHaveBeenCalledTimes(1);
+      expect(editForumTopic).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("caps retained excerpts independently of the threshold and clears them on claim (4304532547)", async () => {
     await armTopicLabelRefinement({
@@ -280,11 +287,17 @@ describe("maybeRefineTopicLabel", () => {
         userMessage: `CJK task ${"漢".repeat(450)} ${i}`,
       });
     }
-    const pending = Object.values(h.storeState).find(
-      (v) => v && typeof v === "object" && "excerpts" in v,
-    ) as { excerpts?: string[] } | undefined;
-    expect(pending?.excerpts?.length ?? 0).toBeLessThanOrEqual(8);
-    expect((pending?.excerpts ?? []).join("").length).toBeLessThanOrEqual(4_000);
+    const key = `${BOT_ID}:${ACCOUNT}:${CHAT}:${THREAD}`;
+    const pending = storeState.get(key);
+    if (!pending) {
+      throw new Error("Expected persisted topic refinement state");
+    }
+    expect(pending).toMatchObject({ count: 60, done: false });
+    expect(pending.excerpts).toHaveLength(8);
+    expect((pending.excerpts as string[]).join("").length).toBeLessThanOrEqual(4_000);
+    await maybeRefineTopicLabel({ ...base(), afterMessages: 61, userMessage: "last task" });
+    expect(generateTopicLabel).toHaveBeenCalledTimes(1);
+    expect(storeState.get(key)).toMatchObject({ done: true, excerpts: [] });
   });
 
   it("skips refinement without consuming the attempt when the cached name is unavailable (4304532550)", async () => {
@@ -302,37 +315,6 @@ describe("maybeRefineTopicLabel", () => {
     expect(editForumTopic).not.toHaveBeenCalled();
     // The attempt survives; once the name is available again, refinement runs.
     storeState.set("live-name", { name: "Auto Label" });
-    await maybeRefineTopicLabel({ ...base(), afterMessages: 1, userMessage: "follow-up two" });
-    expect(generateTopicLabel).toHaveBeenCalledTimes(1);
-    expect(editForumTopic).toHaveBeenCalledTimes(1);
-  });
-
-  it("defers while the first-turn label is pending even when the cache holds the original name (4304147108)", async () => {
-    // refineAfterMessages:1: a follow-up arrives while the first-turn label is
-    // still generating AND DM metadata has already cached the topic's original
-    // name. The rename guard must not treat "cached name ≠ empty armed label"
-    // as a manual rename and permanently consume the attempt.
-    await armTopicLabelRefinement({
-      botId: BOT_ID,
-      accountId: ACCOUNT,
-      chatId: CHAT,
-      threadId: THREAD,
-      label: "",
-    });
-    storeState.set("live-name", { name: "Original topic name" });
-    await maybeRefineTopicLabel({ ...base(), afterMessages: 1, userMessage: "follow-up" });
-    expect(generateTopicLabel).not.toHaveBeenCalled();
-    expect(editForumTopic).not.toHaveBeenCalled();
-    // The attempt survives: once the label lands, a later turn still refines.
-    const { attachTopicLabelRefinementLabel } = await import("./topic-label-refinement.js");
-    await attachTopicLabelRefinementLabel({
-      botId: BOT_ID,
-      accountId: ACCOUNT,
-      chatId: CHAT,
-      threadId: THREAD,
-      label: "Late Label",
-    });
-    storeState.set("live-name", { name: "Late Label" });
     await maybeRefineTopicLabel({ ...base(), afterMessages: 1, userMessage: "follow-up two" });
     expect(generateTopicLabel).toHaveBeenCalledTimes(1);
     expect(editForumTopic).toHaveBeenCalledTimes(1);

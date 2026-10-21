@@ -3,7 +3,6 @@ import {
   countTitleRefinementMessage,
   resolveSessionTitleRefineConfig,
   SESSION_TITLE_REFINE_AFTER_MESSAGES_DEFAULT,
-  shouldRunTitleRefinement,
   type SessionTitleRefinementState,
 } from "./session-title-refinement-state.js";
 
@@ -87,54 +86,5 @@ describe("countTitleRefinementMessage", () => {
     expect(state?.recentMessages?.[0]).toContain("task 3");
     expect(state?.recentMessages?.at(-1)).toContain("task 10");
     expect(state?.recentMessages?.every((message) => message.length <= 500)).toBe(true);
-  });
-});
-
-describe("shouldRunTitleRefinement", () => {
-  const state = (over: Partial<SessionTitleRefinementState>): SessionTitleRefinementState => ({
-    taskMessagesSinceTitle: 6,
-    refinementDone: false,
-    sessionId: SID,
-    generatedName: "Generated Title",
-    ...over,
-  });
-
-  it("does not run without state or before threshold", () => {
-    expect(shouldRunTitleRefinement({ state: undefined, sessionId: SID, afterMessages: 6 })).toBe(
-      false,
-    );
-    expect(
-      shouldRunTitleRefinement({
-        state: state({ taskMessagesSinceTitle: 5 }),
-        sessionId: SID,
-        afterMessages: 6,
-      }),
-    ).toBe(false);
-  });
-
-  it("runs exactly at threshold", () => {
-    expect(shouldRunTitleRefinement({ state: state({}), sessionId: SID, afterMessages: 6 })).toBe(
-      true,
-    );
-  });
-
-  it("never runs twice (exactly-once)", () => {
-    expect(
-      shouldRunTitleRefinement({
-        state: state({ refinementDone: true }),
-        sessionId: SID,
-        afterMessages: 6,
-      }),
-    ).toBe(false);
-  });
-
-  it("does not run across a session reset (stale state guard)", () => {
-    expect(
-      shouldRunTitleRefinement({
-        state: state({ sessionId: "old-session" }),
-        sessionId: SID,
-        afterMessages: 6,
-      }),
-    ).toBe(false);
   });
 });

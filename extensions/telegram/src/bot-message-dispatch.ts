@@ -319,8 +319,14 @@ async function scheduleDmTopicLabel(params: {
         await attachTopicLabelRefinementLabel({
           botId: params.bot.botInfo?.id,
           accountId: context.route.accountId,
+          bot: params.bot,
+          assertServiceCurrent: assertAccountCurrent,
+          cfg: params.cfg,
+          agentId: context.route.agentId,
           chatId: context.chatId,
           threadId: topicThreadId,
+          afterMessages: refineCfg.afterMessages,
+          logVerbose,
           label,
         });
       }

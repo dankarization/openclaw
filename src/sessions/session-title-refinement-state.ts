@@ -92,18 +92,3 @@ export function initializeTitleRefinementState(
     ...(options?.skipNextMessage ? { skipNextMessage: true } : {}),
   };
 }
-
-/** True when the bounded one-time refinement should run on this message. */
-export function shouldRunTitleRefinement(params: {
-  state: SessionTitleRefinementState | undefined;
-  sessionId: string;
-  afterMessages: number;
-}): boolean {
-  if (!params.state || params.state.refinementDone) {
-    return false;
-  }
-  if (params.state.sessionId !== params.sessionId) {
-    return false;
-  }
-  return params.state.taskMessagesSinceTitle >= params.afterMessages;
-}
