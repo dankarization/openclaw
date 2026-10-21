@@ -8,6 +8,7 @@ import {
 import { z } from "zod";
 import { DEFAULT_ACCOUNT_ID, resolveA2aChannelAccount } from "./accounts.js";
 import { assertA2aOutboundAgentAllowed } from "./outbound-acl.js";
+import { a2aPeerScope, currentReceiptGeneration, recordAcceptedSend } from "./task-receipts.js";
 
 const A2A_OUTBOUND_TIMEOUT_MS = 30_000;
 
@@ -37,6 +38,12 @@ type A2aOutboundSendParams = {
   /** Continuation context for a task that belongs to an existing conversation. */
   contextId?: string | null;
   assertDirectAdapterHandoff?: () => void;
+  /**
+   * Set by a caller that reconciles the task-read receipt store itself once the peer's
+   * task ID is known (the task action does). Without it this surface revokes: it carries
+   * no session identity, so it can never mint a source-bound receipt.
+   */
+  deferReceiptReconcile?: boolean;
 };
 
 export function resolveA2aOutboundPeer(
@@ -161,7 +168,7 @@ export async function sendA2aChannelText(params: A2aOutboundSendParams): Promise
   contextId: string;
 }> {
   const messageId = randomUUID();
-  const { peerName, peer } = resolveA2aOutboundPeer(params);
+  const { accountId, peerName, peer } = resolveA2aOutboundPeer(params);
   // Only a NEW task needs source-agent authority; reads keep their receipt or
   // operator authority, so the guard lives on the send path alone.
   assertA2aOutboundAgentAllowed({ peerName, peer, sessionKey: params.sessionKey });
@@ -181,11 +188,30 @@ export async function sendA2aChannelText(params: A2aOutboundSendParams): Promise
   if (!result.success) {
     throw new Error("peer returned an invalid A2A SendMessage result");
   }
+  // Preserve legacy send receipts, but only a correlated response can grant task reads.
+  const taskId = response.correlated ? result.data.task?.id : undefined;
+  // This surface carries no agent/session identity, so it can never install a receipt. It
+  // still has to reconcile the store: a peer that reports an ID already known from another
+  // source must not leave that older session able to read this task. A caller that owns
+  // receipt minting defers that reconcile so it can still see the collision.
+  if (!params.deferReceiptReconcile) {
+    recordAcceptedSend({
+      peerScope: a2aPeerScope({
+        accountId,
+        peerName,
+        url: peer.url,
+        outboundToken: peer.outboundToken,
+      }),
+      taskId,
+      source: undefined,
+      contextId: result.data.task?.contextId ?? contextId,
+      generation: currentReceiptGeneration(),
+    });
+  }
   return {
     to: params.to,
     messageId: result.data.task?.id ?? messageId,
-    // Preserve legacy send receipts, but only a correlated response can grant task reads.
-    taskId: response.correlated ? result.data.task?.id : undefined,
+    taskId,
     contextId: result.data.task?.contextId ?? contextId,
   };
 }

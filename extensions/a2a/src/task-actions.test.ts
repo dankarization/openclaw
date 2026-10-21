@@ -464,6 +464,56 @@ describe("A2A source-bound task reads", () => {
     await expect(f.read("task-big")).rejects.toThrow("SendMessage receipt");
   });
 
+  it("revokes an earlier receipt when a receipt-less send reports the same task ID", async () => {
+    const f = fixture();
+    expect((await handleA2aTaskAction(f.context)).details).toMatchObject({
+      messageId: "task-1",
+      readAvailable: true,
+    });
+    // The peer restarts and reports the same task ID for a send that carries no session
+    // identity at all (a CLI send or the direct channel-adapter surface), so no
+    // replacement receipt can be minted. Every send to a peer shares one remote context,
+    // so the stale receipt must not survive; the read must fail before provider I/O.
+    f.tasks.clear();
+    const receiptless = { ...f.context } as ChannelMessageActionContext & {
+      agentId?: undefined;
+      sessionKey?: undefined;
+      sessionId?: undefined;
+    };
+    delete receiptless.agentId;
+    delete receiptless.sessionKey;
+    delete receiptless.sessionId;
+    expect((await handleA2aTaskAction(receiptless)).details).toMatchObject({
+      messageId: "task-1",
+      readAvailable: false,
+    });
+    f.fetchMock.mockClear();
+    await expect(f.read()).rejects.toThrow("SendMessage receipt");
+    expect(f.fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("revokes an earlier receipt when the replacement send cannot store its peer context", async () => {
+    const f = fixture();
+    await handleA2aTaskAction(f.context);
+    f.tasks.clear();
+    f.fetchMock.mockImplementationOnce(async (_url, init) => {
+      const rpc = JSON.parse(requestBodyText(init?.body)) as { id: string };
+      return reply(rpc.id, { task: { id: "task-1", contextId: "c".repeat(4096) } });
+    });
+    const other = {
+      agentId: "yougile",
+      sessionKey: "agent:yougile:webchat:fixture",
+      sessionId: "incarnation-4",
+    };
+    expect((await handleA2aTaskAction({ ...f.context, ...other })).details).toMatchObject({
+      messageId: "task-1",
+      readAvailable: false,
+    });
+    f.fetchMock.mockClear();
+    await expect(f.read()).rejects.toThrow("SendMessage receipt");
+    expect(f.fetchMock).not.toHaveBeenCalled();
+  });
+
   it("normalizes a conforming unknown state as nonterminal instead of rejecting the task", async () => {
     const f = fixture();
     await handleA2aTaskAction(f.context);

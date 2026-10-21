@@ -1,32 +1,18 @@
-import { createHash } from "node:crypto";
 import { jsonResult, readStringParam } from "openclaw/plugin-sdk/channel-actions";
 import type { ChannelMessageActionContext } from "openclaw/plugin-sdk/channel-contract";
 import { captureChannelReadAuthority } from "openclaw/plugin-sdk/fetch-runtime";
 import { z } from "zod";
 import { requestA2aPeer, resolveA2aOutboundPeer, sendA2aChannelText } from "./outbound.js";
 import { extractA2aMessageText } from "./protocol.js";
+import {
+  a2aPeerScope,
+  currentReceiptGeneration,
+  getTaskReceipt,
+  pruneTaskReceipts,
+  recordAcceptedSend,
+} from "./task-receipts.js";
 
-type TaskReceipt = { source: string; contextId: string; createdAt: number };
-const receipts = new Map<string, TaskReceipt>();
-const MAX_RECEIPTS = 500;
-const RECEIPT_TTL_MS = 24 * 60 * 60 * 1000;
-/**
- * Bound on the peer-supplied conversation context retained with a receipt. The value
- * comes from the remote task, so an unbounded copy would let one peer pin memory far
- * beyond the entry count cap; an over-long or non-printable value simply stores no
- * receipt, which fails the later read closed.
- */
-const MAX_CONTEXT_ID_BYTES = 512;
-let receiptGeneration = 0;
-
-function isStorableContextId(value: string | undefined | null): value is string {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    Buffer.byteLength(value, "utf8") <= MAX_CONTEXT_ID_BYTES &&
-    /^[\x20-\x7e]+$/.test(value)
-  );
-}
+export { clearA2aTaskReadReceipts } from "./task-receipts.js";
 
 const TaskSchema = z.object({
   id: z.string().min(1),
@@ -53,29 +39,7 @@ function peerScope(ctx: ChannelMessageActionContext, to: string): string {
     accountId: ctx.accountId,
     to,
   });
-  // Rotation or retargeting invalidates receipts; no credential is kept in the map.
-  return createHash("sha256")
-    .update(JSON.stringify([accountId, peerName, peer.url, peer.outboundToken ?? null]))
-    .digest("hex");
-}
-
-function taskKey(scope: string, taskId: string): string {
-  return createHash("sha256")
-    .update(JSON.stringify([scope, taskId]))
-    .digest("hex");
-}
-
-function pruneReceipts(): void {
-  for (const [key, receipt] of receipts) {
-    if (Date.now() - receipt.createdAt >= RECEIPT_TTL_MS || receipts.size > MAX_RECEIPTS) {
-      receipts.delete(key);
-    }
-  }
-}
-
-export function clearA2aTaskReadReceipts(): void {
-  receiptGeneration += 1;
-  receipts.clear();
+  return a2aPeerScope({ accountId, peerName, url: peer.url, outboundToken: peer.outboundToken });
 }
 
 export async function handleA2aTaskAction(ctx: ChannelMessageActionContext) {
@@ -90,7 +54,7 @@ export async function handleA2aTaskAction(ctx: ChannelMessageActionContext) {
       throw new Error("A2A task text is required");
     }
     const source = sourceKey(ctx);
-    const generation = receiptGeneration;
+    const generation = currentReceiptGeneration();
     // Resolve before I/O; later configuration cannot rebind this accepted task.
     const scope = peerScope(ctx, to);
     if (ctx.dryRun) {
@@ -102,27 +66,22 @@ export async function handleA2aTaskAction(ctx: ChannelMessageActionContext) {
       to,
       text,
       sessionKey: ctx.sessionKey,
+      // This path mints the read receipt itself once the peer's task ID is known, so the
+      // plain send surface must not revoke the collision evidence first.
+      deferReceiptReconcile: true,
       assertDirectAdapterHandoff: ctx.assertDirectAdapterHandoff,
     });
-    let readAvailable = false;
-    if (sent.taskId && source && generation === receiptGeneration) {
-      const key = taskKey(scope, sent.taskId);
-      // Prune before the collision lookup: an entry that outlived its TTL must not block
-      // a replacement receipt for the same task ID.
-      pruneReceipts();
-      const previous = receipts.get(key);
-      if (previous && previous.source !== source) {
-        // A peer that reuses a task ID for another source must not leave the earlier
-        // session able to read the replacement task: every send to a peer shares one
-        // remote context, so the stale receipt would pass the source-independent
-        // context check. Revoke it instead of retaining authority for the old source.
-        receipts.delete(key);
-      } else if (isStorableContextId(sent.contextId)) {
-        receipts.set(key, { source, contextId: sent.contextId, createdAt: Date.now() });
-        pruneReceipts();
-        readAvailable = true;
-      }
-    }
+    // Any accepted send reconciles the receipt store: a peer that reuses a task ID for
+    // another source (or a send that cannot mint a receipt at all) must not leave the
+    // earlier session able to read the replacement task. Every send to a peer shares one
+    // remote context, so the context check alone cannot separate them.
+    const readAvailable = recordAcceptedSend({
+      peerScope: scope,
+      taskId: sent.taskId,
+      source,
+      contextId: sent.contextId,
+      generation,
+    });
     return jsonResult({ ...sent, readAvailable });
   }
   if (ctx.action !== "read") {
@@ -133,20 +92,20 @@ export async function handleA2aTaskAction(ctx: ChannelMessageActionContext) {
     throw new Error("A2A read requires the remote task ID as messageId");
   }
   const assertAuthority = captureChannelReadAuthority();
-  const key = taskKey(peerScope(ctx, to), taskId);
-  pruneReceipts();
-  const receipt = receipts.get(key);
+  const scope = peerScope(ctx, to);
+  pruneTaskReceipts();
+  const receipt = getTaskReceipt(scope, taskId);
   const directOperator = ctx.conversationReadOrigin === "direct-operator";
   const assertCurrent = () => {
     assertAuthority?.();
     ctx.assertDirectAdapterHandoff?.();
-    pruneReceipts();
+    pruneTaskReceipts();
     if (
       !directOperator &&
       (!assertAuthority ||
         !receipt ||
         receipt.source !== sourceKey(ctx) ||
-        receipts.get(key) !== receipt)
+        getTaskReceipt(scope, taskId) !== receipt)
     ) {
       throw new Error(
         "A2A task read requires a SendMessage receipt from this exact agent/session incarnation and configured peer. Missing, expired or restarted receipts cannot be recovered from a task ID alone; ask an operator to reconcile, do not resend the task.",
