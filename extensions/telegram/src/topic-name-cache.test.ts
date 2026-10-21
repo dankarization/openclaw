@@ -15,7 +15,12 @@ import {
   clearTelegramRuntimeForTest,
   resetTelegramTopicNameCacheForTest,
 } from "./runtime.test-support.js";
-import { getTopicCreatorUserId, getTopicName, updateTopicName } from "./topic-name-cache.js";
+import {
+  getTopicCreatorUserId,
+  getTopicName,
+  recordTopicCreation,
+  updateTopicName,
+} from "./topic-name-cache.js";
 
 describe("topic-name-cache", () => {
   let state: OpenClawTestState;
@@ -48,6 +53,62 @@ describe("topic-name-cache", () => {
     await expect(getTopicName(-100123, 42)).resolves.toBe("CI/CD");
     await expect(getTopicCreatorUserId(-100123, 42)).resolves.toBe(7);
     await expect(getTopicName(-100123, 43)).resolves.toBeUndefined();
+  });
+
+  it("preserves a queued rename and close when a late creation event arrives", async () => {
+    const scope = "queued-creation";
+    const namespace = `telegram.topic-name-cache.${createHash("sha256").update(scope).digest("hex").slice(0, 16)}`;
+    let entered = false;
+    const release = Promise.withResolvers<void>();
+    const runtime = getTelegramRuntime();
+    const open = runtime.state.openKeyedStore;
+    vi.spyOn(runtime.state, "openKeyedStore").mockImplementation(
+      <T>(options: OpenAsyncKeyedStoreOptions) => {
+        const store = open<T>(options);
+        if (options.namespace !== namespace) {
+          return store;
+        }
+        return {
+          ...store,
+          register: async (...args: Parameters<PluginStateKeyedStore<T>["register"]>) => {
+            if (args[0] === "-100123:1") {
+              entered = true;
+              await release.promise;
+            }
+            return store.register(...args);
+          },
+        };
+      },
+    );
+    await getTopicName(-100123, 42, scope);
+    const blocker = updateTopicName(-100123, 1, { name: "Blocker" }, scope);
+    const pending = [blocker];
+    try {
+      await vi.waitFor(() => expect(entered).toBe(true), { timeout: 10_000 });
+      pending.push(
+        updateTopicName(-100123, 42, { name: "Renamed", closed: true }, scope),
+        recordTopicCreation(-100123, 42, { name: "Creation event", creatorUserId: 7 }, scope),
+      );
+      // Let both calls reach the queue while the preceding durable write is held.
+      await new Promise<void>((resolve) => {
+        setImmediate(resolve);
+      });
+    } finally {
+      release.resolve();
+      await Promise.all(pending);
+    }
+    resetTelegramTopicNameCacheForTest();
+    resetPluginStateStoreForTests();
+    const durable = createPluginStateKeyedStoreForTests<{
+      name: string;
+      closed?: boolean;
+      creatorUserId?: number;
+    }>("telegram", { namespace, maxEntries: 2048 });
+    await expect(durable.lookup("-100123:42")).resolves.toMatchObject({
+      name: "Renamed",
+      closed: true,
+      creatorUserId: 7,
+    });
   });
 
   it("retains active topics and evicts the inactive oldest topic across database reopen", async () => {

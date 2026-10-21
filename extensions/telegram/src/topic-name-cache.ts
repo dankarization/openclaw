@@ -251,10 +251,10 @@ function nextUpdatedAt(scope?: string): number {
   return state.lastUpdatedAt;
 }
 
-export async function updateTopicName(
+async function updateTopicNameWithPatch(
   chatId: number | string,
   threadId: number | string,
-  patch: Partial<Omit<TopicEntry, "updatedAt">>,
+  resolvePatch: (existing: TopicEntry | undefined) => Partial<Omit<TopicEntry, "updatedAt">>,
   scope?: string,
 ): Promise<void> {
   const state = getTopicStoreState(scope);
@@ -262,6 +262,7 @@ export async function updateTopicName(
   await mutateTopicStore(state, async () => {
     const key = cacheKey(chatId, threadId);
     const existing = state.store.get(key);
+    const patch = resolvePatch(existing);
     const iconColor = patch.iconColor ?? existing?.iconColor;
     const iconCustomEmojiId = patch.iconCustomEmojiId ?? existing?.iconCustomEmojiId;
     const closed = patch.closed ?? existing?.closed;
@@ -279,6 +280,15 @@ export async function updateTopicName(
     }
     await persistTopicEntry(state, key, merged);
   });
+}
+
+export async function updateTopicName(
+  chatId: number | string,
+  threadId: number | string,
+  patch: Partial<Omit<TopicEntry, "updatedAt">>,
+  scope?: string,
+): Promise<void> {
+  await updateTopicNameWithPatch(chatId, threadId, () => patch, scope);
 }
 
 export async function getTopicName(
@@ -305,13 +315,15 @@ export async function recordTopicCreation(
   creation: Pick<TopicEntry, "name" | "creatorUserId" | "iconColor" | "iconCustomEmojiId">,
   scope?: string,
 ): Promise<void> {
-  const state = getTopicStoreState(scope);
-  await hydrateTopicStoreState(state);
-  // A late creation service message must not undo a subsequent rename or close.
-  const patch = state.store.has(cacheKey(chatId, threadId))
-    ? { creatorUserId: creation.creatorUserId }
-    : { ...creation, closed: false };
-  await updateTopicName(chatId, threadId, patch, scope);
+  // Decide after preceding mutations settle: a late creation service message
+  // must not undo a queued rename or close that has not reached the cache yet.
+  await updateTopicNameWithPatch(
+    chatId,
+    threadId,
+    (existing) =>
+      existing ? { creatorUserId: creation.creatorUserId } : { ...creation, closed: false },
+    scope,
+  );
 }
 
 export async function getTopicCreatorUserId(
