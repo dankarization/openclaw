@@ -10,6 +10,13 @@ import { loadBundledPluginFacade } from "../../test-utils/bundled-plugin-public-
 import { dispatchChannelMessageAction } from "./message-action-dispatch.js";
 import type { ChannelMessageActionContext, ChannelPlugin } from "./types.public.js";
 
+function requestBodyText(body: unknown): string {
+  if (typeof body !== "string") {
+    throw new Error("expected the request body to be a JSON string");
+  }
+  return body;
+}
+
 const { a2aChannelPlugin } = await loadBundledPluginFacade<{ a2aChannelPlugin: ChannelPlugin }>({
   pluginId: "a2a",
   artifactBasename: "api.js",
@@ -39,7 +46,7 @@ function fixture() {
   let state = "TASK_STATE_WORKING";
   const methods: string[] = [];
   const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
-    const rpc = JSON.parse(String(init?.body)) as {
+    const rpc = JSON.parse(requestBodyText(init?.body)) as {
       id: string;
       method: string;
       params: { message?: { contextId: string }; id?: string };
@@ -172,8 +179,8 @@ describe("A2A task reads through real host action admission", () => {
   it("refuses a read after the admitting plugin is revoked while provider I/O is pending", async () => {
     const f = fixture();
     await dispatchChannelMessageAction(f.context);
-    const started = createDeferred<void>();
-    const release = createDeferred<void>();
+    const started = createDeferred();
+    const release = createDeferred();
     const original = f.fetch.getMockImplementation()!;
     f.fetch.mockImplementationOnce(async (...args) => {
       started.resolve();
@@ -204,7 +211,7 @@ describe("A2A task reads through real host action admission", () => {
     });
     const requests = f.fetch.mock.calls.map(
       ([, init]) =>
-        JSON.parse(String(init?.body)) as {
+        JSON.parse(requestBodyText(init?.body)) as {
           method: string;
           params: { id?: string };
         },

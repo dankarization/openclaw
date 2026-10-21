@@ -7,6 +7,13 @@ import { describeMessageTool } from "./message-actions.js";
 import { clearA2aTaskReadReceipts, handleA2aTaskAction } from "./task-actions.js";
 import type { A2aCoreConfig } from "./types.js";
 
+function requestBodyText(body: unknown): string {
+  if (typeof body !== "string") {
+    throw new Error("expected the request body to be a JSON string");
+  }
+  return body;
+}
+
 type FixtureTask = {
   id: string;
   contextId: string;
@@ -56,7 +63,7 @@ function fixture() {
   const tasks = new Map<string, FixtureTask>();
   const methods: string[] = [];
   const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
-    const rpc = JSON.parse(String(init?.body)) as {
+    const rpc = JSON.parse(requestBodyText(init?.body)) as {
       id: string;
       method: string;
       params: { message?: { contextId: string }; id?: string };
@@ -259,7 +266,7 @@ describe("A2A source-bound task reads", () => {
     const f = fixture();
     await handleA2aTaskAction(f.context);
     f.fetchMock.mockClear().mockImplementationOnce(async (_url, init) => {
-      const rpc = JSON.parse(String(init?.body)) as { id: string; method: string };
+      const rpc = JSON.parse(requestBodyText(init?.body)) as { id: string; method: string };
       expect(rpc.method).toBe("GetTask");
       return new Response(
         JSON.stringify({
@@ -273,7 +280,7 @@ describe("A2A source-bound task reads", () => {
     expect(f.fetchMock).toHaveBeenCalledTimes(2);
     const requests = f.fetchMock.mock.calls.map(
       ([, init]) =>
-        JSON.parse(String(init?.body)) as { method: string; params: unknown; id: string },
+        JSON.parse(requestBodyText(init?.body)) as { method: string; params: unknown; id: string },
     );
     expect(requests.map((request) => request.method)).toEqual(["GetTask", "tasks/get"]);
     expect(requests[0]!.id).toBe(requests[1]!.id);
@@ -286,7 +293,7 @@ describe("A2A source-bound task reads", () => {
       const f = fixture();
       await handleA2aTaskAction(f.context);
       f.fetchMock.mockImplementationOnce(async (_url, init) => {
-        const rpc = JSON.parse(String(init?.body)) as { id: string };
+        const rpc = JSON.parse(requestBodyText(init?.body)) as { id: string };
         const task = structuredClone(f.tasks.get("task-1")!);
         if (kind === "task-id") {
           task.id = "other-task";
@@ -329,7 +336,7 @@ describe("A2A source-bound task reads", () => {
     const f = fixture();
     await handleA2aTaskAction(f.context);
     f.fetchMock.mockClear().mockImplementationOnce(async (_url, init) => {
-      const rpc = JSON.parse(String(init?.body)) as { id: string };
+      const rpc = JSON.parse(requestBodyText(init?.body)) as { id: string };
       f.revoke();
       return new Response(
         JSON.stringify({
@@ -346,7 +353,7 @@ describe("A2A source-bound task reads", () => {
   it("does not publish a result after an awaited request loses its authority", async () => {
     const f = fixture();
     await handleA2aTaskAction(f.context);
-    const started = createDeferred<void>();
+    const started = createDeferred();
     const response = createDeferred<Response>();
     f.fetchMock.mockImplementationOnce(async () => {
       started.resolve();
@@ -355,15 +362,17 @@ describe("A2A source-bound task reads", () => {
     const read = f.read();
     await started.promise;
     f.revoke();
-    const rpc = JSON.parse(String(f.fetchMock.mock.calls.at(-1)![1]?.body)) as { id: string };
+    const rpc = JSON.parse(requestBodyText(f.fetchMock.mock.calls.at(-1)![1]?.body)) as {
+      id: string;
+    };
     response.resolve(reply(rpc.id, f.tasks.get("task-1")));
     await expect(read).rejects.toThrow("authority revoked");
   });
 
   it("preserves an accepted send without reviving a receipt after channel shutdown", async () => {
     const f = fixture();
-    const started = createDeferred<void>();
-    const release = createDeferred<void>();
+    const started = createDeferred();
+    const release = createDeferred();
     const original = f.fetchMock.getMockImplementation()!;
     f.fetchMock.mockImplementationOnce(async (...args) => {
       started.resolve();
@@ -377,5 +386,38 @@ describe("A2A source-bound task reads", () => {
     expect((await send).details).toMatchObject({ messageId: "task-1", readAvailable: false });
     await expect(f.read()).rejects.toThrow("do not resend");
     expect(f.methods).toEqual(["SendMessage"]);
+  });
+
+  it("revokes an earlier receipt when the peer reassigns the task ID to another source", async () => {
+    const f = fixture();
+    expect((await handleA2aTaskAction(f.context)).details).toMatchObject({
+      messageId: "task-1",
+      readAvailable: true,
+    });
+    // The peer restarts and returns the same task ID for a different originating
+    // session; every send to a peer shares one remote context, so the stale receipt
+    // must not survive the reassignment.
+    f.tasks.clear();
+    const other = {
+      agentId: "yougile",
+      sessionKey: "agent:yougile:webchat:fixture",
+      sessionId: "incarnation-2",
+    };
+    expect((await handleA2aTaskAction({ ...f.context, ...other })).details).toMatchObject({
+      messageId: "task-1",
+      readAvailable: false,
+    });
+    f.fetchMock.mockClear();
+    await expect(f.read()).rejects.toThrow("SendMessage receipt");
+    await expect(
+      handleA2aTaskAction({
+        ...f.context,
+        ...other,
+        action: "read",
+        params: { to: "alpha", messageId: "task-1" },
+      }),
+    ).rejects.toThrow("SendMessage receipt");
+    expect(f.fetchMock).not.toHaveBeenCalled();
+    expect(f.methods).toEqual(["SendMessage", "SendMessage"]);
   });
 });
