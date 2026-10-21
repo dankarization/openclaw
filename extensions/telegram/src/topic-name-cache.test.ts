@@ -1,7 +1,16 @@
-import { resetPluginStateStoreForTests } from "openclaw/plugin-sdk/plugin-state-test-runtime";
+import { createHash } from "node:crypto";
+import type {
+  OpenAsyncKeyedStoreOptions,
+  PluginStateKeyedStore,
+} from "openclaw/plugin-sdk/plugin-state-runtime";
+import {
+  createPluginStateKeyedStoreForTests,
+  resetPluginStateStoreForTests,
+} from "openclaw/plugin-sdk/plugin-state-test-runtime";
 import { createOpenClawTestState, type OpenClawTestState } from "openclaw/plugin-sdk/test-state";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setTelegramPluginStateRuntimeForTests } from "./runtime-state.test-support.js";
+import { getTelegramRuntime } from "./runtime.js";
 import {
   clearTelegramRuntimeForTest,
   resetTelegramTopicNameCacheForTest,
@@ -22,6 +31,7 @@ describe("topic-name-cache", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     resetTelegramTopicNameCacheForTest();
     clearTelegramRuntimeForTest();
     resetPluginStateStoreForTests();
@@ -132,5 +142,75 @@ describe("topic-name-cache", () => {
     // The already-copied row survives idempotently with its newer values.
     await expect(getTopicName(-100123, 42, accountScope)).resolves.toBe("Fresh 42");
     await expect(getTopicCreatorUserId(-100123, 43, accountScope)).resolves.toBe(8);
+  });
+
+  it("retains fresh account ownership while importing a full legacy cache", async () => {
+    const legacyScope = "full-legacy-store";
+    for (let id = 1; id <= 2048; id++) {
+      await updateTopicName(-100123, id, { name: `Legacy ${id}`, creatorUserId: 7 }, legacyScope);
+    }
+    const accountScope = `${legacyScope}\0telegram-account:default`;
+    await updateTopicName(
+      -100123,
+      9999,
+      { name: "Fresh account title", creatorUserId: 99 },
+      accountScope,
+    );
+    await vi.waitFor(
+      async () => {
+        await expect(getTopicName(-100123, 2048, accountScope)).resolves.toBe("Legacy 2048");
+      },
+      { timeout: 20_000 },
+    );
+    resetTelegramTopicNameCacheForTest();
+    resetPluginStateStoreForTests();
+    await expect(getTopicName(-100123, 9999, accountScope)).resolves.toBe("Fresh account title");
+    await expect(getTopicCreatorUserId(-100123, 9999, accountScope)).resolves.toBe(99);
+    await expect(getTopicName(-100123, 1, accountScope)).resolves.toBeUndefined();
+    await expect(getTopicCreatorUserId(-100123, 2048, accountScope)).resolves.toBe(7);
+  });
+
+  it("retries an imported row whose durable registration failed", async () => {
+    const legacyScope = "retry-legacy-store";
+    await updateTopicName(-100123, 42, { name: "Legacy retry", creatorUserId: 7 }, legacyScope);
+    const accountScope = `${legacyScope}\0telegram-account:default`;
+    const namespace = `telegram.topic-name-cache.${createHash("sha256").update(accountScope).digest("hex").slice(0, 16)}`;
+    const runtime = getTelegramRuntime();
+    const open = runtime.state.openKeyedStore;
+    let failed = false;
+    vi.spyOn(runtime.state, "openKeyedStore").mockImplementation(
+      <T>(options: OpenAsyncKeyedStoreOptions) => {
+        const store = open<T>(options);
+        if (options.namespace !== namespace) {
+          return store;
+        }
+        return {
+          ...store,
+          register: async (...args: Parameters<PluginStateKeyedStore<T>["register"]>) => {
+            if (!failed && args[0] === "-100123:42") {
+              failed = true;
+              throw new Error("Transient import write failure");
+            }
+            return store.register(...args);
+          },
+        };
+      },
+    );
+    await getTopicName(-100123, 9999, accountScope);
+    await vi.waitFor(() => expect(failed).toBe(true));
+    const durable = createPluginStateKeyedStoreForTests<{ name: string; creatorUserId?: number }>(
+      "telegram",
+      { namespace, maxEntries: 2048 },
+    );
+    await vi.waitFor(async () => {
+      await getTopicName(-100123, 9999, accountScope);
+      await expect(durable.lookup("-100123:42")).resolves.toMatchObject({
+        name: "Legacy retry",
+        creatorUserId: 7,
+      });
+    });
+    resetTelegramTopicNameCacheForTest();
+    resetPluginStateStoreForTests();
+    await expect(getTopicCreatorUserId(-100123, 42, accountScope)).resolves.toBe(7);
   });
 });

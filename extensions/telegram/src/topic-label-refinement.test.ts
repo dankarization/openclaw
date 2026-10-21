@@ -355,6 +355,26 @@ describe("maybeRefineTopicLabel", () => {
     expect(generateTopicLabel).not.toHaveBeenCalled();
   });
 
+  it("does not rename when the topic name disappears during inference", async () => {
+    await armTopicLabelRefinement({
+      botId: BOT_ID,
+      accountId: ACCOUNT,
+      chatId: CHAT,
+      threadId: THREAD,
+      label: "Initial Label",
+    });
+    vi.mocked(getTopicName).mockResolvedValueOnce("Initial Label").mockResolvedValueOnce(undefined);
+    await maybeRefineTopicLabel({ ...base(), afterMessages: 1 });
+    expect(generateTopicLabel).toHaveBeenCalledTimes(1);
+    expect(editForumTopic).not.toHaveBeenCalled();
+    expect(storeState.get(`${BOT_ID}:${ACCOUNT}:${CHAT}:${THREAD}`)).toMatchObject({
+      done: true,
+      outcome: "failed",
+    });
+    await maybeRefineTopicLabel({ ...base(), afterMessages: 1 });
+    expect(generateTopicLabel).toHaveBeenCalledTimes(1);
+  });
+
   it("does not rename through a stopped account after the post-inference cache read", async () => {
     await armTopicLabelRefinement({
       botId: BOT_ID,
@@ -367,13 +387,13 @@ describe("maybeRefineTopicLabel", () => {
     let stopped = false;
     // First read (pre-inference guard) returns the armed label so the claim
     // proceeds; the second read (post-inference) coincides with the account
-    // stopping. undefined is safe there — the post-inference check treats a
-    // missing name as unchanged and falls through to the authority check.
+    // stopping. Keep the name unchanged so only the service authority check
+    // can prevent the final API effect.
     vi.mocked(getTopicName)
       .mockImplementationOnce(async () => "Initial Label")
       .mockImplementationOnce(async () => {
         stopped = true;
-        return undefined;
+        return "Initial Label";
       });
 
     await maybeRefineTopicLabel({

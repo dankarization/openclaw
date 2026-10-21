@@ -23,6 +23,7 @@ type TopicNameStoreState = {
   lastUpdatedAt: number;
   store: TopicNameStore;
   hydratePromise?: Promise<void>;
+  mutationTail?: Promise<void>;
   legacyImportAttempts?: number;
   persistentStore: PluginStateKeyedStore<TopicEntry>;
   /** Full cache scope (store path plus account suffix) backing this state. */
@@ -76,6 +77,40 @@ function evictOldest(store: TopicNameStore): string | undefined {
   return oldestKey;
 }
 
+// Legacy import and inbound updates share the same bounded namespace. Serialize
+// their retention decision with the write so a background copy cannot evict or
+// overwrite a newer inbound name or creator fact while awaiting storage.
+function mutateTopicStore<T>(state: TopicNameStoreState, run: () => Promise<T>): Promise<T> {
+  const result = (state.mutationTail ?? Promise.resolve()).then(run);
+  state.mutationTail = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
+}
+
+async function persistTopicEntry(
+  state: TopicNameStoreState,
+  key: string,
+  entry: TopicEntry,
+): Promise<void> {
+  state.store.set(key, entry);
+  const evictedKey = evictOldest(state.store);
+  // Delete before registering: the backing store's insertion-order cap must
+  // not evict a fresh account row on behalf of an older imported row.
+  try {
+    if (evictedKey) {
+      await state.persistentStore.delete(evictedKey);
+    }
+    if (evictedKey !== key) {
+      await state.persistentStore.register(key, entry);
+    }
+  } catch (error) {
+    state.hydratePromise = undefined;
+    throw error;
+  }
+}
+
 function isTopicEntry(value: unknown): value is TopicEntry {
   if (!value || typeof value !== "object") {
     return false;
@@ -116,16 +151,19 @@ const LEGACY_ACCOUNT_SCOPE_MARKER = "\0telegram-account:";
 
 function hydrateTopicStoreState(state: TopicNameStoreState): Promise<void> {
   state.hydratePromise ??= (async () => {
-    const entries = await state.persistentStore.entries();
-    for (const { key, value } of entries) {
-      if (isTopicEntry(value)) {
-        state.store.set(key, value);
+    await mutateTopicStore(state, async () => {
+      const entries = await state.persistentStore.entries();
+      state.store.clear();
+      for (const { key, value } of entries) {
+        if (isTopicEntry(value)) {
+          state.store.set(key, value);
+        }
       }
-    }
-    state.lastUpdatedAt = Math.max(
-      0,
-      ...Array.from(state.store.values(), (entry) => entry.updatedAt),
-    );
+      state.lastUpdatedAt = Math.max(
+        0,
+        ...Array.from(state.store.values(), (entry) => entry.updatedAt),
+      );
+    });
     // Upgrade path: pre-4302875118 installs persisted topic names under the
     // bare session-store-path namespace. Every production caller now derives
     // the scope with the account id appended, which would hide those entries
@@ -165,19 +203,19 @@ async function importLegacyTopicEntries(state: TopicNameStoreState): Promise<voi
   const legacyEntries = await getTopicStoreState(legacyScope).persistentStore.entries();
   let copied = 0;
   for (const { key, value } of legacyEntries) {
-    if (!isTopicEntry(value) || state.store.has(key)) {
+    if (!isTopicEntry(value)) {
       continue;
     }
     // Durable idempotency: a row copied by a previous (possibly crashed) run
     // persists in the account-scoped store even when this run's memory map
     // has not observed it; re-copying would clobber a newer rename.
-    const durable = await state.persistentStore.lookup(key);
-    if (isTopicEntry(durable)) {
-      state.store.set(key, durable);
-      continue;
-    }
-    state.store.set(key, value);
-    await state.persistentStore.register(key, value);
+    await mutateTopicStore(state, async () => {
+      if (state.store.has(key)) {
+        return;
+      }
+      const durable = await state.persistentStore.lookup(key);
+      await persistTopicEntry(state, key, isTopicEntry(durable) ? durable : value);
+    });
     copied += 1;
     if (copied % LEGACY_IMPORT_CHUNK === 0) {
       await new Promise<void>((resolve) => {
@@ -221,29 +259,26 @@ export async function updateTopicName(
 ): Promise<void> {
   const state = getTopicStoreState(scope);
   await hydrateTopicStoreState(state);
-  const key = cacheKey(chatId, threadId);
-  const existing = state.store.get(key);
-  const iconColor = patch.iconColor ?? existing?.iconColor;
-  const iconCustomEmojiId = patch.iconCustomEmojiId ?? existing?.iconCustomEmojiId;
-  const closed = patch.closed ?? existing?.closed;
-  const creatorUserId = patch.creatorUserId ?? existing?.creatorUserId;
-  const merged: TopicEntry = {
-    name: patch.name ?? existing?.name ?? "",
-    updatedAt: nextUpdatedAt(scope),
-    ...(iconColor !== undefined ? { iconColor } : {}),
-    ...(iconCustomEmojiId !== undefined ? { iconCustomEmojiId } : {}),
-    ...(closed !== undefined ? { closed } : {}),
-    ...(creatorUserId !== undefined ? { creatorUserId } : {}),
-  };
-  if (!merged.name) {
-    return;
-  }
-  state.store.set(key, merged);
-  await state.persistentStore.register(key, merged);
-  const evictedKey = evictOldest(state.store);
-  if (evictedKey) {
-    await state.persistentStore.delete(evictedKey);
-  }
+  await mutateTopicStore(state, async () => {
+    const key = cacheKey(chatId, threadId);
+    const existing = state.store.get(key);
+    const iconColor = patch.iconColor ?? existing?.iconColor;
+    const iconCustomEmojiId = patch.iconCustomEmojiId ?? existing?.iconCustomEmojiId;
+    const closed = patch.closed ?? existing?.closed;
+    const creatorUserId = patch.creatorUserId ?? existing?.creatorUserId;
+    const merged: TopicEntry = {
+      name: patch.name ?? existing?.name ?? "",
+      updatedAt: nextUpdatedAt(scope),
+      ...(iconColor !== undefined ? { iconColor } : {}),
+      ...(iconCustomEmojiId !== undefined ? { iconCustomEmojiId } : {}),
+      ...(closed !== undefined ? { closed } : {}),
+      ...(creatorUserId !== undefined ? { creatorUserId } : {}),
+    };
+    if (!merged.name) {
+      return;
+    }
+    await persistTopicEntry(state, key, merged);
+  });
 }
 
 export async function getTopicName(
@@ -253,13 +288,15 @@ export async function getTopicName(
 ): Promise<string | undefined> {
   const state = getTopicStoreState(scope);
   await hydrateTopicStoreState(state);
-  const key = cacheKey(chatId, threadId);
-  const entry = state.store.get(key);
-  if (entry) {
-    entry.updatedAt = nextUpdatedAt(scope);
-    await state.persistentStore.register(key, entry);
-  }
-  return entry?.name;
+  return mutateTopicStore(state, async () => {
+    const key = cacheKey(chatId, threadId);
+    const entry = state.store.get(key);
+    if (entry) {
+      entry.updatedAt = nextUpdatedAt(scope);
+      await state.persistentStore.register(key, entry);
+    }
+    return entry?.name;
+  });
 }
 
 export async function recordTopicCreation(

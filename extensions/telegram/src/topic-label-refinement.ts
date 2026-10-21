@@ -299,9 +299,11 @@ async function runRefinementTurn(
     // may have renamed the topic while the LLM call was in flight, and the
     // refinement must never overwrite that name (Codex 4303083920).
     const postInferenceName = await getTopicName(params.chatId, params.threadId, cacheScope);
-    if (postInferenceName && postInferenceName !== next.label) {
+    if (postInferenceName !== next.label) {
       await store.register(key, { ...next, excerpts: [], done: true, outcome: "failed" });
-      params.logVerbose("auto-topic-label: refinement skipped after inference (renamed manually)");
+      params.logVerbose(
+        "auto-topic-label: refinement skipped after inference (topic name changed or unavailable)",
+      );
       return;
     }
     // The cache read also awaits: the account may stop or reload while it is

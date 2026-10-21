@@ -1,5 +1,8 @@
 import { resolveAgentDir } from "openclaw/plugin-sdk/agent-runtime";
-import { isChannelPartialDeliveryError } from "openclaw/plugin-sdk/channel-inbound";
+import {
+  formatMediaPlaceholderText,
+  isChannelPartialDeliveryError,
+} from "openclaw/plugin-sdk/channel-inbound";
 import { getAgentScopedMediaLocalRoots } from "openclaw/plugin-sdk/media-runtime";
 import { getGlobalHookRunner } from "openclaw/plugin-sdk/plugin-runtime";
 import {
@@ -251,10 +254,7 @@ async function scheduleDmTopicLabel(params: {
     });
     return;
   }
-  const userMessage = truncateUtf16Safe(
-    context.ctxPayload.RawBody ?? context.ctxPayload.Body ?? "",
-    500,
-  );
+  const userMessage = params.userMessage;
   if (!userMessage.trim()) {
     return;
   }
@@ -576,7 +576,8 @@ export const dispatchTelegramMessage = async (
     isFirstTurnInSession,
     telegramCfg,
     userMessage: truncateUtf16Safe(
-      dispatchContext.ctxPayload.RawBody ?? dispatchContext.ctxPayload.Body ?? "",
+      (dispatchContext.ctxPayload.RawBody ?? dispatchContext.ctxPayload.Body ?? "").trim() ||
+        formatMediaPlaceholderText(dispatchContext.ctxPayload.media ?? []),
       500,
     ),
     ...(opts.accountAbortSignal ? { accountAbortSignal: opts.accountAbortSignal } : {}),
