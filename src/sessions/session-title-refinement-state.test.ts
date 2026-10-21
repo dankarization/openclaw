@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   countTitleRefinementMessage,
   resolveSessionTitleRefineConfig,
-  SESSION_TITLE_REFINE_AFTER_MESSAGES_DEFAULT,
   type SessionTitleRefinementState,
 } from "./session-title-refinement-state.js";
 
@@ -28,12 +27,10 @@ describe("resolveSessionTitleRefineConfig", () => {
       resolveSessionTitleRefineConfig({
         cfgSession: { autoTitle: { refine: true, refineAfterMessages: after } },
       });
-    expect(cfg(undefined).afterMessages).toBe(SESSION_TITLE_REFINE_AFTER_MESSAGES_DEFAULT);
-    expect(cfg(0).afterMessages).toBe(SESSION_TITLE_REFINE_AFTER_MESSAGES_DEFAULT);
-    expect(cfg(101).afterMessages).toBe(SESSION_TITLE_REFINE_AFTER_MESSAGES_DEFAULT);
-    expect(cfg(3.5 as unknown as number).afterMessages).toBe(
-      SESSION_TITLE_REFINE_AFTER_MESSAGES_DEFAULT,
-    );
+    expect(cfg(undefined).afterMessages).toBe(6);
+    expect(cfg(0).afterMessages).toBe(6);
+    expect(cfg(101).afterMessages).toBe(6);
+    expect(cfg(3.5 as unknown as number).afterMessages).toBe(6);
     expect(cfg(10).afterMessages).toBe(10);
   });
 });

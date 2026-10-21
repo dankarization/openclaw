@@ -10,7 +10,7 @@ export const AUTO_TOPIC_LABEL_REFINE_PROMPT =
   "Generate a very short topic label (2-4 words, max 25 chars) for a chat conversation based on the supplied conversation excerpt. Use the language the excerpt is written in, not the language of quoted literals, in sentence case: capitalize only the first word and words that language always capitalizes. No emoji. Return ONLY the topic name, nothing else.";
 
 /** Default task messages after the first turn before the one-time refinement runs. */
-export const AUTO_TOPIC_LABEL_REFINE_AFTER_MESSAGES_DEFAULT = 6;
+const AUTO_TOPIC_LABEL_REFINE_AFTER_MESSAGES_DEFAULT = 6;
 
 /** Per-key enablement: false disables, true enables, undefined inherits the next scope. */
 function resolveAutoTopicLabelKeyEnabled(

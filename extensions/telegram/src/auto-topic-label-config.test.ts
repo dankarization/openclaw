@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  AUTO_TOPIC_LABEL_REFINE_AFTER_MESSAGES_DEFAULT,
   resolveAutoTopicLabelConfig,
   resolveAutoTopicLabelRefineConfig,
 } from "./auto-topic-label-config.js";
@@ -39,10 +38,10 @@ describe("resolveAutoTopicLabelRefineConfig", () => {
   it("defaults threshold and clamps invalid values", () => {
     const cfg = (refineAfterMessages?: number) =>
       resolveAutoTopicLabelRefineConfig({ directConfig: { refine: true, refineAfterMessages } });
-    expect(cfg(undefined).afterMessages).toBe(AUTO_TOPIC_LABEL_REFINE_AFTER_MESSAGES_DEFAULT);
-    expect(cfg(0).afterMessages).toBe(AUTO_TOPIC_LABEL_REFINE_AFTER_MESSAGES_DEFAULT);
-    expect(cfg(-1).afterMessages).toBe(AUTO_TOPIC_LABEL_REFINE_AFTER_MESSAGES_DEFAULT);
-    expect(cfg(101).afterMessages).toBe(AUTO_TOPIC_LABEL_REFINE_AFTER_MESSAGES_DEFAULT);
+    expect(cfg(undefined).afterMessages).toBe(6);
+    expect(cfg(0).afterMessages).toBe(6);
+    expect(cfg(-1).afterMessages).toBe(6);
+    expect(cfg(101).afterMessages).toBe(6);
     expect(cfg(9).afterMessages).toBe(9);
   });
 });

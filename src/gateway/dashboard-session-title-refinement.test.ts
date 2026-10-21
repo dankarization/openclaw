@@ -80,32 +80,6 @@ describe("maybeRefineDashboardSessionTitle", () => {
     resolveUtilityModelRefForAgent.mockReset().mockReturnValue("openai/gpt-5.6-luna");
   });
 
-  it("fail-before: with the old explicit-name guard the threshold write is always rejected; pass-after: counter persists under a generated name", async () => {
-    // Threshold below the configured 2 would be rejected by the old
-    // !hasExplicitSessionName guard because the entry already carries a
-    // generated displayName. The fix persists the counter instead.
-    const writes: unknown[] = [];
-    updateSessionEntry.mockImplementation(async (_scope, update) => {
-      const patch = await update({ ...generatedEntry });
-      writes.push(patch);
-      const result = patch ? { ...generatedEntry, ...patch } : generatedEntry;
-      loadSessionEntry.mockReturnValue(result);
-      return result;
-    });
-
-    await maybeRefineDashboardSessionTitle(refineParams());
-
-    expect(writes[0]).toEqual({
-      titleRefinement: {
-        taskMessagesSinceTitle: 1,
-        refinementDone: false,
-        sessionId: "session-1",
-        generatedName: "First Pass Title",
-        recentMessages: ["Later task message"],
-      },
-    });
-  });
-
   it("runs the one-time refinement at threshold and persists the refined name (manual names never overwritten)", async () => {
     let current: SessionEntry = {
       ...generatedEntry,

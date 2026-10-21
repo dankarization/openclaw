@@ -7,7 +7,7 @@ import { z } from "zod";
  * sessionId identity, so /reset (new sessionId) and stale async writers are
  * handled by the existing session writer guards.
  */
-export const SessionTitleRefinementStateSchema = z.strictObject({
+const SessionTitleRefinementStateSchema = z.strictObject({
   /** User task messages observed after the first generated title existed. */
   taskMessagesSinceTitle: z.number().int().min(0),
   /** True once the single refinement has run (successfully or not). */
@@ -25,7 +25,7 @@ export const SessionTitleRefinementStateSchema = z.strictObject({
 export type SessionTitleRefinementState = z.infer<typeof SessionTitleRefinementStateSchema>;
 
 /** Default task messages after the first title before the single refinement runs. */
-export const SESSION_TITLE_REFINE_AFTER_MESSAGES_DEFAULT = 6;
+const SESSION_TITLE_REFINE_AFTER_MESSAGES_DEFAULT = 6;
 const MAX_RECENT_TITLE_MESSAGES = 8;
 const MAX_TITLE_MESSAGE_LENGTH = 500;
 
