@@ -205,6 +205,86 @@ describe("topic-name-cache", () => {
     await expect(getTopicCreatorUserId(-100123, 43, accountScope)).resolves.toBe(8);
   });
 
+  it("backfills legacy ownership after a foreground rename without replacing fresh topic state", async () => {
+    const legacyScope = "overlapping-legacy-store";
+    const accountScope = `${legacyScope}\0telegram-account:default`;
+    const namespace = (scope: string) =>
+      `telegram.topic-name-cache.${createHash("sha256").update(scope).digest("hex").slice(0, 16)}`;
+    for (const id of [42, 43, 44]) {
+      await updateTopicName(-100123, id, { name: `Legacy ${id}`, creatorUserId: 7 }, legacyScope);
+    }
+    resetTelegramTopicNameCacheForTest();
+    resetPluginStateStoreForTests();
+    let entered = false;
+    const release = Promise.withResolvers<void>();
+    const runtime = getTelegramRuntime();
+    const open = runtime.state.openKeyedStore;
+    vi.spyOn(runtime.state, "openKeyedStore").mockImplementation(
+      <T>(options: OpenAsyncKeyedStoreOptions) => {
+        const store = open<T>(options);
+        if (options.namespace !== namespace(legacyScope)) {
+          return store;
+        }
+        return {
+          ...store,
+          entries: async () => {
+            const entries = await store.entries();
+            entered = true;
+            await release.promise;
+            return entries;
+          },
+        };
+      },
+    );
+    const durable = createPluginStateKeyedStoreForTests<{
+      name: string;
+      closed?: boolean;
+      iconColor?: number;
+      creatorUserId?: number;
+      updatedAt: number;
+    }>("telegram", { namespace: namespace(accountScope), maxEntries: 2048 });
+    let foreground: Awaited<ReturnType<typeof durable.lookup>>;
+    try {
+      await getTopicName(-100123, 9999, accountScope);
+      await vi.waitFor(() => expect(entered).toBe(true), { timeout: 10_000 });
+      await updateTopicName(
+        -100123,
+        42,
+        { name: "Renamed during upgrade", closed: true, iconColor: 123 },
+        accountScope,
+      );
+      await updateTopicName(
+        -100123,
+        43,
+        { name: "Known account owner", creatorUserId: 99 },
+        accountScope,
+      );
+      foreground = await durable.lookup("-100123:42");
+      expect(foreground).toMatchObject({
+        name: "Renamed during upgrade",
+        closed: true,
+        iconColor: 123,
+      });
+      expect(foreground?.creatorUserId).toBeUndefined();
+    } finally {
+      release.resolve();
+    }
+    await vi.waitFor(
+      async () => {
+        await expect(getTopicCreatorUserId(-100123, 44, accountScope)).resolves.toBe(7);
+      },
+      { timeout: 10_000 },
+    );
+    await expect(durable.lookup("-100123:42")).resolves.toEqual({
+      ...foreground,
+      creatorUserId: 7,
+    });
+    await expect(getTopicCreatorUserId(-100123, 43, accountScope)).resolves.toBe(99);
+    resetTelegramTopicNameCacheForTest();
+    resetPluginStateStoreForTests();
+    await expect(getTopicCreatorUserId(-100123, 42, accountScope)).resolves.toBe(7);
+  });
+
   it("retains fresh account ownership while importing a full legacy cache", async () => {
     const legacyScope = "full-legacy-store";
     for (let id = 1; id <= 2048; id++) {

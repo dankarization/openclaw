@@ -188,8 +188,8 @@ const LEGACY_IMPORT_MAX_ATTEMPTS = 3;
  * Resumable, idempotent upgrade copy of the pre-account-scoped topic
  * namespace (Codex 4304709767): a crash or a rejected register after some
  * rows were copied must not lose the remaining rows (their creatorUserId
- * facts are unrecoverable from Telegram), so the copy skips rows the
- * account-scoped store already holds instead of gating on emptiness. Copies
+ * facts are unrecoverable from Telegram), so existing account rows retain
+ * their current state while missing ownership is backfilled. Copies
  * in bounded chunks with pauses between them so bulk legacy writes never
  * monopolise the state store's write lane against concurrent inbound lookups
  * (Codex 4304709769).
@@ -210,11 +210,17 @@ async function importLegacyTopicEntries(state: TopicNameStoreState): Promise<voi
     // persists in the account-scoped store even when this run's memory map
     // has not observed it; re-copying would clobber a newer rename.
     await mutateTopicStore(state, async () => {
-      if (state.store.has(key)) {
+      const cached = state.store.get(key);
+      const durable = cached ?? (await state.persistentStore.lookup(key));
+      if (isTopicEntry(durable)) {
+        if (durable.creatorUserId === undefined && value.creatorUserId !== undefined) {
+          await persistTopicEntry(state, key, { ...durable, creatorUserId: value.creatorUserId });
+        } else if (!cached) {
+          await persistTopicEntry(state, key, durable);
+        }
         return;
       }
-      const durable = await state.persistentStore.lookup(key);
-      await persistTopicEntry(state, key, isTopicEntry(durable) ? durable : value);
+      await persistTopicEntry(state, key, value);
     });
     copied += 1;
     if (copied % LEGACY_IMPORT_CHUNK === 0) {
