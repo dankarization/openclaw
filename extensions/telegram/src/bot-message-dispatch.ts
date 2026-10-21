@@ -31,7 +31,6 @@ import {
   createFreshTelegramSessionEntryLoader,
   resolveTelegramReasoningLevel,
 } from "./bot-message-dispatch-session.js";
-import { createTelegramDispatchStatus } from "./bot-message-dispatch-status.js";
 import { runTelegramDispatchTurn } from "./bot-message-dispatch-turn.js";
 import type {
   DispatchTelegramMessageParams,
@@ -68,78 +67,6 @@ function includeStickerDescription(params: {
     return params.body;
   }
   return `${params.formattedDescription}\n${params.body}`;
-}
-
-function resolveTelegramQuoteContext(params: {
-  context: TelegramMessageContext;
-  replyToMode: DispatchTelegramMessageParams["replyToMode"];
-}) {
-  const { context, replyToMode } = params;
-  const rawReplyQuoteText =
-    context.ctxPayload.ReplyToIsQuote && typeof context.ctxPayload.ReplyToQuoteText === "string"
-      ? context.ctxPayload.ReplyToQuoteText
-      : undefined;
-  const replyQuoteText = context.ctxPayload.ReplyToIsQuote
-    ? rawReplyQuoteText?.trim()
-      ? rawReplyQuoteText
-      : context.ctxPayload.ReplyToBody?.trim() || undefined
-    : undefined;
-  const replyQuoteMessageId =
-    replyQuoteText && !context.ctxPayload.ReplyToIsExternal
-      ? resolveTelegramReplyId(context.ctxPayload.ReplyToId)
-      : undefined;
-  const replyQuotePosition =
-    typeof context.ctxPayload.ReplyToQuotePosition === "number"
-      ? context.ctxPayload.ReplyToQuotePosition
-      : undefined;
-  const replyQuoteEntities = Array.isArray(context.ctxPayload.ReplyToQuoteEntities)
-    ? context.ctxPayload.ReplyToQuoteEntities
-    : undefined;
-  const replyQuoteTargetsBotMessage = context.msg.reply_to_message?.from?.is_bot === true;
-  const replyQuoteByMessageId: TelegramNativeQuoteCandidateByMessageId = {};
-  if (replyToMode !== "off") {
-    if (replyQuoteText && replyQuoteMessageId != null) {
-      addTelegramNativeQuoteCandidate(replyQuoteByMessageId, replyQuoteMessageId, {
-        text: replyQuoteText,
-        ...(replyQuotePosition !== undefined ? { position: replyQuotePosition } : {}),
-        ...(replyQuoteEntities ? { entities: replyQuoteEntities } : {}),
-      });
-    }
-    addTelegramNativeQuoteCandidate(
-      replyQuoteByMessageId,
-      context.ctxPayload.MessageSid ?? context.msg.message_id,
-      buildTelegramNativeQuoteCandidate(getTelegramTextParts(context.msg)),
-    );
-    if (
-      !context.ctxPayload.ReplyToIsExternal &&
-      typeof context.ctxPayload.ReplyToQuoteSourceText === "string"
-    ) {
-      addTelegramNativeQuoteCandidate(
-        replyQuoteByMessageId,
-        context.ctxPayload.ReplyToId,
-        buildTelegramNativeQuoteCandidate({
-          text: context.ctxPayload.ReplyToQuoteSourceText,
-          entities: Array.isArray(context.ctxPayload.ReplyToQuoteSourceEntities)
-            ? context.ctxPayload.ReplyToQuoteSourceEntities
-            : undefined,
-        }),
-      );
-    }
-  }
-  const draftReplyToMessageId =
-    replyToMode !== "off" && typeof context.msg.message_id === "number"
-      ? replyQuoteTargetsBotMessage
-        ? context.msg.message_id
-        : (replyQuoteMessageId ?? context.msg.message_id)
-      : undefined;
-  return {
-    draftReplyToMessageId,
-    replyQuoteByMessageId,
-    replyQuoteEntities,
-    replyQuoteMessageId,
-    replyQuotePosition,
-    replyQuoteText,
-  };
 }
 
 async function prepareTelegramSticker(params: {
@@ -357,7 +284,23 @@ export const dispatchTelegramMessage = async (
   const dispatchContext = await resolveDispatchTelegramContext({ context });
   const loadFreshSessionEntry = createFreshTelegramSessionEntryLoader({ cfg });
   const isRoomEvent = dispatchContext.ctxPayload.InboundEventKind === "room_event";
-  const status = createTelegramDispatchStatus({ context: dispatchContext });
+  const statusReactionController = isRoomEvent ? null : dispatchContext.statusReactionController;
+  const finalizeStatus = async (outcome: "done" | "error" | "cancelled") => {
+    if (!statusReactionController) {
+      return;
+    }
+    if (outcome === "done") {
+      await statusReactionController.setDone();
+    } else if (outcome === "error") {
+      await statusReactionController.setError();
+    }
+    await statusReactionController.restoreInitial();
+  };
+  const finalizeStatusInBackground = (outcome: "done" | "error" | "cancelled", label: string) => {
+    void finalizeStatus(outcome).catch((err: unknown) => {
+      logVerbose(`telegram: status reaction ${label} failed: ${String(err)}`);
+    });
+  };
   const richMessagesParams = {
     cfg,
     accountId: dispatchContext.route.accountId,
@@ -371,7 +314,64 @@ export const dispatchTelegramMessage = async (
     agentId: dispatchContext.route.agentId,
     loadFreshSessionEntry,
   });
-  const quote = resolveTelegramQuoteContext({ context: dispatchContext, replyToMode });
+  const rawReplyQuoteText =
+    dispatchContext.ctxPayload.ReplyToIsQuote &&
+    typeof dispatchContext.ctxPayload.ReplyToQuoteText === "string"
+      ? dispatchContext.ctxPayload.ReplyToQuoteText
+      : undefined;
+  const replyQuoteText = dispatchContext.ctxPayload.ReplyToIsQuote
+    ? rawReplyQuoteText?.trim()
+      ? rawReplyQuoteText
+      : dispatchContext.ctxPayload.ReplyToBody?.trim() || undefined
+    : undefined;
+  const replyQuoteMessageId =
+    replyQuoteText && !dispatchContext.ctxPayload.ReplyToIsExternal
+      ? resolveTelegramReplyId(dispatchContext.ctxPayload.ReplyToId)
+      : undefined;
+  const replyQuotePosition =
+    typeof dispatchContext.ctxPayload.ReplyToQuotePosition === "number"
+      ? dispatchContext.ctxPayload.ReplyToQuotePosition
+      : undefined;
+  const replyQuoteEntities = Array.isArray(dispatchContext.ctxPayload.ReplyToQuoteEntities)
+    ? dispatchContext.ctxPayload.ReplyToQuoteEntities
+    : undefined;
+  const replyQuoteTargetsBotMessage = dispatchContext.msg.reply_to_message?.from?.is_bot === true;
+  const replyQuoteByMessageId: TelegramNativeQuoteCandidateByMessageId = {};
+  if (replyToMode !== "off") {
+    if (replyQuoteText && replyQuoteMessageId != null) {
+      addTelegramNativeQuoteCandidate(replyQuoteByMessageId, replyQuoteMessageId, {
+        text: replyQuoteText,
+        ...(replyQuotePosition !== undefined ? { position: replyQuotePosition } : {}),
+        ...(replyQuoteEntities ? { entities: replyQuoteEntities } : {}),
+      });
+    }
+    addTelegramNativeQuoteCandidate(
+      replyQuoteByMessageId,
+      dispatchContext.ctxPayload.MessageSid ?? dispatchContext.msg.message_id,
+      buildTelegramNativeQuoteCandidate(getTelegramTextParts(dispatchContext.msg)),
+    );
+    if (
+      !dispatchContext.ctxPayload.ReplyToIsExternal &&
+      typeof dispatchContext.ctxPayload.ReplyToQuoteSourceText === "string"
+    ) {
+      addTelegramNativeQuoteCandidate(
+        replyQuoteByMessageId,
+        dispatchContext.ctxPayload.ReplyToId,
+        buildTelegramNativeQuoteCandidate({
+          text: dispatchContext.ctxPayload.ReplyToQuoteSourceText,
+          entities: Array.isArray(dispatchContext.ctxPayload.ReplyToQuoteSourceEntities)
+            ? dispatchContext.ctxPayload.ReplyToQuoteSourceEntities
+            : undefined,
+        }),
+      );
+    }
+  }
+  const draftReplyToMessageId =
+    replyToMode !== "off" && typeof dispatchContext.msg.message_id === "number"
+      ? replyQuoteTargetsBotMessage
+        ? dispatchContext.msg.message_id
+        : (replyQuoteMessageId ?? dispatchContext.msg.message_id)
+      : undefined;
   // Draft messages are provider-visible before final modifiers run. Suppress them when a hook
   // can rewrite or cancel, or the original payload can flash before the normal delivery gate.
   const hookRunner = getGlobalHookRunner();
@@ -384,7 +384,12 @@ export const dispatchTelegramMessage = async (
   const isDispatchSuperseded = () => turnAdoptionLifecycle?.abortSignal?.aborted === true;
   const turnConfig = {
     ...dispatchParams,
-    ...quote,
+    draftReplyToMessageId,
+    replyQuoteByMessageId,
+    replyQuoteEntities,
+    replyQuoteMessageId,
+    replyQuotePosition,
+    replyQuoteText,
     allowProviderPreview,
     chunkMode: resolveChunkMode(cfg, "telegram", dispatchContext.route.accountId),
     context: dispatchContext,
@@ -394,7 +399,7 @@ export const dispatchTelegramMessage = async (
     mediaLocalRoots: getAgentScopedMediaLocalRoots(cfg, dispatchContext.route.agentId),
     resolvedReasoningLevel,
     richMessages,
-    statusReactionController: status.controller,
+    statusReactionController,
     tableMode,
   };
   const draftState = createDraftState(turnConfig);
@@ -438,11 +443,11 @@ export const dispatchTelegramMessage = async (
   // ingress watchdog. Never enter the reply pipeline after that owner has
   // already fenced this attempt; the canonical spool row will retry it.
   if (isDispatchSuperseded()) {
-    status.finalizeInBackground("cancelled", "cancelled finalize");
+    finalizeStatusInBackground("cancelled", "cancelled finalize");
     return { kind: "completed" };
   }
-  if (status.controller && !isRoomEvent) {
-    void status.controller.setThinking();
+  if (statusReactionController && !isRoomEvent) {
+    void statusReactionController.setThinking();
   }
   try {
     turnDispatched = await runTelegramDispatchTurn(turn);
@@ -472,8 +477,8 @@ export const dispatchTelegramMessage = async (
     return { kind: "completed" };
   }
   if (dispatchWasSuperseded) {
-    if (status.controller) {
-      status.finalizeInBackground("done", "finalize");
+    if (statusReactionController) {
+      finalizeStatusInBackground("done", "finalize");
     }
     return { kind: "completed" };
   }
@@ -554,8 +559,8 @@ export const dispatchTelegramMessage = async (
         )
       : null);
 
-  if (status.controller && !hasVisibleResponse && !intentionalNoResponse) {
-    status.finalizeInBackground("error", "error finalize");
+  if (statusReactionController && !hasVisibleResponse && !intentionalNoResponse) {
+    finalizeStatusInBackground("error", "error finalize");
   }
   const shouldReturnRetryableDispatchFailure =
     retryDispatchErrors &&
@@ -582,8 +587,8 @@ export const dispatchTelegramMessage = async (
     ),
     ...(opts.accountAbortSignal ? { accountAbortSignal: opts.accountAbortSignal } : {}),
   });
-  if (status.controller) {
-    status.finalizeInBackground(
+  if (statusReactionController) {
+    finalizeStatusInBackground(
       turn.agentRunFailed ||
         turn.dispatchError != null ||
         turn.previewLifecycle.finalFailed ||
