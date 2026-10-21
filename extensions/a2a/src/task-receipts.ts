@@ -100,18 +100,22 @@ export function recordAcceptedSend(input: {
   // replacement receipt for the same task ID.
   pruneTaskReceipts();
   const previous = receipts.get(key);
-  const replacementSafe =
-    input.source !== undefined &&
-    input.generation === receiptGeneration &&
-    isStorableContextId(input.contextId);
-  if (!replacementSafe || (previous && previous.source !== input.source)) {
+  const source = input.source;
+  const contextId = input.contextId;
+  const collision = previous !== undefined && previous.source !== source;
+  if (
+    collision ||
+    source === undefined ||
+    input.generation !== receiptGeneration ||
+    !isStorableContextId(contextId)
+  ) {
     // Either this send can never mint a receipt (no session identity, a cleared store, or
     // an unstorable peer context), or the peer handed this task ID to a different source.
     // In both cases revoke instead of leaving — or creating — read authority.
     receipts.delete(key);
     return false;
   }
-  receipts.set(key, { source: input.source, contextId: input.contextId, createdAt: Date.now() });
+  receipts.set(key, { source, contextId, createdAt: Date.now() });
   pruneTaskReceipts();
   return true;
 }
