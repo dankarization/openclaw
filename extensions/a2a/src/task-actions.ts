@@ -105,8 +105,13 @@ export async function handleA2aTaskAction(ctx: ChannelMessageActionContext) {
     if (sent.taskId && source && generation === receiptGeneration) {
       const key = taskKey(scope, sent.taskId);
       const previous = receipts.get(key);
-      // A peer reusing an ID cannot transfer another session's read receipt.
-      if (!previous || previous.source === source) {
+      if (previous && previous.source !== source) {
+        // A peer that reuses a task ID for another source must not leave the earlier
+        // session able to read the replacement task: every send to a peer shares one
+        // remote context, so the stale receipt would pass the source-independent
+        // context check. Revoke it instead of retaining authority for the old source.
+        receipts.delete(key);
+      } else {
         receipts.set(key, { source, contextId: sent.contextId, createdAt: Date.now() });
         pruneReceipts();
         readAvailable = true;
