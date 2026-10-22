@@ -11,7 +11,7 @@ Normal `pnpm build` on the exact published head completed successfully in 4m 08.
 
 The test-type repair passed the exact `pnpm tsgo:extensions:test` check, scoped lint and normal commit hooks. The real SQLite dispatch crash regression passes. The preceding production repair's 47 affected tests include the lifecycle rotation, dashboard, owner cancellation and durable initial-label recovery boundaries; the final commit only corrects the generic type of that recovery fixture. Hosted checks independently reran on the published head.
 
-[CI workflow 39821522128](https://github.com/openclaw/openclaw/actions/runs/39821522128) is completed/success. The three combined commit statuses, including ci-gate, are success at the recorded verification. Two raw CheckRun records were still being reconciled after workflow completion; this document does not represent stale in_progress records as terminal or claim maintainer acceptance.
+[CI workflow 39821522128](https://github.com/openclaw/openclaw/actions/runs/39821522128) is completed/success. The three combined commit statuses, including ci-gate, are success at the recorded verification. All 24 workflows reported terminal results (20 success, 4 skipped). Two raw CheckRun records still incorrectly report in_progress although every step, including Complete job, and their parent workflows succeeded. This is an API inconsistency, not two running tests; no maintainer acceptance is claimed.
 
 ## 1. Official latest stable package → candidate
 
@@ -78,10 +78,18 @@ The account remained configured and enabled. Its visible and cached name stayed 
 
 ![Initial name survives account-service stop](account-stop-title.png)
 
+## 5. Captionless media counts as a task turn
+
+A separate fresh topic received its initial name. Through the native Telegram file picker and image-send preview, the user sent the synthetic PNG with an empty caption. The provider observed one image input part and the ordinary task reply appeared; no refinement request occurred yet and the initial name remained unchanged.
+
+The next text task caused the single refinement. Its request contained both `<media:image>` and that text; the visible name became `QA f35 media refined`. Reopened SQLite state confirmed count 2 / done true / outcome renamed, without retained excerpts. Thus the media turn contributed to the threshold rather than being skipped.
+
+![Actual captionless photo and normal reply](captionless-photo.png)
+
 ## Boundaries and cleanup
 
 The same QA checkout, installation and profile were reused. No additional full checkout or dependency environment was deployed. Our Gateway, deterministic provider and RPC controller were terminated, their temporary FIFO removed, and their listeners released. Foreign services were preserved.
 
 [Machine-readable redacted receipts](receipts.json) contain the observed facts and hashes of the retained private raw logs. Raw provider requests, chat identities, private paths, internal addresses and credentials are intentionally not published.
 
-Still outstanding: a smoke through an actual model provider, remaining raw CheckRun completion reconciliation, fresh reviewer assessment and maintainer acceptance. CI, risk labels and human acceptance are separate.
+Still outstanding: a smoke through an actual model provider, fresh reviewer assessment and the maintainer's naming-policy decision (opt-in message-count trigger and settings), plus maintainer acceptance. The stale raw CheckRun records are an API-consistency caveat rather than running tests. CI, risk labels and human acceptance are separate.
