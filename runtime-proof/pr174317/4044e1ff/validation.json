@@ -1,0 +1,89 @@
+{
+  "publishedHead": "4044e1ff4caf1e54f49082f942294eac9d1b4971",
+  "nativeValidatedCommit": "ff44e03c9cfaf4ce13dcf233a79c2e01f4f9f284",
+  "identicalTree": "f8153bfe8fe16317645e880e6cfb4a57176c7837",
+  "parent": "f35cd67be5fe60ae8d0802c4bd17cfe9c7743ee6",
+  "ordinaryAtomicUpdate": true,
+  "forcePush": false,
+  "verifiedChangedBlobs": 7,
+  "red": {
+    "productionHead": "f35cd67be5fe60ae8d0802c4bd17cfe9c7743ee6",
+    "sharedPrimaryUtilitySuccessfulCompletionCase": {
+      "expectedInferenceCalls": 1,
+      "actualInferenceCalls": 0,
+      "result": "intended assertion failure"
+    },
+    "noUtilityControl": "passed"
+  },
+  "green": {
+    "affectedTests": 76,
+    "dashboardTitleTests": 40,
+    "dashboardRefinementTests": 14,
+    "sharedGeneratorTests": 22,
+    "realRoutingAndSqliteRegression": {
+      "sharedPrimaryUtility": "one completion call; refined displayName persisted; done; no second inference",
+      "noUtility": "one primary completion call; refined displayName persisted; done; no second inference",
+      "distinctUtilityFailure": "one completion call; initial displayName persisted; done; no appended primary retry"
+    },
+    "externalCompletionOutput": "stubbed; real routing/generator and SQLite entry owner",
+    "coreTypes": "passed",
+    "owningTestTypeGraphs": {
+      "gateway-root": "passed in 180.0s",
+      "messaging": "passed in 99.2s"
+    },
+    "scopedNormalLintExit": 0,
+    "formatting": "passed",
+    "normalCommitHooks": "passed"
+  },
+  "automaticTypeSelection": {
+    "result": "failed graph-root budget before selection; selected unrelated graphs; stopped through normal wrapper cleanup",
+    "reportedCounts": {
+      "gateway-root": 727,
+      "infra": 735
+    },
+    "limit": 720,
+    "guardUnchanged": true,
+    "notClaimedPassing": true
+  },
+  "productionNetLines": -22,
+  "testAndClassifierNetLines": 49,
+  "mergeCalculation": {
+    "main": "06eb109ab151a722db5f7643bd7ac25a3891d8ae",
+    "exit": 0,
+    "tree": "7c0514d486f2ee558f554d1ab7d4e19d686c39bb",
+    "mainMergedForFreshness": false,
+    "head": "4044e1ff4caf1e54f49082f942294eac9d1b4971"
+  },
+  "runtimeEvidence": {
+    "executedHead": "f35cd67be5fe60ae8d0802c4bd17cfe9c7743ee6",
+    "packetCommit": "edb1ff7cdaa0e58b83bb0a07d93cce8cd82abf72",
+    "relabelledAsCurrentHeadExecution": false,
+    "actualModel": "gemma4:12b through existing durable Ollama queue",
+    "realTelegramCompleted": true,
+    "reuseBasis": "Telegram owner/collector/persistence/migrations unchanged; ordinary shared-generator path still utility->primary with the same deduplication; only dashboard optional modes differ",
+    "newHpEnvironmentCopies": 0
+  },
+  "currentHeadBuild": {
+    "result": "passed",
+    "exit": 0,
+    "seconds": 436.8,
+    "buildInfo": {
+      "version": "2026.10.5",
+      "commit": "4044e1ff4caf1e54f49082f942294eac9d1b4971",
+      "builtAt": "2026-10-22T19:47:59.543Z",
+      "buildId": "2026.10.5-4044e1ff4caf-2026-10-22T19-47-59.543Z"
+    },
+    "logSha256": "424dc88fa8ace56cc5c1a88361822deca08447e0d4df24d16c750be0765e6e82",
+    "platform": "darwin-x64",
+    "newHpDeployment": false
+  },
+  "hostedCi": "pending",
+  "maintainerAcceptance": false,
+  "logSha256": {
+    "pr174317-dashboard-shared-model-red.log": "0c2cb02003a084502dbb88f9830bd3eae48354326950d4278a9e400291f2ffa8",
+    "pr174317-dashboard-shared-model-green-host.log": "6912ee3f9e1cfab171e6fc65c31e5eff6039432405ba68241b4cc89c37639f22",
+    "pr174317-dashboard-p2-core-types.log": "ae8394de25ce29e378b86687304c64f819f619b7d275d3a59664ece1a4054336",
+    "pr174317-dashboard-p2-owning-test-types.log": "0805b3abb42aa293d012ac05d9ec2da29af5121eeaa710f7e9914e0514e401a8",
+    "pr174317-dashboard-p2-lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}
