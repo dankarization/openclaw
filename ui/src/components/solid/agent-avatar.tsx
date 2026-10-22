@@ -1,10 +1,10 @@
-import { createMemo, onCleanup, Show } from "solid-js";
+import { createMemo, onSettled, Show } from "solid-js";
 import type { AgentIdentityResult } from "../../api/types.ts";
 import { resolveAgentTextAvatar } from "../../lib/agents/display.ts";
 import { resolveAgentAvatarUrl } from "../../lib/avatar.ts";
 import { createIdentityAvatars } from "../../lib/identity-avatar-loader.ts";
 import { projectOwner } from "../../lib/reactive/projection.ts";
-import { defineSolidBridge, type SolidBridgeElement } from "../../lit/solid-bridge.ts";
+import { defineSolidBridge, type SolidBridgeElement } from "../../lib/solid-bridge.ts";
 import type { AgentSelectOption } from "../agent-select.ts";
 import { Icon } from "./icon.tsx";
 import { AgentIdentityAvatar } from "./identity-avatar.tsx";
@@ -16,7 +16,7 @@ export type AgentAvatarProps = {
 
 export function AgentAvatarContent(props: AgentAvatarProps) {
   const loader = createIdentityAvatars();
-  onCleanup(loader.connect());
+  onSettled(() => loader.connect());
   const avatarSource = projectOwner(loader, (owner) => owner);
   const avatar = createMemo(() => {
     const option = props.option;

@@ -149,7 +149,6 @@ const LEGACY_MEDIA_KINDS = new Set<MediaKind>([
 
 type CanonicalizedPersistedMediaMessage<T extends object> = {
   changed: boolean;
-  hadLegacy: boolean;
   message: T;
 };
 
@@ -162,7 +161,7 @@ export function canonicalizePersistedUserMessageMedia<T extends object>(
   const hadTopLevelMedia = Object.hasOwn(record, "media");
   const canonical = readPersistedMediaFactInputs(message);
   if (!hadLegacy && !hadTopLevelMedia && canonical === undefined) {
-    return { changed: false, hadLegacy: false, message };
+    return { changed: false, message };
   }
 
   const topLevelMedia = Array.isArray(record.media)
@@ -246,7 +245,6 @@ export function canonicalizePersistedUserMessageMedia<T extends object>(
   }
   return {
     changed: JSON.stringify(next) !== JSON.stringify(record),
-    hadLegacy,
     message: next as T,
   };
 }
@@ -255,15 +253,6 @@ export function stripLegacyMediaContextFields(ctx: Record<string, unknown>): voi
   for (const key of LEGACY_MEDIA_CONTEXT_KEYS) {
     delete ctx[key];
   }
-}
-
-export function readRuntimePromptImageOrder(message: object): PromptImageOrderEntry[] | undefined {
-  const imageOrder = (
-    readRuntimePromptMediaFacts(message) as
-      | (MediaFact[] & { imageOrder?: PromptImageOrderEntry[] })
-      | undefined
-  )?.imageOrder;
-  return Array.isArray(imageOrder) ? (imageOrder as PromptImageOrderEntry[]) : undefined;
 }
 
 /** Returns whether a declared MIME only describes otherwise unclassified binary bytes. */
@@ -368,7 +357,7 @@ function normalizeMediaFact<TInput extends MediaFactInput>(
     url: normalizeOptionalString(input.url),
     contentType,
     kind:
-      input.kind ??
+      (typeof input.kind === "string" ? input.kind : undefined) ??
       defaults.kind ??
       (isGenericBinaryMediaContentType(contentType) ? undefined : kindFromMime(contentType)),
     fileName: normalizeOptionalString(input.fileName),

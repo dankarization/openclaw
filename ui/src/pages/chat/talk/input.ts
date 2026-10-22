@@ -1,6 +1,10 @@
 import { racePromiseWithAbortSignal } from "@openclaw/retry";
 import { t } from "../../../i18n/index.ts";
+import { registerChatComposerEnglish } from "../../../i18n/locales/en-chat-composer.ts";
+import { UserFacingError } from "../../../lib/format-error.ts";
 import { listen } from "../../../lib/reactive/listener.ts";
+
+registerChatComposerEnglish();
 
 export type RealtimeTalkInputDevice = {
   deviceId: string;
@@ -254,8 +258,9 @@ async function openRealtimeTalkMedia(
         ? new RealtimeTalkSelectedMicrophoneError()
         : new Error(t("chat.composer.selectedCameraUnavailable"));
     }
-    // oxlint-disable-next-line preserve-caught-error -- A DOMException cause appends its legacy code in the shared formatter.
-    throw new Error(realtimeTalkDeviceIssueMessage(deviceIssueFromError(error), kind));
+    throw new UserFacingError(realtimeTalkDeviceIssueMessage(deviceIssueFromError(error), kind), {
+      cause: error,
+    });
   }
   if (signal?.aborted) {
     acquisition.getTracks().forEach((track) => track.stop());
@@ -264,6 +269,7 @@ async function openRealtimeTalkMedia(
   return acquisition;
 }
 
+// Owns microphone acquisition; stop aborts track listeners and releases late permission results.
 export class RealtimeTalkInputOwner {
   private controller: AbortController | null = null;
   private media: MediaStream | null = null;

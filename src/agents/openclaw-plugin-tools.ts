@@ -6,6 +6,7 @@ import {
   selectMessageActionRequesterIdentity,
 } from "../gateway/message-action-turn-capability.js";
 import { resolveAgentScopedOutboundMediaAccess } from "../media/read-capability.js";
+import { resolveProviderAuthScope } from "../plugins/provider-auth-scope.js";
 import { getActivePluginRegistry, getActivePluginRegistryVersion } from "../plugins/runtime.js";
 import {
   getPluginRuntimeGatewayRequestScope,
@@ -41,7 +42,6 @@ type ResolveOpenClawPluginToolsOptions = OpenClawPluginToolOptions & {
   preparedModelRuntime?: PreparedModelRuntimeSnapshot;
   pluginToolAllowlist?: string[];
   pluginToolDenylist?: string[];
-  disablePluginTools?: boolean;
   clientCaps?: string[];
   authProfileStore?: AuthProfileStore;
 };
@@ -222,10 +222,6 @@ export function resolveOpenClawPluginToolsForOptions(params: PluginToolOptions):
 function* resolveOpenClawPluginToolSteps(
   params: PluginToolOptions,
 ): Generator<Promise<void>, AnyAgentTool[], void> {
-  if (params.options?.disablePluginTools) {
-    return [];
-  }
-
   const inputConfig = params.resolvedConfig ?? params.options?.config;
   const availabilityConfig = resolveAgentRuntimeToolConfig(inputConfig);
   // Bind ownership before reload replaces the source snapshot. Explicit run
@@ -277,6 +273,13 @@ function* resolveOpenClawPluginToolSteps(
   const resolveApiKeyForProvider = authProfileStore
     ? async (providerId: string): Promise<string | undefined> => {
         const cfg = resolveCurrentRuntimeConfig();
+        const workspaceDir = pluginToolInputs.context.workspaceDir;
+        // This preparation excludes plugin auth, including agent-profile substitutes.
+        if (
+          resolveProviderAuthScope({ provider: providerId, config: cfg, workspaceDir }) === "plugin"
+        ) {
+          return undefined;
+        }
         for (const profileId of resolveAuthProfileOrder({
           cfg,
           store: authProfileStore,
@@ -293,7 +296,6 @@ function* resolveOpenClawPluginToolSteps(
             return resolved.apiKey;
           }
         }
-        const workspaceDir = pluginToolInputs.context.workspaceDir;
         const runtimeLookup = createRuntimeProviderAuthLookup({
           cfg,
           workspaceDir,
@@ -350,6 +352,8 @@ function* resolveOpenClawPluginToolSteps(
       preparedModelRuntime,
       config: availabilityConfig,
       agentId: pluginToolInputs.context.agentId,
+      sessionKey: pluginToolInputs.context.sessionKey,
+      sessionId: pluginToolInputs.context.sessionId,
     }),
     context: {
       ...pluginToolInputs.context,
