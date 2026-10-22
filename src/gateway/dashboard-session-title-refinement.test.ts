@@ -80,7 +80,7 @@ describe("maybeRefineDashboardSessionTitle", () => {
     resolveUtilityModelRefForAgent.mockReset().mockReturnValue("openai/gpt-5.6-luna");
   });
 
-  it("runs the one-time refinement at threshold and persists the refined name (manual names never overwritten)", async () => {
+  it("persists the refined name once at threshold and ignores later turns", async () => {
     let current: SessionEntry = {
       ...generatedEntry,
       titleRefinement: {
@@ -112,21 +112,10 @@ describe("maybeRefineDashboardSessionTitle", () => {
       refinementDone: true,
       generatedName: "Release Planning",
     });
-  });
-
-  it("exactly-once: refinementDone blocks a second refinement even at/after threshold", async () => {
-    const doneEntry: SessionEntry = {
-      ...generatedEntry,
-      titleRefinement: {
-        taskMessagesSinceTitle: 9,
-        refinementDone: true,
-        sessionId: "session-1",
-        generatedName: "First Pass Title",
-      },
-    };
-    await maybeRefineDashboardSessionTitle(refineParams(doneEntry));
-    expect(generateConversationLabelWithFallback).not.toHaveBeenCalled();
-    expect(updateSessionEntry).not.toHaveBeenCalled();
+    const writes = updateSessionEntry.mock.calls.length;
+    await maybeRefineDashboardSessionTitle(refineParams(current));
+    expect(generateConversationLabelWithFallback).toHaveBeenCalledTimes(1);
+    expect(updateSessionEntry).toHaveBeenCalledTimes(writes);
   });
 
   it("manual rename precedence: displayName not matching the owned generated name blocks persistence and generation", async () => {

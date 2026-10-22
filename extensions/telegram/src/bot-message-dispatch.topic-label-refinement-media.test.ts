@@ -12,7 +12,13 @@ import {
 
 const naming = vi.hoisted(() => ({
   arm: vi.fn(async () => {}),
-  attach: vi.fn(async () => {}),
+  attach: vi.fn(
+    async (
+      params: Parameters<typeof import("./topic-label-refinement.js").finishInitialTopicLabel>[0],
+    ) => {
+      await params.applyInitialLabel();
+    },
+  ),
   refine: vi.fn(async () => {}),
 }));
 // mock-isolation: this suite owns dispatch-to-naming selection; durable claims
@@ -20,7 +26,7 @@ const naming = vi.hoisted(() => ({
 vi.mock("./topic-label-refinement.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./topic-label-refinement.js")>()),
   armTopicLabelRefinement: naming.arm,
-  attachTopicLabelRefinementLabel: naming.attach,
+  finishInitialTopicLabel: naming.attach,
   maybeRefineTopicLabel: naming.refine,
 }));
 // mock-isolation: do not open a topic-cache database for dispatcher selection.
@@ -217,7 +223,6 @@ describeTelegramDispatch("DM topic naming for captionless media", () => {
           () => scope.drain(),
         );
         expect(edit).not.toHaveBeenCalled();
-        expect(naming.attach).not.toHaveBeenCalled();
       } finally {
         release.resolve("Late model label");
         await AsyncWorkScope.runWhenAllIdle(

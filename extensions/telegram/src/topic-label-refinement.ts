@@ -25,6 +25,8 @@ import {
 type TopicLabelRefinementEntry = {
   /** Label this bot generated for the first turn. */
   label: string;
+  /** Durable intent until the initial edit and cache update have completed. */
+  pendingInitialLabel?: string;
   /** Later user task messages, including those received during initial generation. */
   count: number;
   /** Intermediate user excerpts retained for the refinement source. */
@@ -96,18 +98,16 @@ export async function armTopicLabelRefinement(params: {
   label: string;
 }): Promise<void> {
   try {
-    const store = await loadRefinementStore();
-    // Once-per-topic: a completed refinement for this topic survives re-arming
-    // after /reset or a new session in the same DM topic.
-    const existing = await store.lookup(refinementKey(params));
-    if (existing?.done) {
-      return;
-    }
-    await store.register(refinementKey(params), {
-      label: params.label,
-      count: 0,
-      excerpts: [],
-      done: false,
+    await withRefinementLock(refinementKey(params), async () => {
+      const store = await loadRefinementStore();
+      const key = refinementKey(params);
+      // Resume interrupted attachment, but reset ordinary unfinished context
+      // when a new session starts in this topic. Completed attempts stay spent.
+      const existing = await store.lookup(key);
+      if (existing?.done || existing?.pendingInitialLabel) {
+        return;
+      }
+      await store.register(key, { label: params.label, count: 0, excerpts: [], done: false });
     });
   } catch (err) {
     console.warn(`auto-topic-label: refinement arming failed: ${String(err)}`);
@@ -115,17 +115,27 @@ export async function armTopicLabelRefinement(params: {
 }
 
 /**
- * Attaches the generated first-turn label to the already-armed entry
- * (arm-before-async-label ordering). Without an armed entry this is a no-op,
- * matching the previous arm-after-label behavior.
+ * Persist the initial label intent before its external effect. Serialize the
+ * edit, cache update and attachment with later turns; initial inference stays
+ * outside this lock so follow-ups during generation are still counted.
  */
-export async function attachTopicLabelRefinementLabel(
-  params: Omit<MaybeRefineTopicLabelParams, "userMessage"> & { label: string },
+export async function finishInitialTopicLabel(
+  params: Omit<MaybeRefineTopicLabelParams, "userMessage"> & {
+    label: string;
+    applyInitialLabel: () => Promise<void>;
+  },
 ): Promise<void> {
   try {
-    await withRefinementLock(refinementKey(params), () =>
-      runRefinementTurn(params, { label: params.label }),
-    );
+    await withRefinementLock(refinementKey(params), async () => {
+      const key = refinementKey(params);
+      const store = await loadRefinementStore();
+      const entry = await store.lookup(key);
+      if (entry && !entry.done) {
+        await store.register(key, { ...entry, pendingInitialLabel: params.label });
+      }
+      await params.applyInitialLabel();
+      await runRefinementTurn(params, { label: params.label });
+    });
   } catch (err) {
     console.warn(`auto-topic-label: refinement label attach failed: ${String(err)}`);
   }
@@ -215,6 +225,7 @@ async function runRefinementTurn(
     const next: TopicLabelRefinementEntry = { ...entry };
     if ("label" in event) {
       next.label = event.label;
+      delete next.pendingInitialLabel;
     } else {
       const excerpt = truncateUtf16Safe(event.userMessage, REFINEMENT_SOURCE_MAX_CHARS);
       if (!excerpt.trim()) {
@@ -231,6 +242,27 @@ async function runRefinementTurn(
       }
       next.excerpts = kept;
     }
+    const cacheScope = resolveTopicNameCacheScope({ cfg: params.cfg, accountId: params.accountId });
+    if (next.pendingInitialLabel) {
+      const landedName = await getTopicName(params.chatId, params.threadId, cacheScope);
+      if (landedName === undefined) {
+        await store.register(key, next);
+        params.logVerbose("auto-topic-label: initial label recovery waiting for cached topic name");
+        return;
+      }
+      if (landedName !== next.pendingInitialLabel) {
+        await store.register(key, {
+          ...next,
+          pendingInitialLabel: undefined,
+          excerpts: [],
+          done: true,
+          outcome: "failed",
+        });
+        return;
+      }
+      next.label = next.pendingInitialLabel;
+      delete next.pendingInitialLabel;
+    }
     await store.register(key, next);
     if (next.count < params.afterMessages || !next.label.trim()) {
       return;
@@ -239,7 +271,6 @@ async function runRefinementTurn(
     // Both guard and cache update use the account-scoped cache scope so that
     // multi-account deployments with colliding chat/topic IDs never read
     // another account's cached name (4300095326).
-    const cacheScope = resolveTopicNameCacheScope({ cfg: params.cfg, accountId: params.accountId });
     const currentName = await getTopicName(params.chatId, params.threadId, cacheScope);
     if (currentName === undefined) {
       // The topic's cached name is unavailable (evicted by unrelated topic

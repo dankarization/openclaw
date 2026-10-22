@@ -49,7 +49,7 @@ import { cacheSticker, describeStickerImage } from "./sticker-cache.js";
 import { resolveStickerVisionSupport } from "./sticker-vision.js";
 import {
   armTopicLabelRefinement,
-  attachTopicLabelRefinementLabel,
+  finishInitialTopicLabel,
   maybeRefineTopicLabel,
 } from "./topic-label-refinement.js";
 import { appendTopicNameCacheAccountScope, updateTopicName } from "./topic-name-cache.js";
@@ -200,8 +200,8 @@ async function scheduleDmTopicLabel(params: {
   // Arm the refinement counter BEFORE the async first-turn label so a fast
   // follow-up that lands while the label is still generating is counted on
   // this turn's entry once it appears, instead of racing past the arming
-  // window (Codex 4300868452). Arming is idempotent for entries that are not
-  // done, and the label is attached after generation completes.
+  // window (Codex 4300868452). Completed attempts and interrupted label
+  // attachment survive re-arming; new session context otherwise starts fresh.
   if (refineCfg.enabled) {
     await armTopicLabelRefinement({
       botId: params.bot.botInfo?.id,
@@ -228,28 +228,29 @@ async function scheduleDmTopicLabel(params: {
         return;
       }
       logVerbose(`auto-topic-label: generated label (len=${label.length})`);
-      assertAccountCurrent();
-      await params.bot.api.editForumTopic(context.chatId, topicThreadId, { name: label });
-      // Cache the automatic label so the refinement's manual-rename guard can
-      // observe later human renames of DM topics (Codex 4302875124).
-      await updateTopicName(
-        context.chatId,
-        topicThreadId,
-        { name: label },
-        appendTopicNameCacheAccountScope(
-          resolveStorePath(params.cfg.session?.store, {
-            agentId: resolveTelegramAccountOwnerAgentId({
-              cfg: params.cfg,
-              accountId: context.route.accountId,
+      const applyInitialLabel = async () => {
+        assertAccountCurrent();
+        await params.bot.api.editForumTopic(context.chatId, topicThreadId, { name: label });
+        // Cache the automatic label so the refinement's manual-rename guard can
+        // observe later human renames of DM topics (Codex 4302875124).
+        await updateTopicName(
+          context.chatId,
+          topicThreadId,
+          { name: label },
+          appendTopicNameCacheAccountScope(
+            resolveStorePath(params.cfg.session?.store, {
+              agentId: resolveTelegramAccountOwnerAgentId({
+                cfg: params.cfg,
+                accountId: context.route.accountId,
+              }),
             }),
-          }),
-          context.route.accountId,
-        ),
-      ).catch(() => {});
-      logVerbose(`auto-topic-label: renamed topic ${context.chatId}/${topicThreadId}`);
-      // Attach the generated label to the already-armed refinement entry.
+            context.route.accountId,
+          ),
+        ).catch(() => {});
+        logVerbose(`auto-topic-label: renamed topic ${context.chatId}/${topicThreadId}`);
+      };
       if (refineCfg.enabled) {
-        await attachTopicLabelRefinementLabel({
+        await finishInitialTopicLabel({
           botId: params.bot.botInfo?.id,
           accountId: context.route.accountId,
           bot: params.bot,
@@ -261,7 +262,10 @@ async function scheduleDmTopicLabel(params: {
           afterMessages: refineCfg.afterMessages,
           logVerbose,
           label,
+          applyInitialLabel,
         });
+      } else {
+        await applyInitialLabel();
       }
     } catch (err) {
       logVerbose(`auto-topic-label: failed: ${String(err)}`);

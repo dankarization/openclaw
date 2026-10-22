@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { preserveGenerationPrivateFields } from "./session-entry-public-patch.js";
-import type { InternalSessionEntry, SessionEntry } from "./types.js";
+import { mergeSessionEntry, type InternalSessionEntry, type SessionEntry } from "./types.js";
 
 describe("preserveGenerationPrivateFields", () => {
   it("restores titleRefinement across same-session plugin upserts (4304147107)", () => {
@@ -25,22 +25,25 @@ describe("preserveGenerationPrivateFields", () => {
     expect(patch.displayName).toBe("Planning");
   });
 
-  it("does not restore private fields when the session rotates", () => {
-    const persistedEntry: InternalSessionEntry = {
-      sessionId: "session-1",
-      updatedAt: 123,
-      lifecycleRevision: "rev-1",
-      titleRefinement: {
+  it.each([{ sessionId: "session-2", lifecycleRevision: "rev-2" }, { lifecycleRevision: "rev-2" }])(
+    "clears refinement from the merged replacement lifecycle: %j",
+    (rotation) => {
+      const persistedEntry: InternalSessionEntry = {
         sessionId: "session-1",
-        generatedName: "Planning",
-        taskMessagesSinceTitle: 1,
-        refinementDone: false,
-      },
-    };
-    const patch = preserveGenerationPrivateFields(persistedEntry, {
-      sessionId: "session-2",
-      lifecycleRevision: "rev-2",
-    });
-    expect(patch.titleRefinement).toBeUndefined();
-  });
+        updatedAt: 123,
+        lifecycleRevision: "rev-1",
+        titleRefinement: {
+          sessionId: "session-1",
+          generatedName: "Planning",
+          taskMessagesSinceTitle: 1,
+          refinementDone: true,
+          recentMessages: ["task from retired lifecycle"],
+        },
+      };
+      const patch = preserveGenerationPrivateFields(persistedEntry, rotation);
+      const merged: InternalSessionEntry = mergeSessionEntry(persistedEntry, patch);
+      expect(merged.lifecycleRevision).toBe("rev-2");
+      expect(merged.titleRefinement).toBeUndefined();
+    },
+  );
 });
