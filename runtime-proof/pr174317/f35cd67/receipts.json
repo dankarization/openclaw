@@ -1,0 +1,78 @@
+{
+  "upgrade": {
+    "sha": "f35cd67be5fe60ae8d0802c4bd17cfe9c7743ee6",
+    "stableVersion": "2026.10.6",
+    "realTelegramUI": true,
+    "provider": "deterministic fixture",
+    "doctorExit": 0,
+    "stableHistoryPresentInCandidateRequest": true,
+    "normalReplyObservedInUI": "QA f35 upgrade reply",
+    "verifiedSourceFiles": 58610,
+    "verifiedRuntimeFiles": 40673,
+    "mismatches": 0,
+    "sameSessionIdAfterOfflineReopen": true,
+    "legacyCacheEntriesChecked": 2,
+    "legacyCacheAllFieldsPreserved": true
+  },
+  "threshold": {
+    "sha": "f35cd67be5fe60ae8d0802c4bd17cfe9c7743ee6",
+    "realTelegramUI": true,
+    "provider": "deterministic fixture",
+    "threshold": 2,
+    "countBeforeRestart": 1,
+    "doneBeforeRestart": false,
+    "firstLabel": "QA f35 initial",
+    "refinedLabel": "QA f35 alpine irrigation",
+    "refinementRequestCountAfterThirdTask": 1,
+    "firstAndSecondTaskExcerptsPresent": true,
+    "gatewayRestarted": true
+  },
+  "manual-race": {
+    "sha": "f35cd67be5fe60ae8d0802c4bd17cfe9c7743ee6",
+    "realTelegramUI": true,
+    "provider": "deterministic fixture",
+    "requestObservedAt": "2026-10-22T17:48:19.154954Z",
+    "manualUISaveAt": "2026-10-22T17:48:23.642Z",
+    "postInferenceGuardAt": "2026-10-22T17:48:29.240Z",
+    "initialLabel": "QA f35 race2 initial",
+    "modelProposedLabel": "QA f35 race2 forbidden",
+    "finalVisibleLabel": "QA f35 HUMAN chosen",
+    "refinementRequestCount": 1,
+    "editDialogClosed": true,
+    "firstTrialExcluded": "UI driver failed before applying a user rename; not product proof",
+    "laterTaskReplyCompletedWithoutRepeatedRefinement": true,
+    "cachedNameMatchesVisibleManualName": true,
+    "terminalCount": 2,
+    "done": true,
+    "outcome": "failed",
+    "excerptsPresent": false
+  },
+  "account-stop": {
+    "sha": "f35cd67be5fe60ae8d0802c4bd17cfe9c7743ee6",
+    "realTelegramUI": true,
+    "provider": "deterministic fixture",
+    "inferenceRequestObservedAt": "2026-10-22T17:51:49.738754+00:00",
+    "stopRequestedAt": "2026-10-22T17:51:49.740000+00:00",
+    "stopConfirmedAt": "2026-10-22T17:51:49.815000+00:00",
+    "runningFalseObservedAt": "2026-10-22T17:51:49.850000+00:00",
+    "cancellationGuardAt": "2026-10-22T17:51:59.838Z",
+    "visibleAndCachedName": "QA f35 stop initial",
+    "terminalCount": 2,
+    "done": true,
+    "outcome": "failed",
+    "excerptsPresent": false,
+    "configuredAndEnabledUnchanged": true,
+    "notAccountDeletionOrTokenChange": true
+  },
+  "cleanup": {
+    "ownedGatewayProviderAndControllerStopped": true,
+    "ownedListenersReleased": true,
+    "newFullCheckouts": 0
+  },
+  "rawEvidenceSha256": {
+    "f35cd67-provider-requests.jsonl": "0c90abc5d33f74ac50102f223d4b9cd5fd136cde529eec1f77282d1d902b3600",
+    "f35cd67-after-restart-gateway.log": "14eaaeb1c00ca4121d7f3398367a215f3f2d225cd75ab30f6ef3dccce8869d39",
+    "f35cd67-authority-rpc-v2-receipts.jsonl": "54a883cd969c66cb2bac2a1ae9df04834a9eb0dc7e921e24736a943dc942149a",
+    "f35cd67-candidate-doctor.log": "7c2be822e25d254e09d86c3c29e6f95e57ec249c9b2787c489de074ab4224efd"
+  }
+}
