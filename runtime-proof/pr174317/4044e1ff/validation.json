@@ -77,7 +77,34 @@
     "platform": "darwin-x64",
     "newHpDeployment": false
   },
-  "hostedCi": "pending",
+  "hostedCi": {
+    "head": "4044e1ff4caf1e54f49082f942294eac9d1b4971",
+    "verifiedUtc": "2026-10-22T20:10:58.674094+00:00",
+    "workflow": "https://github.com/openclaw/openclaw/actions/runs/39843189938",
+    "workflowConclusion": "success",
+    "checkRuns": {
+      "fetchedAllPages": true,
+      "total": 186,
+      "success": 132,
+      "skipped": 53,
+      "neutral": 1,
+      "failure": 0,
+      "cancelled": 0,
+      "pending": 0
+    },
+    "workflows": {
+      "total": 26,
+      "success": 20,
+      "skipped": 6,
+      "pending": 0,
+      "failed": 0
+    },
+    "commitStatuses": {
+      "openclaw/dependency-review": "success",
+      "openclaw/security-sensitive-review": "success",
+      "openclaw/ci-gate": "success"
+    }
+  },
   "maintainerAcceptance": false,
   "logSha256": {
     "pr174317-dashboard-shared-model-red.log": "0c2cb02003a084502dbb88f9830bd3eae48354326950d4278a9e400291f2ffa8",

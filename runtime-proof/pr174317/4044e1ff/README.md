@@ -27,7 +27,7 @@ Node 24.22.1 and pnpm 12.15.0 were used. Core types, both owning test-type graph
 
 An independent bounded read-only review found no confirmed findings. This was narrative subagent assessment, not helper-isolated machine certification.
 
-Normal `pnpm build` on the exact published head passed in 7m 16.8s on Mac; generated build-info records `4044e1ff4caf1e54f49082f942294eac9d1b4971`. [Hosted CI](https://github.com/openclaw/openclaw/actions/runs/39843189938) is still pending at preparation of this packet; no hosted success is assumed. A non-checkout merge calculation against main `06eb109ab151a722db5f7643bd7ac25a3891d8ae` was clean; main was not merged for freshness.
+Normal `pnpm build` on the exact published head passed in 7m 16.8s on Mac; generated build-info records `4044e1ff4caf1e54f49082f942294eac9d1b4971`. [Hosted CI](https://github.com/openclaw/openclaw/actions/runs/39843189938) completed successfully. Full pagination returned 186 CheckRuns: 132 success, 53 skipped, 1 neutral, zero failure/cancellation/pending. All 26 workflows were terminal (20 success, 6 skipped). All three separate commit statuses, including `openclaw/ci-gate`, were success. These results belong to the published 4044 head; they are not F35 statuses. A non-checkout merge calculation against main `06eb109ab151a722db5f7643bd7ac25a3891d8ae` was clean; main was not merged for freshness.
 
 ## Real Telegram/model evidence and reuse boundary
 
