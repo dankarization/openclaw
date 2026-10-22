@@ -1,3 +1,7 @@
+import type {
+  OpenAsyncKeyedStoreOptions,
+  PluginStateKeyedStore,
+} from "openclaw/plugin-sdk/plugin-state-runtime";
 import { resetPluginStateStoreForTests } from "openclaw/plugin-sdk/plugin-state-test-runtime";
 import { expect, it, vi } from "vitest";
 import {
@@ -21,11 +25,12 @@ describeTelegramDispatch("initial topic-label recovery", () => {
     const state = getTelegramRuntime().state;
     const openStore = state.openKeyedStore;
     let interrupted = false;
-    state.openKeyedStore = <T>(options: Parameters<typeof openStore>[0]) => {
+    state.openKeyedStore = <T>(options: OpenAsyncKeyedStoreOptions): PluginStateKeyedStore<T> => {
       const store = openStore<T>(options);
       return {
         ...store,
-        register: async (key, value) => {
+        register: async (...args: Parameters<PluginStateKeyedStore<T>["register"]>) => {
+          const [, value] = args;
           if (
             !interrupted &&
             options.namespace === "telegram.topic-label-refinement" &&
@@ -34,7 +39,7 @@ describeTelegramDispatch("initial topic-label recovery", () => {
             interrupted = true;
             throw new Error("interrupted after Telegram edit and cache commit");
           }
-          return store.register(key, value);
+          return store.register(...args);
         },
       };
     };
