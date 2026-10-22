@@ -8,7 +8,10 @@ import { resolveDefaultAgentId } from "../../agents/agent-scope.js";
 import { splitTrailingAuthProfile } from "../../agents/model-ref-profile.js";
 import { resolveCompatibleAgentRuntimeForProvider } from "../../agents/session-runtime-compat.js";
 import { resolveSimpleCompletionSelectionForAgent } from "../../agents/simple-completion-runtime.js";
-import { runUtilityCompletion } from "../../agents/utility-completion.js";
+import {
+  runUtilityCompletion,
+  type UtilityCompletionAttempt,
+} from "../../agents/utility-completion.js";
 import { resolveAutomaticUtilityRuntimeOverride } from "../../agents/utility-model.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { createDedupeCache } from "../../infra/dedupe.js";
@@ -77,35 +80,32 @@ function resolveRawModelProvider(modelRef: string | undefined): string | undefin
   return provider || undefined;
 }
 
-function resolveAttemptRuntime(
+function resolveAttemptPlan(
   params: ConversationLabelParams & { agentId: string },
-  selection: NonNullable<ReturnType<typeof resolveAttemptSelection>>,
-): string | undefined {
-  const selectedRuntime = resolveCompatibleAgentRuntimeForProvider({
-    provider: selection.provider,
-    runtime: params.agentHarnessRuntimeOverride,
-    cfg: params.cfg,
-  });
-  if (selectedRuntime) {
-    return selectedRuntime;
-  }
-  const automaticRuntime = resolveAutomaticUtilityRuntimeOverride({
-    cfg: params.cfg,
-    agentId: params.agentId,
-    utilityProvider: selection.provider,
-    utilityModelId: selection.modelId,
-  });
-  return automaticRuntime === "claude-cli" ? automaticRuntime : undefined;
-}
-
-/** Attempt identity from an already-resolved selection, so no selection is resolved twice. */
-function attemptKeyFromSelection(
   attempt: ConversationLabelAttempt,
-  selection: ReturnType<typeof resolveAttemptSelection>,
-  runtime: string | undefined,
-): string {
+  dispatched?: UtilityCompletionAttempt,
+) {
+  const selection = resolveAttemptSelection(params, attempt);
+  let runtime = dispatched?.agentHarnessRuntimeOverride;
+  if (!dispatched && selection) {
+    // A session override cannot serve a utility model on an incompatible provider.
+    runtime = resolveCompatibleAgentRuntimeForProvider({
+      provider: selection.provider,
+      runtime: params.agentHarnessRuntimeOverride,
+      cfg: params.cfg,
+    });
+    if (!runtime) {
+      const automaticRuntime = resolveAutomaticUtilityRuntimeOverride({
+        cfg: params.cfg,
+        agentId: params.agentId,
+        utilityProvider: selection.provider,
+        utilityModelId: selection.modelId,
+      });
+      runtime = automaticRuntime === "claude-cli" ? automaticRuntime : undefined;
+    }
+  }
   const rawRef = splitTrailingAuthProfile(attempt.modelRef?.trim() ?? "");
-  return selection
+  const key = selection
     ? [
         "resolved",
         selection.provider,
@@ -117,16 +117,7 @@ function attemptKeyFromSelection(
     : ["raw", rawRef.model, rawRef.profile ?? attempt.preferredProfile ?? "", runtime ?? ""].join(
         "\0",
       );
-}
-
-/** One resolution per attempt: selection, effective runtime, and identity are carried together. */
-function resolveAttemptPlan(
-  params: ConversationLabelParams & { agentId: string },
-  attempt: ConversationLabelAttempt,
-) {
-  const selection = resolveAttemptSelection(params, attempt);
-  const runtime = selection ? resolveAttemptRuntime(params, selection) : undefined;
-  return { selection, runtime, key: attemptKeyFromSelection(attempt, selection, runtime) };
+  return { selection, runtime, key };
 }
 
 async function runLabelAttempts(
@@ -170,9 +161,6 @@ async function runLabelAttempts(
         }
         assertOperatorModelAllowed(params.operatorAuthority, model);
       }
-      // The session's runtime override was resolved for its primary provider; a
-      // utility model on another provider cannot run through that harness.
-      const agentHarnessRuntimeOverride = plan.runtime;
       const completion = await runUtilityCompletion({
         purpose: "conversation-label",
         config: params.cfg,
@@ -182,27 +170,21 @@ async function runLabelAttempts(
         agentId: params.agentId,
         agentDir: params.agentDir ?? selection.agentDir,
         useUtilityModel: attempt.phase === "utility",
-        onAttempt: ({
-          provider,
-          model: modelId,
-          authProfileId,
-          agentHarnessRuntimeOverride: attemptRuntimeOverride,
-        }) => {
-          // Candidate identity is only known at dispatch; resolve it once here.
-          const candidate: ConversationLabelAttempt = {
-            modelRef: `${provider}/${modelId}`,
-            preferredProfile: authProfileId,
-            phase: attempt.phase,
-          };
+        onAttempt: (candidate) => {
+          // Utility fallbacks can reach the same model without the session runtime.
           seen.add(
-            attemptKeyFromSelection(
+            resolveAttemptPlan(
+              params,
+              {
+                modelRef: `${candidate.provider}/${candidate.model}`,
+                preferredProfile: candidate.authProfileId,
+                phase: attempt.phase,
+              },
               candidate,
-              resolveAttemptSelection(params, candidate),
-              attemptRuntimeOverride,
-            ),
+            ).key,
           );
         },
-        ...(agentHarnessRuntimeOverride ? { agentHarnessRuntimeOverride } : {}),
+        ...(plan.runtime ? { agentHarnessRuntimeOverride: plan.runtime } : {}),
         systemPrompt: [
           params.prompt,
           'Label only the text in the "conversationLabelSource" field of the JSON object in the final user input.',
