@@ -1,0 +1,95 @@
+{
+  "head": "4044e1ff4caf1e54f49082f942294eac9d1b4971",
+  "entryPoint": "shipped dist/index.js Gateway CLI and Gateway RPC",
+  "actualModel": "local/gemma4:12b",
+  "utilityModel": "local/gemma4:12b",
+  "completionStubbed": false,
+  "threshold": 2,
+  "steps": [
+    {
+      "step": "valid-opening",
+      "displayName": "Planning a team meeting",
+      "model": "gemma4:12b",
+      "provider": "local",
+      "status": "done",
+      "hasActiveRun": false,
+      "normalReply": "I can help you structure the agenda and select a time that works for everyone.",
+      "gatewaySnapshotUtc": "2026-10-22T20:26:47.987000+00:00"
+    },
+    {
+      "step": "followup1",
+      "displayName": "Planning a team meeting",
+      "model": "gemma4:12b",
+      "provider": "local",
+      "status": "done",
+      "hasActiveRun": false,
+      "normalReply": "Run a full dry-run of the restore process on a staging environment to verify that the backup data is actually restorable and consistent.",
+      "gatewaySnapshotUtc": "2026-10-22T20:27:40.719000+00:00"
+    },
+    {
+      "step": "threshold",
+      "displayName": "PostgreSQL disaster recovery rehearsal planning",
+      "model": "gemma4:12b",
+      "provider": "local",
+      "status": "done",
+      "hasActiveRun": false,
+      "normalReply": "Include a specific walkthrough of the `recovery_target_time` configuration and a manual check of the WAL archive status to ensure seamless point-in-time recovery.",
+      "gatewaySnapshotUtc": "2026-10-22T20:28:20.714000+00:00"
+    },
+    {
+      "step": "later",
+      "displayName": "PostgreSQL disaster recovery rehearsal planning",
+      "model": "gemma4:12b",
+      "provider": "local",
+      "status": "done",
+      "hasActiveRun": false,
+      "normalReply": "Verify both the integrity of the base backups and the continuity of the WAL segments to ensure a seamless transition during recovery.",
+      "gatewaySnapshotUtc": "2026-10-22T20:29:06.707000+00:00"
+    }
+  ],
+  "offline": {
+    "head": "4044e1ff4caf1e54f49082f942294eac9d1b4971",
+    "keySha256": "4a3a84f9404fef0ab879c46ac09ad7d81604311ca8ce263ee178427e0c98665a",
+    "offlineRows": [
+      {
+        "databaseKind": "agent",
+        "displayName": "PostgreSQL disaster recovery rehearsal planning",
+        "refinement": {
+          "taskMessagesSinceTitle": 2,
+          "refinementDone": true,
+          "generatedName": "PostgreSQL disaster recovery rehearsal planning",
+          "skipNextTaskMessage": null
+        },
+        "recentMessagesPresent": false,
+        "entrySha256": "acc23f049a979a60458695cb7a217c125a231cf7d7858e1f7d778572fd1d171f",
+        "sqliteIntegrity": "ok",
+        "foreignKeyViolations": 0
+      }
+    ],
+    "portsReleased": true,
+    "originalConfigRestoredExactly": true
+  },
+  "cleanup": {
+    "gatewayExit": 0,
+    "finishedUtc": "2026-10-22T20:29:49Z",
+    "originalConfigRestoredExactly": true,
+    "modelCatalogsRestored": true,
+    "registryExit": 0,
+    "ownedPortsReleased": true,
+    "foreignServicesChanged": false
+  },
+  "manualTitlePatchSent": false,
+  "newCredentials": false,
+  "newEnvironmentCopies": 0,
+  "excludedSetup": [
+    "Optional idempotent sessions.create rejected before creation for lack of authenticated principal/device identity; not retried.",
+    "First implicit OpenAI default opening failed auth; excluded. Standard sessions.patch selected the already authorized local model before the four successful turns."
+  ],
+  "rawEvidenceSha256": {
+    "4044e1ff-dashboard-rpc-private.log": "9b8721bcde2f13f5158b153fef78429a250ee36a1fc7bc43aafab9adbb1d4314",
+    "4044e1ff-dashboard-model-runtime.log": "009fa9145a87138a225d9dd2211fb5473f75b135bc763dd6774488b4d99cbef7",
+    "4044e1ff-dashboard-model-console.log": "811943c7cb360d6b415d38b1d31529276aefdbc846ede36ebc791db0e2ae6352"
+  },
+  "sourceReceiptSha256": "8ce355749b62cf3766423ed2751454b86ea5e975e66514cb09c5e78f785ca1b6",
+  "observationSource": "Captured sessions.describe and chat.history replies from shipped Gateway CLI; timestamps are Gateway snapshotAt values."
+}

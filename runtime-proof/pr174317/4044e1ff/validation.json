@@ -61,7 +61,8 @@
     "actualModel": "gemma4:12b through existing durable Ollama queue",
     "realTelegramCompleted": true,
     "reuseBasis": "Telegram owner/collector/persistence/migrations unchanged; ordinary shared-generator path still utility->primary with the same deduplication; only dashboard optional modes differ",
-    "newHpEnvironmentCopies": 0
+    "newHpEnvironmentCopies": 0,
+    "appliesTo": "Telegram and stable-upgrade evidence; current-head dashboard proof is recorded separately."
   },
   "currentHeadBuild": {
     "result": "passed",
@@ -75,7 +76,8 @@
     },
     "logSha256": "424dc88fa8ace56cc5c1a88361822deca08447e0d4df24d16c750be0765e6e82",
     "platform": "darwin-x64",
-    "newHpDeployment": false
+    "newHpDeployment": true,
+    "reusedExistingHpCheckout": true
   },
   "hostedCi": {
     "head": "4044e1ff4caf1e54f49082f942294eac9d1b4971",
@@ -112,5 +114,34 @@
     "pr174317-dashboard-p2-core-types.log": "ae8394de25ce29e378b86687304c64f819f619b7d275d3a59664ece1a4054336",
     "pr174317-dashboard-p2-owning-test-types.log": "0805b3abb42aa293d012ac05d9ec2da29af5121eeaa710f7e9914e0514e401a8",
     "pr174317-dashboard-p2-lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "dashboardCurrentHeadRuntime": {
+    "head": "4044e1ff4caf1e54f49082f942294eac9d1b4971",
+    "entryPoint": "shipped dist/index.js Gateway CLI and Gateway RPC",
+    "primaryEqualsUtility": true,
+    "actualModel": "local/gemma4:12b",
+    "completionStubbed": false,
+    "normalReplies": 4,
+    "initialTitle": "Planning a team meeting",
+    "firstFollowupTitle": "Planning a team meeting",
+    "thresholdTitle": "PostgreSQL disaster recovery rehearsal planning",
+    "laterTitle": "PostgreSQL disaster recovery rehearsal planning",
+    "finalCount": 2,
+    "done": true,
+    "recentMessagesPresent": false,
+    "gatewayExit": 0,
+    "registryExit": 0,
+    "sourceFilesVerified": 58610,
+    "runtimeFilesVerified": 40673,
+    "runtimeRoots": 26,
+    "sourceRuntimeMismatches": 0,
+    "newFullCheckoutOrDependencies": 0,
+    "receipt": "dashboard-gateway.json",
+    "sourceReceiptSha256": "8ce355749b62cf3766423ed2751454b86ea5e975e66514cb09c5e78f785ca1b6",
+    "transportArchiveBytesRemoved": 33893520,
+    "diskBeforeArchiveRemoval": 69675110400,
+    "diskAfterArchiveRemoval": 69709008896,
+    "rollbackBackupVerified": true,
+    "rollbackBackupSha256": "267e116ac8d8c612650fb2846f39fdff336332ad0886048ff87c31720b52dbcc"
   }
 }
