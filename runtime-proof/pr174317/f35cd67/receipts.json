@@ -109,5 +109,23 @@
     "configRestoredExactly": true,
     "credentialOccurrencesInSavedFiles": 0,
     "result": "blocked before model invocation; no successful actual-model smoke claimed"
+  },
+  "localModelRoutePreflight": {
+    "head": "f35cd67be5fe60ae8d0802c4bd17cfe9c7743ee6",
+    "model": "gemma4:12b",
+    "route": "existing native Ollama durable queue",
+    "queuedJobCompleted": true,
+    "jobIdSha256": "c9130bde323dfc167560befeb5e9ead366bfaea55e9d45ab8b1767ef0d4b30f8",
+    "inputSha256": "sha256:2efa9da89c7b57c775367f533fd248875bfcc7e491f1d33cbce2dfb2eeafd618",
+    "resultSha256": "sha256:e00ef3a92603b71d20f245c330003ca5441289ebd78dc93a6e496b2c450af474",
+    "elapsedHttpSeconds": 12.25,
+    "reply": "READY",
+    "promptEvalCount": 32,
+    "evalCount": 2,
+    "done": true,
+    "atUtc": "2026-10-22T18:58:44Z",
+    "telegramFeatureSmokeCompleted": false,
+    "newCredentialUsed": false,
+    "newModelDownloaded": false
   }
 }

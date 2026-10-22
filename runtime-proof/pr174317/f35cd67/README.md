@@ -90,7 +90,11 @@ The next text task caused the single refinement. Its request contained both `<me
 
 A separate attempt selected the existing `mistral-free-ladder` bucket, configured as a no-cost Mistral Large → Devstral → Small route. Its authenticated model-catalog preflight returned HTTP 401 at 18:42:47 UTC, before any model invocation or Gateway start. The configured credential value proved to be a local placeholder; a usable existing owner credential has not been identified. No pricing claim is made from the configured zero-cost fields alone, and no paid fallback series was attempted.
 
-The QA configuration was restored byte-for-byte, and the saved-file scan found zero occurrences of the supplied credential value. This negative preflight does not establish model/runtime behavior. A successful real-model smoke remains outstanding and separate from the five real-Telegram/deterministic-provider scenarios above.
+The QA configuration was restored byte-for-byte, and the saved-file scan found zero occurrences of the supplied credential value. This negative request concerns only that catalog request/value; it does not establish a production outage or the effective credentials of its normal chat route.
+
+The owner then selected an existing local inference queue instead. A single request through its native Ollama queue route completed on the already available `gemma4:12b`: `READY`, `done=true`, 32 input tokens / 2 output tokens, HTTP elapsed 12.25 s at 18:58:44 UTC. A read-only check of that job's durable result confirmed completion and the recorded input/result hashes. The request used no external credential, model download, direct backend call or queue-policy change.
+
+This is a successful **real-model route preflight**, not a Telegram feature smoke: the interactive client is currently locked. The verified candidate Gateway reached ready/health 200 with the local route configured, but no Telegram smoke message was sent. The idle QA Gateway was then terminated normally (exit 0), and its original configuration restored exactly. The complete real-model Telegram opening/context/refinement run remains outstanding and separate from the five real-Telegram/deterministic-provider scenarios above.
 
 ## Boundaries and cleanup
 
