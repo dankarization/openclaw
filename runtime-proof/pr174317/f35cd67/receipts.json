@@ -124,8 +124,47 @@
     "evalCount": 2,
     "done": true,
     "atUtc": "2026-10-22T18:58:44Z",
-    "telegramFeatureSmokeCompleted": false,
+    "telegramFeatureSmokeCompleted": true,
     "newCredentialUsed": false,
     "newModelDownloaded": false
+  },
+  "realLocalModelTelegram": {
+    "head": "f35cd67be5fe60ae8d0802c4bd17cfe9c7743ee6",
+    "provider": "real local model via existing durable Ollama queue",
+    "model": "gemma4:12b",
+    "realTelegramUI": true,
+    "setupModelSelectedThroughTelegramCommand": true,
+    "initialTaskLabel": "Alpine greenhouse advice",
+    "countBeforeRestart": 1,
+    "doneBeforeRestart": false,
+    "cleanRestart": true,
+    "finalVisibleLabel": "Alpine greenhouse design",
+    "fourNormalModelRepliesObserved": true,
+    "laterTurnDidNotRenameAgain": true,
+    "finalState": {
+      "label": "Alpine greenhouse design",
+      "count": 2,
+      "done": true,
+      "outcome": "renamed",
+      "excerptsPresent": false,
+      "keySha256": "2c30dd67bee2cbd9e2bd598819bdc3737e4ff611754dabab20362643c417e9ca"
+    },
+    "sqliteIntegrity": "ok",
+    "foreignKeyViolations": 0,
+    "newCredentials": false,
+    "newModelDownloads": false,
+    "directBackendRequests": false,
+    "configRestoredExactly": true,
+    "ownedGatewayExit": 0,
+    "sourceLogSha256": "f6434f85e238016b94e0c34910b834c9743e9bbe7c0730357eeb8927e42235c8",
+    "consoleLogSha256": "c735f9ea97795c61cd8b0cd5f9b2c39c519dd3d7df9f0d034c49b3c9d40a9920",
+    "excludedSetupAttempt": "First new topic retained the old fixture model and returned auth401; excluded before explicit /model selection. Local model selection generated its own setup title before the first ordinary garden task initialized the actual task label.",
+    "timelineUtc": {
+      "openingTask": "2026-10-22T19:11:20Z",
+      "firstFollowup": "2026-10-22T19:13:00Z",
+      "thresholdAfterRestart": "2026-10-22T19:17:35Z",
+      "laterTurn": "2026-10-22T19:18:28Z",
+      "normalShutdown": "2026-10-22T19:19:18Z"
+    }
   }
 }

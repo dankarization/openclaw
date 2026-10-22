@@ -3,7 +3,7 @@
 Tested published commit: `f35cd67be5fe60ae8d0802c4bd17cfe9c7743ee6`.
 Source tree: `3a85f9dcb96188e8a4bda60be0b20be7f5c4571f`.
 
-**Telegram transport and user actions were real. Model completions were supplied by the repository's deterministic provider. A real-model smoke has not been performed.** These executions are fresh runs of this published head, not reuse of the older b66 receipts.
+**Telegram transport and user actions were real. Scenarios 1–5 use the repository's deterministic provider for precise race synchronization. Scenario 6 uses the actual `gemma4:12b` through the existing durable Ollama queue.** These executions are fresh runs of this published head, not reuse of the older b66 receipts.
 
 ## Artifact identity and local validation
 
@@ -86,15 +86,29 @@ The next text task caused the single refinement. Its request contained both `<me
 
 ![Actual captionless photo and normal reply](captionless-photo.png)
 
-## 6. Actual-model preflight — blocked, not a passed smoke
+## 6. Real local model → actual Telegram → restart and refinement
 
-A separate attempt selected the existing `mistral-free-ladder` bucket, configured as a no-cost Mistral Large → Devstral → Small route. Its authenticated model-catalog preflight returned HTTP 401 at 18:42:47 UTC, before any model invocation or Gateway start. The configured credential value proved to be a local placeholder; a usable existing owner credential has not been identified. No pricing claim is made from the configured zero-cost fields alone, and no paid fallback series was attempted.
+The already available `gemma4:12b` served this separate smoke through the existing native Ollama durable queue. No external key, model download, direct backend request or queue-policy change was used. A prior one-request route preflight returned `READY` / done true in 12.25 seconds; the following is the actual Telegram feature run, not that preflight.
 
-The QA configuration was restored byte-for-byte, and the saved-file scan found zero occurrences of the supplied credential value. This negative request concerns only that catalog request/value; it does not establish a production outage or the effective credentials of its normal chat route.
+The test Gateway used the exact published candidate. Its isolated configuration selected the existing local Ollama provider as both primary and utility model, with a 32,768-token context cap and 512 output tokens. The existing Telegram session selected it through the ordinary `/model local/gemma4:12b` command before the task began.
 
-The owner then selected an existing local inference queue instead. A single request through its native Ollama queue route completed on the already available `gemma4:12b`: `READY`, `done=true`, 32 input tokens / 2 output tokens, HTTP elapsed 12.25 s at 18:58:44 UTC. A read-only check of that job's durable result confirmed completion and the recorded input/result hashes. The request used no external credential, model download, direct backend call or queue-policy change.
+| Step | UTC | Expected / actual |
+| --- | --- | --- |
+| Opening greenhouse task | 19:11:20 | Ordinary model answer about multi-layer glazing; initial task title `Alpine greenhouse advice`. |
+| First follow-up: rainwater and frost protection | 19:13:00 | Ordinary model answer about thermal curtains. After a clean stop, offline state was count 1 / done false. |
+| Restart, second follow-up: irrigation and thermal storage | 19:17:35 | Ordinary model answer about heat storage; visible title refined to `Alpine greenhouse design`. |
+| Later task | 19:18:28 | Ordinary answer confirmed rainwater harvesting and thermal storage; title stayed unchanged. |
+| Normal shutdown / offline validation | 19:19:18 | Gateway exit 0; reopened state count 2 / done true / outcome renamed / no excerpts. SQLite integrity `ok`, foreign-key violations 0. |
 
-This is a successful **real-model route preflight**, not a Telegram feature smoke: the interactive client is currently locked. The verified candidate Gateway reached ready/health 200 with the local route configured, but no Telegram smoke message was sent. The idle QA Gateway was then terminated normally (exit 0), and its original configuration restored exactly. The complete real-model Telegram opening/context/refinement run remains outstanding and separate from the five real-Telegram/deterministic-provider scenarios above.
+![Actual model initial task title](local-model-initial-title.png)
+
+![Actual model refined title](local-model-final-title.png)
+
+![Actual model later task reply](local-model-final-reply.png)
+
+Reproduction: start the verified candidate with the existing authorized Ollama queue provider, select that model in a fresh Telegram topic, send an opening greenhouse task, then a rainwater/frost follow-up. Stop the isolated Gateway normally and inspect a disposable SQLite copy. Restart with the same state, send the irrigation/thermal-storage follow-up and then one further task. Expect the single refinement and final spent/purged state shown above. Stop the Gateway normally and restore the original QA configuration and model catalogs byte-for-byte.
+
+One earlier setup topic inherited the old fixture model and returned an auth error before explicit model selection; it is excluded. The `/model` setup message generated its own setup title before the first ordinary task established the task title. Neither is represented as a passing ordinary model reply. The earlier alternative catalog HTTP 401 remains a separate negative preflight and is not evidence of a production auth failure.
 
 ## Boundaries and cleanup
 
@@ -102,4 +116,4 @@ The same QA checkout, installation and profile were reused. No additional full c
 
 [Machine-readable redacted receipts](receipts.json) contain the observed facts and hashes of the retained private raw logs. Raw provider requests, chat identities, private paths, internal addresses and credentials are intentionally not published.
 
-Still outstanding: a smoke through an actual model provider, fresh reviewer assessment and the maintainer's naming-policy decision (opt-in message-count trigger and settings), plus maintainer acceptance. The stale raw CheckRun records are an API-consistency caveat rather than running tests. CI, risk labels and human acceptance are separate.
+The fresh reviewer inspected the five deterministic scenarios and accepted the previous lifecycle/cache repairs. It found one new dashboard P2: when utility equals primary, refinement can consume its attempt without inference. That separate author repair is in progress; this Telegram smoke does not claim to fix or validate that dashboard defect. The maintainer's naming-policy decision (opt-in message-count trigger and settings), fresh assessment of the repaired head and maintainer acceptance remain outstanding. The stale raw CheckRun records are an API-consistency caveat rather than running tests. CI, risk labels and human acceptance are separate.
