@@ -25,7 +25,12 @@
     "refinedLabel": "QA f35 alpine irrigation",
     "refinementRequestCountAfterThirdTask": 1,
     "firstAndSecondTaskExcerptsPresent": true,
-    "gatewayRestarted": true
+    "gatewayRestarted": true,
+    "terminalCount": 2,
+    "done": true,
+    "outcome": "renamed",
+    "excerptsPresent": false,
+    "finalOfflineStateReceiptSha256": "89781545db452eb7f458276d3c64181fa869bc5a59f2c3004fb80aae8a7229ee"
   },
   "manual-race": {
     "sha": "f35cd67be5fe60ae8d0802c4bd17cfe9c7743ee6",
@@ -93,5 +98,16 @@
     "providerLogSha256": "f9c98c2d74a9f0a4e0be04339b4f98ddccd58bb1fe6f03b3564d8944fbd376cd",
     "gatewayLogSha256": "8cb9918dcf9a743543bda67c55ba5c2023dd88a135075544c627a08515932c61",
     "ownedProcessesStopped": true
+  },
+  "actualModelPreflight": {
+    "sha": "f35cd67be5fe60ae8d0802c4bd17cfe9c7743ee6",
+    "configuredBucket": "mistral-free-ladder",
+    "atUtc": "2026-10-22T18:42:47Z",
+    "catalogHttpStatus": 401,
+    "modelInvoked": false,
+    "gatewayStarted": false,
+    "configRestoredExactly": true,
+    "credentialOccurrencesInSavedFiles": 0,
+    "result": "blocked before model invocation; no successful actual-model smoke claimed"
   }
 }

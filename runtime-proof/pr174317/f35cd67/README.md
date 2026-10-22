@@ -86,6 +86,12 @@ The next text task caused the single refinement. Its request contained both `<me
 
 ![Actual captionless photo and normal reply](captionless-photo.png)
 
+## 6. Actual-model preflight — blocked, not a passed smoke
+
+A separate attempt selected the existing `mistral-free-ladder` bucket, configured as a no-cost Mistral Large → Devstral → Small route. Its authenticated model-catalog preflight returned HTTP 401 at 18:42:47 UTC, before any model invocation or Gateway start. The configured credential value proved to be a local placeholder; a usable existing owner credential has not been identified. No pricing claim is made from the configured zero-cost fields alone, and no paid fallback series was attempted.
+
+The QA configuration was restored byte-for-byte, and the saved-file scan found zero occurrences of the supplied credential value. This negative preflight does not establish model/runtime behavior. A successful real-model smoke remains outstanding and separate from the five real-Telegram/deterministic-provider scenarios above.
+
 ## Boundaries and cleanup
 
 The same QA checkout, installation and profile were reused. No additional full checkout or dependency environment was deployed. Our Gateway, deterministic provider and RPC controller were terminated, their temporary FIFO removed, and their listeners released. Foreign services were preserved.
