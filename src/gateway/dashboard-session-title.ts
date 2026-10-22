@@ -261,13 +261,8 @@ export async function generateDashboardSessionTitle(params: {
   agentId: string;
   entry?: DashboardSessionTitleModelEntry;
   sourceText: string;
-  utilityOnly?: boolean;
-  /**
-   * With utilityOnly, allows the regular model when no utility model is
-   * configured at all; the random-slug fallback stays suppressed (refinement
-   * must not no-op on an unconfigured utilityModel — Codex 4305281869).
-   */
-  allowRegularFallbackWithoutUtility?: boolean;
+  /** Optional naming never persists a random slug; speculation also excludes primary. */
+  mode?: "speculative" | "refinement";
   abortSignal?: AbortSignal;
   assertCurrent?: () => void;
   operatorAuthority?: AdmittedRunOperatorAuthority;
@@ -317,10 +312,7 @@ export async function generateDashboardSessionTitle(params: {
         abortSignal: params.abortSignal,
         assertCurrent: params.assertCurrent,
         operatorAuthority: params.operatorAuthority,
-        ...(params.utilityOnly ? { utilityOnly: true } : {}),
-        ...(params.allowRegularFallbackWithoutUtility
-          ? { allowRegularFallbackWithoutUtility: true }
-          : {}),
+        ...(params.mode ? { mode: params.mode } : {}),
       });
     } catch {
       params.assertCurrent?.();
@@ -340,9 +332,8 @@ export async function generateDashboardSessionTitle(params: {
   if (title) {
     return title;
   }
-  // Speculative utility-only naming must not persist a provisional title that
-  // would skip the healthy primary-model pass after send.
-  if (params.utilityOnly) {
+  // Optional naming keeps the current title when inference fails.
+  if (params.mode) {
     return null;
   }
   // Saved titles also name Git branches; never persist raw prompt text as a fallback.
@@ -368,7 +359,7 @@ export async function prepareDashboardSessionTitle(params: {
     });
     const sourceText = resolveSessionTitleSource(params.userMessage, skillCommands);
     return sourceText
-      ? await generateDashboardSessionTitle({ ...params, sourceText, utilityOnly: true })
+      ? await generateDashboardSessionTitle({ ...params, sourceText, mode: "speculative" })
       : null;
   } catch {
     params.assertCurrent?.();

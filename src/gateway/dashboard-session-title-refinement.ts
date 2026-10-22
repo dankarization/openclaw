@@ -237,18 +237,16 @@ export async function maybeRefineDashboardSessionTitle(params: SessionTitleParam
     if (!sourceText) {
       return;
     }
-    // Utility-only mode: refinement must never fall back to a random slug —
-    // a provider outage consumes the optional attempt without a rename. When
-    // no utility model is configured at all, the regular model may still run
-    // so the opt-in refinement is not a permanent no-op (Codex 4305281869).
+    // Refinement keeps the current title on failure. Primary is allowed when
+    // selected in the utility chain or when no utility is configured, never
+    // appended as recovery from a failed utility chain.
     const refined = await generateDashboardSessionTitle({
       cfg: params.cfg,
       agentId: params.agentId,
       entry: params.entry ?? entry,
       sourceText,
       promptOverride: SESSION_TITLE_REFINEMENT_PROMPT,
-      utilityOnly: true,
-      allowRegularFallbackWithoutUtility: true,
+      mode: "refinement",
       operatorAuthority: params.operatorAuthority,
       ...(memory ? { assertCurrent: assertMemoryCurrent } : {}),
       // A single-concurrency/local model queues the refinement behind the

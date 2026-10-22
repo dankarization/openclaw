@@ -324,7 +324,7 @@ describe("maybeGenerateDashboardSessionTitle", () => {
         userMessage: "Help me plan the release",
       }),
     ).resolves.toBeNull();
-    expect(mocks.generate).toHaveBeenCalledWith(expect.objectContaining({ utilityOnly: true }));
+    expect(mocks.generate).toHaveBeenCalledWith(expect.objectContaining({ mode: "speculative" }));
     expect(mocks.patch).not.toHaveBeenCalled();
   });
 

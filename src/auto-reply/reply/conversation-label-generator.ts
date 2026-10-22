@@ -50,15 +50,8 @@ type ConversationLabelFallbackParams = ConversationLabelParams & {
   regularModelRef: string;
   preferredProfile?: string;
   normalizeLabel?: (label: string) => string | null;
-  /** Speculative callers use only the utility chain, without regular-model recovery. */
-  utilityOnly?: boolean;
-  /**
-   * Utility-only callers may run the regular model when no utility model is
-   * configured at all; the random-slug fallback stays suppressed. Refinement
-   * sets this so an unconfigured utilityModel is not a permanent no-op
-   * (Codex 4305281869); speculative naming does not.
-   */
-  allowRegularFallbackWithoutUtility?: boolean;
+  /** Speculation excludes primary; refinement permits it only as the utility or when unconfigured. */
+  mode?: "speculative" | "refinement";
 };
 
 function resolvePositiveInteger(value: number | undefined, fallback: number): number {
@@ -288,19 +281,15 @@ export async function generateConversationLabelWithFallback(
       : candidate;
   }
   const utilityAttempts = utilityAttempt ? [utilityAttempt] : [];
-  // Utility-only runs stay on the utility route, except a refinement caller
-  // may fall back to the regular model when no utility model is configured at
-  // all — otherwise an unconfigured utilityModel would permanently no-op the
-  // opt-in refinement (Codex 4305281869).
+  // Refinement uses the utility chain, including an explicit primary selection.
+  // With no utility configured it uses primary, but never appends primary as
+  // recovery for a failed utility chain. Speculation avoids primary entirely.
   const regularAllowed =
-    !params.utilityOnly ||
-    (utilityAttempts.length === 0 && params.allowRegularFallbackWithoutUtility === true);
+    !params.mode || (params.mode === "refinement" && utilityAttempts.length === 0);
   return await runLabelAttempts({
     ...params,
     agentId,
-    // Utility-only callers pre-claim the regular selection so a utility ref that
-    // resolves onto the primary model is skipped instead of spending on it.
     attempts: regularAllowed ? [...utilityAttempts, regularAttempt] : utilityAttempts,
-    ...(regularAllowed ? {} : { skipAttempts: [regularAttempt] }),
+    ...(params.mode === "speculative" ? { skipAttempts: [regularAttempt] } : {}),
   });
 }

@@ -388,29 +388,28 @@ describe("generateConversationLabelWithFallback", () => {
     ]);
   });
 
-  it("utilityOnly returns null without inference when the utility model resolves onto the primary", async () => {
+  it("speculation skips inference when the utility model resolves onto the primary", async () => {
     await expect(
-      fallback({ utilityModelRef: params.regularModelRef, utilityOnly: true }),
+      fallback({ utilityModelRef: params.regularModelRef, mode: "speculative" }),
     ).resolves.toBeNull();
     expect(runIsolatedCompletion).not.toHaveBeenCalled();
   });
 
-  it("utilityOnly without any utility ref stays null without inference by default", async () => {
+  it("speculation without a utility model skips inference", async () => {
     const { utilityModelRef: _utilityModelRef, ...noUtilityParams } = params;
     await expect(
-      generateConversationLabelWithFallback({ ...noUtilityParams, utilityOnly: true }),
+      generateConversationLabelWithFallback({ ...noUtilityParams, mode: "speculative" }),
     ).resolves.toBeNull();
     expect(runIsolatedCompletion).not.toHaveBeenCalled();
   });
 
-  it("utilityOnly without any utility ref runs the regular model when allowRegularFallbackWithoutUtility is set (4305281869)", async () => {
+  it("refinement uses primary when no utility model is configured (4305281869)", async () => {
     const { utilityModelRef: _utilityModelRef, ...noUtilityParams } = params;
     runIsolatedCompletion.mockResolvedValueOnce({ text: "Invoice help" });
     await expect(
       generateConversationLabelWithFallback({
         ...noUtilityParams,
-        utilityOnly: true,
-        allowRegularFallbackWithoutUtility: true,
+        mode: "refinement",
       }),
     ).resolves.toBe("Invoice help");
     expect(runIsolatedCompletion).toHaveBeenCalledTimes(1);

@@ -1,19 +1,31 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { setRuntimeConfigSnapshot } from "../config/runtime-snapshot.js";
+import { withOpenClawTestState } from "../test-utils/openclaw-test-state.js";
 
 const generateConversationLabelWithFallback = vi.hoisted(() => vi.fn());
+const runIsolatedCompletion = vi.hoisted(() => vi.fn());
 const resolveUtilityModelRefForAgent = vi.hoisted(() => vi.fn());
 const readSessionTitleFieldsFromTranscript = vi.hoisted(() => vi.fn());
 const updateSessionEntry = vi.hoisted(() => vi.fn());
 const loadSessionEntry = vi.hoisted(() => vi.fn());
 
 // mock-isolation: Utility model resolution is stubbed to keep the refinement test hermetic.
-vi.mock("../agents/utility-model.js", () => ({ resolveUtilityModelRefForAgent }));
+vi.mock("../agents/utility-model.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../agents/utility-model.js")>()),
+  resolveUtilityModelRefForAgent,
+}));
+// mock-isolation: Fixed external model output; routing and title persistence remain real.
+vi.mock("../agents/isolated-completion.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../agents/isolated-completion.js")>()),
+  runIsolatedCompletion,
+}));
 // mock-isolation: Label generation is stubbed so refinement tests control naming output directly.
 vi.mock("../auto-reply/reply/conversation-label-generator.js", () => ({
   generateConversationLabelWithFallback,
 }));
 // mock-isolation: Title orchestration writes synthetic entry state instead of acquiring a persistence owner.
-vi.mock("../config/sessions/session-accessor.js", () => ({
+vi.mock("../config/sessions/session-accessor.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../config/sessions/session-accessor.js")>()),
   patchSessionEntryCore: updateSessionEntry,
 }));
 // mock-isolation: Title orchestration reads synthetic session entries without starting storage workers.
@@ -358,30 +370,67 @@ describe("maybeRefineDashboardSessionTitle", () => {
     expect(generateConversationLabelWithFallback).not.toHaveBeenCalled();
   });
 
-  it("refinement allows the regular model when no utility model is configured (4305281869)", async () => {
-    resolveUtilityModelRefForAgent.mockReturnValue(undefined);
-    let current: SessionEntry = {
-      ...baseEntry,
-      displayName: "First Pass Title",
-      titleRefinement: {
-        taskMessagesSinceTitle: 1,
-        refinementDone: false,
-        sessionId: "session-1",
-        generatedName: "First Pass Title",
-      },
-    };
-    updateSessionEntry.mockImplementation(async (_scope, update) => {
-      const patch = await update({ ...current });
-      current = patch ? { ...current, ...patch } : current;
-      loadSessionEntry.mockReturnValue(current);
-      return current;
-    });
-    await maybeRefineDashboardSessionTitle(refineParams(current));
-    expect(generateConversationLabelWithFallback).toHaveBeenCalledWith(
-      expect.objectContaining({
-        utilityOnly: true,
-        allowRegularFallbackWithoutUtility: true,
-      }),
-    );
-  });
+  it.each([
+    { utilityModel: "openai/gpt-5.6-luna", unavailable: false },
+    { utilityModel: "", unavailable: false },
+    { utilityModel: "openai/gpt-5.6-sol", unavailable: true },
+  ])(
+    "persists inference, never a slug: utility=$utilityModel unavailable=$unavailable",
+    async ({ utilityModel, unavailable }) => {
+      await withOpenClawTestState({ scenario: "minimal" }, async (state) => {
+        const actualConfig: OpenClawConfig = {
+          ...refineCfg,
+          agents: { defaults: { model: "openai/gpt-5.6-luna", utilityModel } },
+          plugins: { enabled: false },
+        };
+        await state.writeConfig(actualConfig);
+        setRuntimeConfigSnapshot(actualConfig);
+        const accessor = await vi.importActual<
+          typeof import("../config/sessions/session-accessor.js")
+        >("../config/sessions/session-accessor.js");
+        const reader = await vi.importActual<
+          typeof import("../config/sessions/session-entry-read-runtime.js")
+        >("../config/sessions/session-entry-read-runtime.js");
+        const generator = await vi.importActual<
+          typeof import("../auto-reply/reply/conversation-label-generator.js")
+        >("../auto-reply/reply/conversation-label-generator.js");
+        const utility = await vi.importActual<typeof import("../agents/utility-model.js")>(
+          "../agents/utility-model.js",
+        );
+        const scope = { agentId: "main", sessionKey: "agent:main:dashboard:chat-1" };
+        const entry: SessionEntry = {
+          ...generatedEntry,
+          titleRefinement: {
+            ...initializeTitleRefinementState("session-1", "First Pass Title"),
+            taskMessagesSinceTitle: 1,
+          },
+        };
+        await accessor.upsertSessionEntryCore(scope, entry);
+        updateSessionEntry.mockImplementation(accessor.patchSessionEntryCore);
+        generateConversationLabelWithFallback.mockImplementation(
+          generator.generateConversationLabelWithFallback,
+        );
+        resolveUtilityModelRefForAgent.mockImplementation(utility.resolveUtilityModelRefForAgent);
+        runIsolatedCompletion.mockReset();
+        if (unavailable) {
+          runIsolatedCompletion.mockRejectedValue(new Error("fixture model unavailable"));
+        } else {
+          runIsolatedCompletion.mockResolvedValue({ text: "Release Planning" });
+        }
+        const params = {
+          ...refineParams(entry),
+          cfg: actualConfig,
+          storePath: state.statePath("agents", "main", "sessions", "sessions.json"),
+        };
+        loadSessionEntry.mockImplementation(reader.readSessionEntryReadOnlyInWorker);
+        await maybeRefineDashboardSessionTitle(params);
+        expect(runIsolatedCompletion).toHaveBeenCalledTimes(1);
+        const persisted = await reader.readSessionEntryReadOnlyInWorker(scope);
+        expect(persisted?.displayName).toBe(unavailable ? "First Pass Title" : "Release Planning");
+        expect(persisted?.titleRefinement?.refinementDone).toBe(true);
+        await maybeRefineDashboardSessionTitle(params);
+        expect(runIsolatedCompletion).toHaveBeenCalledTimes(1);
+      });
+    },
+  );
 });
