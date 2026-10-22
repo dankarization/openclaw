@@ -1,0 +1,157 @@
+{
+  "head": "254aef058c40a0b97492e4d357bb8e9dc2e27aae",
+  "tree": "b5574da8989e9f5f5f08873778070740b2b1119c",
+  "buildInfoHead": "254aef058c40a0b97492e4d357bb8e9dc2e27aae",
+  "entryPoint": "shipped dist/index.js Gateway and CLI gateway call RPC",
+  "actualModel": "local/gemma4:12b",
+  "utilityModel": "local/gemma4:12b",
+  "completionStubbed": false,
+  "threshold": 2,
+  "modelSelectedBeforeOpeningVia": "sessions.patch",
+  "manualTitlePatchSent": false,
+  "sessionKeySha256": "bec2fd38e9c29600a8998f63bf399fda1f414482fb34de6446a1d7ed1c11f0e5",
+  "steps": [
+    {
+      "step": "opening",
+      "displayName": "Planning a team meeting",
+      "model": "gemma4:12b",
+      "provider": "local",
+      "status": "done",
+      "hasActiveRun": false,
+      "gatewaySnapshotUtc": "2026-10-22T21:25:09.027000+00:00",
+      "normalReply": "Tell me the primary objectives and the list of participants so I can draft an agenda.",
+      "titlePolls": 0,
+      "message": "Help me plan a team meeting. Reply with one short sentence."
+    },
+    {
+      "step": "followup1",
+      "displayName": "Planning a team meeting",
+      "model": "gemma4:12b",
+      "provider": "local",
+      "status": "done",
+      "hasActiveRun": false,
+      "gatewaySnapshotUtc": "2026-10-22T21:25:14.060000+00:00",
+      "normalReply": "The key validation step is successfully restoring a specific table to a known state and verifying the data integrity against the original source.",
+      "titlePolls": 0,
+      "message": "The meeting is a PostgreSQL backup and point-in-time restore rehearsal. Identify the key validation step in one short sentence."
+    },
+    {
+      "step": "threshold",
+      "displayName": "PostgreSQL backup and recovery rehearsal",
+      "model": "gemma4:12b",
+      "provider": "local",
+      "status": "done",
+      "hasActiveRun": false,
+      "gatewaySnapshotUtc": "2026-10-22T21:28:10.903000+00:00",
+      "normalReply": "Include a manual check of the WAL segment logs to ensure the recovery reaches the exact target timestamp.",
+      "titlePolls": 0,
+      "message": "Focus the agenda on WAL replay and a timed PostgreSQL point-in-time recovery drill. Give one short recommendation."
+    },
+    {
+      "step": "later",
+      "displayName": "PostgreSQL backup and recovery rehearsal",
+      "model": "gemma4:12b",
+      "provider": "local",
+      "status": "done",
+      "hasActiveRun": false,
+      "gatewaySnapshotUtc": "2026-10-22T21:28:16.106000+00:00",
+      "normalReply": "The plan is confirmed: we will perform a timed recovery drill to validate both the base backup and the WAL replay against a specific point-in-time.",
+      "titlePolls": 0,
+      "message": "Confirm our PostgreSQL backup and WAL validation plan in one short sentence."
+    }
+  ],
+  "restart": {
+    "beforeStop": {
+      "count": 1,
+      "done": false,
+      "displayName": "Planning a team meeting",
+      "retainedTaskExcerpts": 1,
+      "databaseChecks": [
+        {
+          "kind": "core",
+          "integrity": "ok",
+          "foreignKeyViolations": 0
+        },
+        {
+          "kind": "agent",
+          "integrity": "ok",
+          "foreignKeyViolations": 0
+        }
+      ],
+      "temporaryCopiesRemoved": true
+    },
+    "firstGatewayExit": 0,
+    "firstConfigRestoredExactly": true,
+    "sameSessionIdentity": true,
+    "firstStartedUtc": "2026-10-22T21:23:45Z",
+    "firstFinishedUtc": "2026-10-22T21:26:35Z",
+    "secondStartedUtc": "2026-10-22T21:27:25Z"
+  },
+  "offlineFinal": {
+    "head": "254aef058c40a0b97492e4d357bb8e9dc2e27aae",
+    "stage": "final",
+    "databaseChecks": [
+      {
+        "kind": "core",
+        "integrity": "ok",
+        "foreignKeyViolations": 0
+      },
+      {
+        "kind": "agent",
+        "integrity": "ok",
+        "foreignKeyViolations": 0
+      }
+    ],
+    "rows": [
+      {
+        "kind": "agent",
+        "displayName": "PostgreSQL backup and recovery rehearsal",
+        "refinement": {
+          "taskMessagesSinceTitle": 2,
+          "refinementDone": true,
+          "generatedName": "PostgreSQL backup and recovery rehearsal"
+        },
+        "recentMessagesPresent": false,
+        "sessionIdentityPreserved": true,
+        "entrySha256": "bd010a31e65ac5e44537366c060d772808fdaa731d983e0fbbc2996c923f199c"
+      }
+    ],
+    "temporaryCopiesRemoved": true,
+    "configRestoredExactly": true,
+    "ownedPortsReleased": true
+  },
+  "cleanup": {
+    "gatewayExits": [
+      0,
+      0
+    ],
+    "finishedUtc": "2026-10-22T21:28:47Z",
+    "configRestoredExactly": true,
+    "modelCatalogsRestored": true,
+    "registryExit": 0,
+    "ownProcessesAbsent": true,
+    "ownedPortsReleased": true,
+    "foreignServicesChanged": false
+  },
+  "deployment": {
+    "sourceFiles": 58621,
+    "runtimeFiles": 40760,
+    "runtimeRoots": 26,
+    "mismatches": 0
+  },
+  "newCredentials": false,
+  "newEnvironmentCopies": 0,
+  "telegramRerun": false,
+  "rawEvidenceSha256": {
+    "gateway-cli-rpc.log": "4511d9158eefaa97d391172712b8d3be94bcb05d4dab4045515e1a13a5e4eef8",
+    "gateway-runtime.log": "e0c917e69c3c30da0a623f088e3ca4350177152c91c96dcec37c9b3771f3ae51",
+    "gateway-console.log": "13345a0178a945313718a7d626927fed22cad218e0e42087e3227fb08b00c152",
+    "before-restart-state.json": "7ac2207488ee78311ba68081250603ea0dd5c8f541ceb749e683786096f828b6",
+    "final-state.json": "d058eff11485ea342f713f3c3298d819898cdd7dcee242ae8fb373389e5812a8"
+  },
+  "historyVerification": {
+    "userTurns": 4,
+    "assistantReplies": 4,
+    "allTerminalRepliesMatchCapturedHistory": true
+  }
+}

@@ -1,0 +1,112 @@
+{
+  "head": "254aef058c40a0b97492e4d357bb8e9dc2e27aae",
+  "native": "25977f791fb40899cf04aed444b40b8268767c6c",
+  "tree": "b5574da8989e9f5f5f08873778070740b2b1119c",
+  "parents": [
+    "4044e1ff4caf1e54f49082f942294eac9d1b4971",
+    "cf2558f5639e273dc4fe1f19e9c5f7715dc8d0de"
+  ],
+  "publication": {
+    "writer": "dankarization",
+    "ordinaryExpectedHeadUpdate": true,
+    "force": false,
+    "blobsTreeParentsRefVerified": true
+  },
+  "localChecks": {
+    "namingTests": 76,
+    "uiCreationTests": 46,
+    "coreTypes": "pass",
+    "uiTypes": "pass",
+    "configDocsGeneration": "pass",
+    "configDocsCheck": "pass",
+    "normalHooks": "pass",
+    "diffCheck": "pass",
+    "newTestsAdded": 0,
+    "independentIntegrationReview": "no concrete finding; narrative, not machine certification"
+  },
+  "build": {
+    "exit": 0,
+    "exactPublishedHead": true,
+    "buildInfoSha256": "a72f43884ecd258b72e2acf09dff757621bd9668572c26051e7d064dd118c3a8"
+  },
+  "ci": {
+    "url": "https://github.com/openclaw/openclaw/actions/runs/39854253550",
+    "checkedUtc": "2026-10-22T21:30:59Z",
+    "conclusion": "success",
+    "checkRuns": {
+      "total": 175,
+      "success": 129,
+      "skipped": 45,
+      "neutral": 1,
+      "failure": 0,
+      "cancelled": 0,
+      "pending": 0
+    },
+    "combinedStatuses": {
+      "dependencyReview": "success",
+      "securitySensitiveReview": "success",
+      "ciGate": "success"
+    }
+  },
+  "runtime": {
+    "actualModel": "local/gemma4:12b",
+    "utilityModel": "local/gemma4:12b",
+    "completionStubbed": false,
+    "threshold": 2,
+    "ordinaryReplies": 4,
+    "historyMatches": true,
+    "restartCount1Preserved": true,
+    "thresholdRefined": true,
+    "laterTitleUnchanged": true,
+    "finalCount": 2,
+    "finalDone": true,
+    "excerptsRetained": false,
+    "sqliteIntegrity": "ok",
+    "foreignKeyViolations": 0,
+    "newEnvironments": 0,
+    "telegramRerun": false
+  },
+  "transport": {
+    "archiveBytes": 136198567,
+    "archiveSha256": "5174921177114a045993d4fb40ad621dc4b11963f9aab4d7b968f4abf0512c9b",
+    "archiveRemovedFromQa": true,
+    "macOriginalVerifiedAndRetained": true,
+    "manifestSha256": "a5df4547b3d409ba106fc946fab2326da2da97ed5dae60aa57e946170d819d44",
+    "affectedOriginalsBackupBytes": 135376473,
+    "affectedOriginalsBackupSha256": "de9ebbb2ec51610c93aa9d5308ab82a12836aeb560a09be6e960e07183b154f5",
+    "rollbackValidated": true,
+    "rollbackApplied": false
+  },
+  "cleanup": {
+    "gatewayExits": [
+      0,
+      0
+    ],
+    "finishedUtc": "2026-10-22T21:28:47Z",
+    "configRestoredExactly": true,
+    "modelCatalogsRestored": true,
+    "registryExit": 0,
+    "ownProcessesAbsent": true,
+    "ownedPortsReleased": true,
+    "foreignServicesChanged": false
+  },
+  "remainingExternalDecision": "maintainer approval of opt-in policy/settings, creation provenance RPC and concurrency SDK export",
+  "receiptSha256": "585e15f54518ed4ce64ad7d44753dfd50b8adfa79040848d58c7944288ca6b26",
+  "rawEvidenceSha256": {
+    "gateway-cli-rpc.log": "4511d9158eefaa97d391172712b8d3be94bcb05d4dab4045515e1a13a5e4eef8",
+    "gateway-runtime.log": "e0c917e69c3c30da0a623f088e3ca4350177152c91c96dcec37c9b3771f3ae51",
+    "gateway-console.log": "13345a0178a945313718a7d626927fed22cad218e0e42087e3227fb08b00c152",
+    "before-restart-state.json": "7ac2207488ee78311ba68081250603ea0dd5c8f541ceb749e683786096f828b6",
+    "final-state.json": "d058eff11485ea342f713f3c3298d819898cdd7dcee242ae8fb373389e5812a8"
+  },
+  "localLogSha256": {
+    "naming-tests.log": "0895e75c847e6dbca4b8a4795bf31a7fe45450316e4f6c91eacc5620dac1519d",
+    "ui-creation-tests.log": "f792887f98efd41b6937bcef6a4eeae6177e93b81176863d9fd034df6f4fbf94",
+    "core-ui-types.log": "4608c22ae9a8a57ee0bc295e9f042d721295cdd3c342addf37a0758eedea5dfe",
+    "config-baseline-check.log": "b04746acbb76322736660aa1db18fea1141607120db7dddfe3621ffe1f5d640d",
+    "commit-hooks.log": "11dafab36a82dd8bc08249f588c3260425b543b117dc77b81ed9d951181de48e",
+    "build.log": "006afec5f12a0b91781dcfc4668a14cbddc35650e421b1fe2504572c4c999962",
+    "qa-install.log": "b8b0dec9ff6ed993ac93889b6dc891fabceb000507af40a0dbb709cfcc244cd9",
+    "rollback-validation.log": "6713005d426c9ecb66a99a331c1be79f5b38b4293ce405a5624e597d179c412f"
+  }
+}
