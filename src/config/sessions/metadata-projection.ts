@@ -214,7 +214,6 @@ export function projectSessionMetaPatch(params: {
   }
   const existingTelegramTopicName = normalizeOptionalString(params.existing?.topicName);
   const keepExistingTelegramTopicOriginLabel =
-    origin?.chatType === "direct" &&
     origin?.threadId != null &&
     !params.prepared.privateTelegramTopicName &&
     existingTelegramTopicName !== undefined &&
