@@ -1,5 +1,10 @@
 import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
 import {
+  SESSION_DASHBOARD_ROW_FIELDS,
+  SESSION_ROW_DETAIL_FIELDS,
+  SESSION_SIDEBAR_ROW_FIELDS,
+} from "../../packages/gateway-protocol/src/session-row-fields.js";
+import {
   buildSubagentSessionListReadIndex,
   getSubagentSessionRuntimeMs,
   getSubagentSessionStartedAt,
@@ -106,6 +111,7 @@ export function resolveGatewaySessionKind(key: string, entry?: SessionEntry) {
 
 export function projectGatewaySessionRunState(params: {
   key: string;
+  parsedKey?: ReturnType<typeof parseAgentSessionKey>;
   entry?: SessionEntry;
   now: number;
   rowContext?: Pick<
@@ -120,28 +126,26 @@ export function projectGatewaySessionRunState(params: {
     normalizeOptionalString(subagentRun?.controllerSessionKey) ||
     normalizeOptionalString(subagentRun?.requesterSessionKey);
   const liveSubagentRunActive = isSubagentRunLive(subagentRun) || isSubagentRunQueued(subagentRun);
-  const hasProjectedRun = (sessionKey: string, sessionId?: string) => {
-    if (!rowContext?.projectedAgentRuns) {
-      return false;
-    }
-    const state = resolveProjectedAgentRunProgressState({
-      sessionKeys: [sessionKey],
-      sessionId,
-      index: rowContext.projectedAgentRuns,
-    });
-    return state !== undefined;
-  };
   // Follow-up turns retain the child session while owning a different run from its original spawn.
   const hasActiveSubagentRun =
     liveSubagentRunActive ||
     subagentRuns.countActiveDescendantRuns(key) > 0 ||
     ((subagentRun !== null || entry?.spawnedBy !== undefined) &&
-      hasProjectedRun(key, entry?.sessionId)) ||
+      rowContext?.projectedAgentRuns !== undefined &&
+      resolveProjectedAgentRunProgressState({
+        sessionKeys: [key],
+        sessionId: entry?.sessionId,
+        agentId:
+          (params.parsedKey === undefined ? parseAgentSessionKey(key) : params.parsedKey)
+            ?.agentId ?? "",
+        index: rowContext.projectedAgentRuns,
+      }) !== undefined) ||
     rowContext?.projectedSubagentActivity?.has(key) === true;
   const fields: Pick<
     GatewaySessionRow,
     | "status"
     | "lastRunError"
+    | "suppressErrorNotice"
     | "subagentRunState"
     | "hasActiveSubagentRun"
     | "startedAt"
@@ -150,6 +154,7 @@ export function projectGatewaySessionRunState(params: {
   > = {
     status: entry?.status,
     lastRunError: entry?.lastRunError,
+    suppressErrorNotice: entry?.suppressErrorNotice,
     subagentRunState: undefined,
     hasActiveSubagentRun: subagentRun || hasActiveSubagentRun ? hasActiveSubagentRun : undefined,
     startedAt: entry?.startedAt,
@@ -231,4 +236,26 @@ export function projectGatewaySessionActiveRun(
     hasActiveRun: active?.active,
     status: active?.active ? (active.status ?? "running") : status,
   };
+}
+
+/** Shape the wire row after recipient-specific fields have been prepared. */
+export function applyGatewaySessionRowMode(
+  row: GatewaySessionRow,
+  rowMode: GatewaySessionRow["rowMode"],
+): void {
+  if (rowMode === "dashboard" || rowMode === "sidebar") {
+    const fields =
+      rowMode === "sidebar" ? SESSION_SIDEBAR_ROW_FIELDS : SESSION_DASHBOARD_ROW_FIELDS;
+    for (const field of Object.keys(row)) {
+      if (!fields.has(field)) {
+        Reflect.deleteProperty(row, field);
+      }
+    }
+    row.rowMode = rowMode;
+  } else if (rowMode === "compact") {
+    for (const field of SESSION_ROW_DETAIL_FIELDS) {
+      delete row[field];
+    }
+    row.rowMode = "compact";
+  }
 }

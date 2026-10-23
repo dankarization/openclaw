@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { updateConfigFormValue } from "../lib/config/config-draft-model.ts";
 import { createInitialConfigState } from "../lib/config/config-state-model.ts";
-import type { SolidBridgeElement } from "../lit/solid-bridge.ts";
 import {
   renderAnalyzedFormFixture,
   disposeConfigFormFixture,
 } from "../test-helpers/config-form-fixtures.tsx";
+import { flush } from "../test-helpers/solid-settle.ts";
+import { analyzeConfigSchema } from "./config-form.analyze.ts";
 import type { JsonSchema } from "./config-form.shared.ts";
-import { analyzeConfigSchema } from "./config-form.ts";
 import baseStyles from "../styles/base.css?inline";
 
 function mountForm(
@@ -151,10 +151,8 @@ describe.runIf("__vitest_browser__" in globalThis)("config array row drafts", ()
           kind === "object"
             ? "openclaw-config-form-structured-draft"
             : "openclaw-config-form-collection-draft";
-        const draft = Array.from(
-          container.querySelectorAll<SolidBridgeElement<object>>(hostSelector),
-        ).at(-1)!;
-        await draft.updateComplete;
+        const draft = Array.from(container.querySelectorAll<HTMLElement>(hostSelector)).at(-1)!;
+        flush();
         const details = draft.querySelector("details") ?? draft.closest("details");
         if (details && !details.open) {
           await page.elementLocator(details.querySelector("summary")!).click();
@@ -248,15 +246,15 @@ describe.runIf("__vitest_browser__" in globalThis)("config collection removal fo
         ?.closest(".settings-row")
         ?.querySelector<HTMLInputElement>("input[aria-label^='Key: ']")?.value;
     try {
-      await focusRemoveControl(container, removeControls(container, "Remove entry")[1]);
+      await focusRemoveControl(container, removeControls(container, "Remove entry: beta")[0]);
       await userEvent.keyboard("{Enter}");
       expect(state.configForm).toEqual({ settings: { values: { alpha: "a", gamma: "c" } } });
-      expect(document.activeElement?.getAttribute("aria-label")).toBe("Remove entry");
+      expect(document.activeElement?.getAttribute("aria-label")).toBe("Remove entry: gamma");
       expect(focusedKey()).toBe("gamma");
 
       await userEvent.keyboard("{Enter}");
       expect(state.configForm).toEqual({ settings: { values: { alpha: "a" } } });
-      expect(document.activeElement?.getAttribute("aria-label")).toBe("Remove entry");
+      expect(document.activeElement?.getAttribute("aria-label")).toBe("Remove entry: alpha");
       expect(focusedKey()).toBe("alpha");
 
       await userEvent.keyboard("{Enter}");
@@ -310,7 +308,7 @@ describe.runIf("__vitest_browser__" in globalThis)("config collection removal fo
       "map",
       { type: "object", additionalProperties: { type: "string" } },
       { alpha: "a" },
-      "Remove entry",
+      "Remove entry: alpha",
     ],
   ] as const)(
     "keeps focus on the %s Remove control when its owner rejects the removal",

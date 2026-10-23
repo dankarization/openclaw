@@ -1,8 +1,5 @@
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
-import { registerLabsEnglish } from "../../i18n/locales/en-labs.ts";
-import { registerEnglishCatalog, t } from "../../lib/reactive/i18n.ts";
-
-registerEnglishCatalog(registerLabsEnglish);
+import { t } from "../../lib/reactive/i18n.ts";
 
 /** What a lab row writes at its gate. Most gates are booleans; some are modes. */
 type LabFeatureValue = boolean | string;
@@ -26,6 +23,8 @@ export type LabFeature = {
   enableAlso: Readonly<Record<string, LabFeatureValue>> | null;
   /** Reset the parent when its presence changes defaults; null retains required gates. */
   resetScope: LabFeatureResetScope;
+  /** Plugin whose own settings page owns this lab's options; Labs links there. */
+  settingsPluginId?: string;
 };
 
 type LabFeatureState = {
@@ -88,6 +87,19 @@ export const LAB_FEATURES = (
     },
     {
       ...BOOLEAN_GATE,
+      id: "advisor",
+      docsUrl: "https://docs.openclaw.ai/concepts/experimental-features#advisor",
+      configPath: ["plugins", "entries", "advisor", "enabled"],
+      settingsPluginId: "advisor",
+    },
+    {
+      ...BOOLEAN_GATE,
+      id: "composerPredictions",
+      docsUrl: "https://docs.openclaw.ai/web/control-ui/chat#composer-predictions",
+      configPath: ["gateway", "controlUi", "experimental", "composerPredictions", "enabled"],
+    },
+    {
+      ...BOOLEAN_GATE,
       id: "chatBubbles",
       docsUrl: "https://docs.openclaw.ai/web/control-ui/chat",
       configPath: ["gateway", "controlUi", "experimental", "chatBubbles"],
@@ -97,6 +109,12 @@ export const LAB_FEATURES = (
       id: "customPluginUi",
       docsUrl: "https://docs.openclaw.ai/plugins/feature-plugins",
       configPath: ["gateway", "controlUi", "experimental", "customPlugins"],
+    },
+    {
+      ...BOOLEAN_GATE,
+      id: "claws",
+      docsUrl: "https://docs.openclaw.ai/cli/claws",
+      configPath: ["gateway", "controlUi", "experimental", "claws"],
     },
     {
       ...BOOLEAN_GATE,

@@ -1,3 +1,4 @@
+import { sqlPublicationAnchor } from "../../infra/sql-connection.js";
 import { stageSqliteTransactionState } from "../../infra/sqlite-post-commit.js";
 import {
   sessionChanges,
@@ -63,7 +64,7 @@ export function bindPreparedSessionEntryPublication(
   preparedSharingChanges.changes.set(change, record);
 }
 
-export function bindSessionEntryPublicationSource<T extends SessionRowChange>(
+function bindSessionEntryPublicationSource<T extends SessionRowChange>(
   change: T,
   database: SessionEntryCacheDatabase,
 ): T {
@@ -96,10 +97,8 @@ export function emitPreparedSessionSharingChange(
   if (record.kind === "metadata") {
     const seal = () => sealSessionEntryPublicationSource(record.prepared.source);
     if (
-      !stageSqliteTransactionState(database.db, {
-        stage() {},
+      !stageSqliteTransactionState(sqlPublicationAnchor(database.db), {
         commit: seal,
-        rollback() {},
       })
     ) {
       seal();
@@ -118,7 +117,7 @@ export function invalidateSessionEntryCaches(databaseIdentity: string): void {
 }
 
 /** Retire all facts in a failed installation, including pending older worker receipts. */
-export function invalidateSessionEntryPublication(
+function invalidateSessionEntryPublication(
   database: SessionEntryCacheDatabase,
   sessionKey: string,
   authorityChanged = true,
@@ -136,11 +135,13 @@ export function publishSessionEntryWorkerMetadataInvalidation(params: {
   databaseIdentity: string;
   sessionKey: string;
   entry?: SessionEntry;
+  fullEntry?: SessionEntry;
 }): void {
   invalidateSessionEntryCaches(params.databaseIdentity);
   for (const read of retainedSharingReads(params.databaseIdentity, params.sessionKey) ?? []) {
     publishRetainedSessionEntryPredicate(read, params.entry, params.entry !== undefined, {
       preserveMatchingEntry: true,
+      fullEntry: params.fullEntry,
     });
   }
   const change: SessionRowChange = {
@@ -294,7 +295,7 @@ export function commitSessionSharingFieldChange(
   }
 }
 
-export function publishSessionSharingFieldChange(
+function publishSessionSharingFieldChange(
   database: SessionEntryCacheDatabase,
   sessionKey: string,
   change: Extract<SessionRowFacts, { kind: "member" | "owner" | "category" }>,
@@ -329,6 +330,7 @@ export function publishSessionSharingEntryChange(
   update: {
     sessionKey: string;
     entry?: SessionEntry;
+    fullEntry?: SessionEntry;
     previousEntry?: Pick<SessionEntry, "sessionId" | "lifecycleRevision">;
     facts?: SessionRowFacts;
   },
@@ -344,7 +346,13 @@ export function publishSessionSharingEntryChange(
     publishTrackedCacheUpdate(
       database,
       () =>
-        recordCommittedSessionMetadataPublication(database, update.sessionKey, facts, update.entry),
+        recordCommittedSessionMetadataPublication(
+          database,
+          update.sessionKey,
+          facts,
+          update.entry,
+          update.fullEntry,
+        ),
       undefined,
       () => invalidateSessionEntryPublication(database, update.sessionKey, false),
     );
@@ -364,6 +372,7 @@ export function publishSessionSharingEntryChange(
           previousIdentity,
           sharingEntry !== undefined || facts?.kind === "removed",
           update.entry,
+          update.fullEntry,
         );
       },
       () => stageSessionSharingPublication(database, update.sessionKey),

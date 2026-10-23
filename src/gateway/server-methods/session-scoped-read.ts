@@ -1,3 +1,4 @@
+import type { SessionEntryReadScope } from "../../config/sessions/session-accessor.types.js";
 import { operatorScopeSatisfied } from "../../shared/operator-scope-compat.js";
 import { resolveGatewayOperatorRoleActor } from "../operator-role-policy.js";
 import {
@@ -15,11 +16,17 @@ import { readGatewayRequestMutationAuthority } from "./session-mutation-guards.j
 import type { GatewayRequestHandlerOptions } from "./types.js";
 
 /** Person-owned reads retain visibility, row generation and the physical store through I/O. */
-export function retainSessionScopedRead(
+export async function retainSessionScopedRead(
   options: GatewayRequestHandlerOptions,
   sessionKey: string,
   agentId: string,
-  readOptions: { requireMaterialized?: boolean; allowMetadataChanges?: boolean } = {},
+  readOptions: {
+    requireMaterialized?: boolean;
+    allowMetadataChanges?: boolean;
+    retain?: boolean;
+    projection?: SessionEntryReadScope["projection"];
+    entryMatches?: NonNullable<Parameters<typeof retainGatewaySessionEntryReadOnly>[2]>;
+  } = {},
 ) {
   const authority = readGatewayRequestMutationAuthority(options);
   const actor = resolveGatewayOperatorRoleActor(options.client);
@@ -33,19 +40,21 @@ export function retainSessionScopedRead(
     client: options.client,
     cfg,
   });
-  if (!narrow && !initialVisibility) {
+  if (!readOptions.retain && !narrow && !initialVisibility) {
     return undefined;
   }
   const assertRoutingCurrent = captureSessionMutationRouting(cfg, undefined, [
     { sessionKey, agentId },
   ]);
-  const read = retainGatewaySessionEntryReadOnly(
+  const read = await retainGatewaySessionEntryReadOnly(
     sessionKey,
     agentId,
-    readOptions.allowMetadataChanges
-      ? (previous, current) => !hasSessionReadAccessChanged(previous, current)
-      : undefined,
+    readOptions.entryMatches ??
+      (readOptions.allowMetadataChanges
+        ? (previous, current) => !hasSessionReadAccessChanged(previous, current)
+        : undefined),
     cfg,
+    { projection: readOptions.projection },
   );
   const assertCurrent = () => {
     authority.assertCurrent();
@@ -73,7 +82,7 @@ export function retainSessionScopedRead(
   };
   try {
     assertCurrent();
-    return { assertCurrent, release: read.release };
+    return { assertCurrent, release: read.release, prepared: read };
   } catch (error) {
     read.release();
     throw error;

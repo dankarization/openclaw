@@ -30,7 +30,7 @@ import { applyPluginNodeInvokePolicy } from "../node-invoke-plugin-policy.js";
 import { resolveRequestedSessionAgentId } from "../session-request-agent.js";
 import { resolveStoredSessionKeyForAgentStore } from "../session-store-key.js";
 import { loadGatewaySessionEntryReadOnlyInWorker } from "../session-utils-store-worker.js";
-import type { loadGatewaySessionEntryReadOnly } from "../session-utils.js";
+import type { GatewaySessionEntryRead } from "../session-utils.js";
 import { buildTerminalEnv, type TerminalLaunchResolution } from "../terminal/launch.js";
 import { createNodeRelayBackend } from "../terminal/node-relay.js";
 import {
@@ -47,7 +47,7 @@ import {
 } from "./terminal-open-plan.js";
 import { terminalUploadHandlers } from "./terminal-upload.js";
 import type { GatewayRequestHandlerOptions, GatewayRequestHandlers } from "./types.js";
-import { assertValidParams, type Validator } from "./validation.js";
+import { assertValidParams, defineValidatedGatewayHandler, type Validator } from "./validation.js";
 
 function invalid(respond: GatewayRequestHandlerOptions["respond"], detail: string): void {
   respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, detail));
@@ -145,6 +145,8 @@ type TerminalSessionOpenRequest = {
   rows: number;
   requiredCwd?: string;
   requireCliAgents?: boolean;
+  /** Gateway-parsed node selected by the caller before invoking the catalog provider. */
+  catalogNodeId?: string;
   resolveCatalogPlan?: (agentId: string) => Promise<SessionCatalogTerminalPlan>;
   catalogFailureMessage?: string;
   failureHint?: string;
@@ -184,7 +186,7 @@ async function openTerminalSessionWithSource(
   opts: GatewayRequestHandlerOptions,
   request: TerminalSessionOpenRequest,
   source?: {
-    entry: ReturnType<typeof loadGatewaySessionEntryReadOnly>["entry"];
+    entry: GatewaySessionEntryRead["entry"];
     assertCurrent(): void;
   },
 ): Promise<void> {
@@ -201,6 +203,18 @@ async function openTerminalSessionWithSource(
   if (!manager) {
     unavailable("terminal is not available");
     return;
+  }
+  const localTerminalBlockReason = manager.gatewayLocalTerminalBlockReason;
+  if (localTerminalBlockReason) {
+    // Catalog providers can run a local login shell while preparing a plan.
+    if (!request.catalogNodeId || !request.resolveCatalogPlan) {
+      unavailable(localTerminalBlockReason);
+      return;
+    }
+    if (!context.nodeRegistry.get(request.catalogNodeId)) {
+      unavailable("terminal node is not connected");
+      return;
+    }
   }
   const launch = context.resolveTerminalLaunchPolicy(request.agentId);
   if (!launch.ok) {
@@ -238,6 +252,13 @@ async function openTerminalSessionWithSource(
           ? error.message
           : (request.catalogFailureMessage ?? "catalog terminal open failed"),
       );
+      return;
+    }
+    if (
+      localTerminalBlockReason &&
+      (catalogPlan.kind !== "node" || catalogPlan.nodeId !== request.catalogNodeId)
+    ) {
+      unavailable(localTerminalBlockReason);
       return;
     }
     title = catalogPlan.title;
@@ -419,7 +440,7 @@ async function openTerminalSessionWithSource(
             context.resolveTerminalLaunchPolicy(refreshedLaunch.plan.agentId).ok &&
             authorizeTerminalNodeCommand(context, relay.plan.nodeId, relay.plan.command).ok &&
             !deadline.controller.signal.aborted &&
-            Date.now() < deadline.expiresAtMs
+            performance.now() < deadline.expiresAtMs
           );
         },
         command: relay.plan.command,
@@ -460,7 +481,7 @@ async function openTerminalSessionWithSource(
         rows: request.rows,
         env: terminalEnv,
         signal: deadline.controller.signal,
-        ...(createBackend ? { createBackend } : {}),
+        ...(createBackend ? { createBackend, executionHost: "node" as const } : {}),
         ...(stageUpload ? { stageUpload } : {}),
       });
       return openingTerminal;
@@ -528,11 +549,8 @@ function terminalSessionHandler<T extends { sessionId: string }>(
     params: T,
   ) => boolean,
 ): GatewayRequestHandlers[string] {
-  return async (opts) => {
+  return defineValidatedGatewayHandler(method, validate, async (opts) => {
     const { params, respond, context } = opts;
-    if (!assertValidParams(params, validate, method, respond)) {
-      return;
-    }
     const connId = requireConnId(opts);
     if (!connId) {
       return;
@@ -546,7 +564,7 @@ function terminalSessionHandler<T extends { sessionId: string }>(
     const manager = context.terminalSessions;
     const ok = (manager && operate(manager, connId, params)) ?? false;
     respond(true, { ok });
-  };
+  });
 }
 
 export const terminalHandlers: GatewayRequestHandlers = {
@@ -583,6 +601,9 @@ export const terminalHandlers: GatewayRequestHandlers = {
       ...(params.sessionKey ? { sessionKey: params.sessionKey } : {}),
       cols: params.cols,
       rows: params.rows,
+      ...(params.catalog?.hostId.startsWith("node:")
+        ? { catalogNodeId: params.catalog.hostId.slice("node:".length) }
+        : {}),
       ...(resolveCatalogPlan ? { resolveCatalogPlan } : {}),
       catalogFailureMessage: "catalog terminal open failed",
     });

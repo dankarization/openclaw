@@ -37,7 +37,7 @@ export function applyMemorySessionEntryCleanup(
       [...(params.upserts ?? [])].length ||
       params.allowCanonicalRepair ||
       params.afterUpsertsInTransaction ||
-      params.afterFreshUpsertsInTransaction
+      params.creation
     ) {
       throw new Error("Memory bulk cleanup does not support SQLite repair or upsert callbacks");
     }
@@ -151,11 +151,11 @@ export function applyMemorySessionEntryCleanup(
                   settlement = capture(
                     deletedEntries.filter(({ sessionKey }) => removed.has(sessionKey)),
                   );
-                  settlement.beforeCommit();
+                  return settlement.beforeCommit();
                 },
+                settled: (settledOutcome) => settlement?.settle(settledOutcome.kind),
               },
             );
-            settlement?.settle(outcome.kind);
             if (outcome.kind === "committed") {
               params.onLifecycleCommitted?.();
             }

@@ -62,11 +62,11 @@ export function captureSessionEntrySourceAssertion(params: {
   readSource?: CapturedSessionEntryReadSource;
   expected: Partial<SessionEntry> | undefined;
   fields: readonly (keyof SessionEntry)[];
+  /** Borrow the selecting reader's publication lifetime instead of selecting the same row again. */
+  preparedEntry?: ReturnType<typeof retainPreparedSessionEntryPredicate>;
   assertCurrent: () => void;
   assertHostCurrent?: () => void;
-  prepareConversations?: (
-    read: (conversationRefs: readonly string[]) => Promise<ReadonlyMap<string, string | null>>,
-  ) => Promise<{
+  prepareConversations?: () => Promise<{
     alternatives: readonly (readonly SessionSourceConversationPredicate[])[];
     assertCurrent: () => void;
     acceptMatches: (alternatives: readonly number[]) => number[];
@@ -166,14 +166,16 @@ export function captureSessionEntrySourceAssertion(params: {
       const database = { agentId: source.agentId, path: source.path, env };
       const retained = retainSessionHistoryWorkerDatabase(database);
       // Join receipt publication before dispatch so a newer write cannot certify an older read.
-      const predicate = retainPreparedSessionEntryPredicate({
-        databaseIdentity: identity.key,
-        sessionKey: scope.sessionKey,
-        entry: undefined,
-        matches: (_before, current) =>
-          (current === undefined) === (expected === undefined) &&
-          fields.every((field) => isDeepStrictEqual(current?.[field], expected?.[field])),
-      });
+      const predicate =
+        params.preparedEntry ??
+        retainPreparedSessionEntryPredicate({
+          databaseIdentity: identity.key,
+          sessionKey: scope.sessionKey,
+          entry: undefined,
+          matches: (_before, current) =>
+            (current === undefined) === (expected === undefined) &&
+            fields.every((field) => isDeepStrictEqual(current?.[field], expected?.[field])),
+        });
       const revision = predicate.captureRevision();
       let active = true;
       let conversations:
@@ -188,37 +190,24 @@ export function captureSessionEntrySourceAssertion(params: {
         }
       };
       try {
-        const result = await retained.owner.readExactEntries({
-          sessionKeys: [scope.sessionKey],
-          projection: "full",
-          includeAuthorization: true,
-          env,
-        });
-        const entry = result.entries.find((row) => row.sessionKey === scope.sessionKey)?.entry;
-        if (
-          result.databaseIdentity?.identity !== source.databaseIdentity ||
-          result.databaseIdentity?.birthtime !== source.databaseBirthtime ||
-          !predicate.acknowledge(entry, revision)
-        ) {
-          params.refuse();
-        }
-        assertCurrent();
-        conversations = await params.prepareConversations?.(async (conversationRefs) => {
-          if (conversationRefs.length === 0) {
-            return new Map();
-          }
-          const rows = await retained.owner.readConversations({
-            query: { conversationRefs, currentBindingOnly: true },
+        if (!params.preparedEntry) {
+          const result = await retained.owner.readExactEntries({
+            sessionKeys: [scope.sessionKey],
+            projection: "full",
+            includeAuthorization: true,
             env,
           });
-          assertCurrent();
-          return new Map(
-            rows.map((row) => [
-              row.conversationRef,
-              row.sessionKey && row.sessionId ? row.sessionKey : null,
-            ]),
-          );
-        });
+          const entry = result.entries.find((row) => row.sessionKey === scope.sessionKey)?.entry;
+          if (
+            result.databaseIdentity?.identity !== source.databaseIdentity ||
+            result.databaseIdentity?.birthtime !== source.databaseBirthtime ||
+            !predicate.acknowledge(entry, revision)
+          ) {
+            params.refuse();
+          }
+        }
+        assertCurrent();
+        conversations = await params.prepareConversations?.();
         assertCurrent();
         return {
           assertCurrent,
@@ -237,13 +226,17 @@ export function captureSessionEntrySourceAssertion(params: {
           ],
           release: () => {
             active = false;
-            predicate.release();
+            if (!params.preparedEntry) {
+              predicate.release();
+            }
             retained.release();
           },
         };
       } catch (error) {
         active = false;
-        predicate.release();
+        if (!params.preparedEntry) {
+          predicate.release();
+        }
         await releaseSessionSourceAuthorities([retained], [error]);
         throw error;
       }

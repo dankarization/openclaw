@@ -193,9 +193,7 @@ suite.define(() => {
           await expect.poll(() => model.getAttribute("aria-disabled")).toBe("false");
           await model.click();
           // A failed background refresh must not add chrome above a usable list.
-          await revealChatModelOption(
-            composer.locator('[data-chat-model-option="openai/gpt-5.4"]'),
-          );
+          await revealChatModelOption(composer, "openai/gpt-5.4");
           if (route === "new") {
             // An absent CLI group can mean discovery has not started, or a completed empty result.
             await expect
@@ -263,20 +261,18 @@ suite.define(() => {
                   return false;
                 }
                 const rendered = await page.evaluate(
-                  ({ key: expectedKey, sessionId: expectedSessionId }) => {
+                  async ({ key: expectedKey, sessionId: expectedSessionId }) => {
                     const pane = document.querySelector<
                       HTMLElement & {
                         state?: ChatPageHost;
                         transcriptReady: boolean;
-                        hasUpdated: boolean;
-                        isUpdatePending: boolean;
+                        updateComplete: Promise<unknown>;
                       }
                     >('openclaw-chat-pane[aria-hidden="false"]');
+                    await pane?.updateComplete;
                     const state = pane?.state;
                     return (
-                      pane?.hasUpdated === true &&
-                      !pane.isUpdatePending &&
-                      pane.transcriptReady &&
+                      pane?.transcriptReady &&
                       state?.sessionKey === expectedKey &&
                       state.currentSessionId === expectedSessionId &&
                       !state.chatLoading

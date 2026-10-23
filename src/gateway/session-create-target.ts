@@ -2,7 +2,6 @@ import { isDeepStrictEqual } from "node:util";
 import type { Result } from "@openclaw/normalization-core/result";
 import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
 import type { ErrorShape } from "../../packages/gateway-protocol/src/index.js";
-import { isEmbeddedAgentRunActive } from "../agents/embedded-agent-runner/runs.js";
 import { resolveSessionStorePathCore } from "../config/sessions/paths.js";
 import { patchSessionEntryCore } from "../config/sessions/session-accessor.sqlite-entry.js";
 import {
@@ -13,9 +12,9 @@ import { sessionEntryCommitGuardOptions } from "../config/sessions/session-sourc
 import type { InternalSessionEntry } from "../config/sessions/types.js";
 import { isIncognitoSessionKey, parseAgentSessionKey } from "../routing/session-key.js";
 import {
-  beginSessionWorkAdmission,
-  isSessionWorkAdmissionActive,
-} from "../sessions/session-lifecycle-admission.js";
+  beginSessionEffect,
+  isSessionControllerWorkActive,
+} from "../sessions/session-controller.lifecycle.js";
 import { authorizeGatewaySessionCreation } from "./operator-role-policy.js";
 import type {
   CreatedGatewaySession,
@@ -28,7 +27,7 @@ import { invalidSessionRequest, unavailableSessionRequest } from "./session-requ
 import { captureSessionMutationRouting } from "./session-sharing-preparation.js";
 import { findCanonicalStoreMatch } from "./session-utils-store-selection.js";
 import { loadGatewaySessionEntryReadOnlyInWorker } from "./session-utils-store-worker.js";
-import { loadGatewaySessionEntryReadOnly } from "./session-utils-store.js";
+import { loadIncognitoGatewaySessionEntryReadOnly } from "./session-utils-store.js";
 import type { GatewaySessionStoreTarget } from "./session-utils-store.types.js";
 
 /** Select and retain the agent's admission through creation, finalization, and rollback. */
@@ -52,7 +51,7 @@ export async function withSessionCreateAdmission(
     interrupted.signal.throwIfAborted();
     params.commitGuard?.();
   };
-  const admission = await beginSessionWorkAdmission({
+  const admission = await beginSessionEffect({
     agentId: selectedAgent.agentId,
     scope: `agent:${selectedAgent.agentId}`,
     identities: [params.key ?? selectedAgent.agentId],
@@ -179,10 +178,7 @@ export async function readSessionCreateTarget(
             `Session ${target.canonicalKey} changed before workspace preparation; retry.`,
           );
         }
-        if (
-          isSessionWorkAdmissionActive(target.storePath, lifecycleIdentities) ||
-          isEmbeddedAgentRunActive(currentTargetEntry.sessionId)
-        ) {
+        if (isSessionControllerWorkActive(target.storePath, lifecycleIdentities, target.agentId)) {
           return unavailableSessionRequest(
             `Session ${target.canonicalKey} is still active; retry workspace preparation after its work finishes.`,
           );
@@ -206,8 +202,11 @@ export async function readSessionCreateTarget(
   assertCurrent();
   if (isIncognitoSessionKey(target.canonicalKey)) {
     return validate(
-      loadGatewaySessionEntryReadOnly(target.canonicalKey, { agentId: target.agentId }, params.cfg)
-        .entry,
+      loadIncognitoGatewaySessionEntryReadOnly(
+        target.canonicalKey,
+        { agentId: target.agentId },
+        params.cfg,
+      ).entry,
     );
   }
   const read = await readSessionEntriesFromStoreInWorker({

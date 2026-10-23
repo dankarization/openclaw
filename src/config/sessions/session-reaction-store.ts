@@ -9,6 +9,7 @@ import {
   acquireSessionActorStorage,
   captureSessionActorStorageOwner,
 } from "./session-actor-storage-binding.js";
+import { readSessionActorStorageResult } from "./session-actor-storage-result.js";
 import type { SessionCollaborationScope } from "./session-collaboration-scope.js";
 import {
   SessionReactionLimitError,
@@ -59,7 +60,7 @@ export async function setSessionReactionAsync(
         memory.authority,
       );
       if (outcome.kind === "committed") {
-        return outcome.value;
+        return readSessionActorStorageResult(outcome);
       }
       const error = new Error(outcome.error.message);
       error.name = outcome.error.name;
@@ -69,7 +70,6 @@ export async function setSessionReactionAsync(
     }
   }
   assertCurrent();
-  const input = structuredClone(reaction);
   const env = cloneEnvWithPlatformSemantics(scope.env ?? process.env);
   env.OPENCLAW_STATE_DIR = resolveStateDir(env);
   // Resolve the logical key without consulting a custom store's native registry.
@@ -95,7 +95,7 @@ export async function setSessionReactionAsync(
               (worker) =>
                 worker.execute({
                   type: "session.reaction.set",
-                  input: { sessionKey: logical.sessionKey, params: input },
+                  input: { sessionKey: logical.sessionKey, params: reaction },
                 }),
             ),
           );
