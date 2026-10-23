@@ -34,7 +34,6 @@ import {
 } from "./bot/helpers.js";
 import { renderTelegramTextEntities } from "./bot/inbound-text-entities.js";
 import { resolveTelegramDirectPeerId } from "./dm-session-key.js";
-import { isTelegramForumTopicTitleUpdate } from "./forum-service-message.js";
 import { resolveTelegramGroupPromptSettings } from "./group-config-helpers.js";
 import {
   isTelegramChatWindowPromptContext,
@@ -659,13 +658,7 @@ export async function buildTelegramInboundContextPayload(
       LocationLivePeriodSeconds: primaryCtx.message?.location?.live_period,
       IsForum: isForum,
       TopicName: isForum && topicName ? topicName : undefined,
-      ThreadLabel:
-        !isGroup &&
-        threadSpec.scope === "dm" &&
-        threadSpec.id != null &&
-        (msg.is_topic_message === true || isTelegramForumTopicTitleUpdate(msg))
-          ? topicName
-          : undefined,
+      ThreadLabel: !isGroup && threadSpec.scope === "dm" ? topicName : undefined,
     },
   } satisfies BuildChannelInboundEventContextAsyncParams);
 
