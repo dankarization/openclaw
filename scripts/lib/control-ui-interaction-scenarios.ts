@@ -24,28 +24,16 @@ export type InteractionScenario = {
   run: (page: Page, gateway: MockGatewayControls) => Promise<void>;
 };
 
-export function createInteractionFixture(
-  buildId: string,
-  version: string,
-): ControlUiMockGatewayScenario {
+export function createInteractionFixture(buildId: string, version: string) {
   const sessions = Array.from({ length: 1_000 }, (_, index) => ({
     key: sessionKeys[index] ?? `agent:main:interaction-${index}`,
     sessionId: `interaction-session-${index}`,
+    agentId: "main",
     kind: "direct" as const,
     label: `Interaction ${String(index).padStart(4, "0")}`,
     updatedAt: 1_800_000_000_000 - index * 1_000,
     childOwnerSessionKeys: [],
   }));
-  const list = (rows: typeof sessions) => ({
-    ts: 1_800_000_000_000,
-    path: "",
-    count: rows.length,
-    totalCount: rows.length,
-    hasMore: false,
-    nextOffset: null,
-    defaults: { model: "model-0", modelProvider: "example", contextTokens: 128_000 },
-    sessions: rows,
-  });
   const jobs: CronJob[] = Array.from({ length: 500 }, (_, index) => ({
     id: `interaction-job-${index}`,
     name: `Warm automation ${String(index).padStart(4, "0")}`,
@@ -103,18 +91,7 @@ export function createInteractionFixture(
       contextWindow: 128_000,
     })),
     methodResponses: {
-      "sessions.list": {
-        cases: [
-          ...Array.from({ length: sessionQuery.length }, (_, index) => {
-            const search = sessionQuery.slice(0, index + 1);
-            return {
-              match: { search },
-              response: list(sessions.filter((row) => row.label.includes(search))),
-            };
-          }),
-          { response: list(sessions) },
-        ],
-      },
+      "progressCard.get": { card: null },
       "cron.list": cronListResponseFixture([
         ...cronCases,
         ...Array.from({ length: 10 }, (_, index) => ({
@@ -133,7 +110,7 @@ export function createInteractionFixture(
         nextOffset: null,
       },
     },
-  };
+  } satisfies ControlUiMockGatewayScenario;
 }
 
 async function frames(page: Page) {
@@ -300,6 +277,27 @@ async function settingsSection(
   await waitForControlUiRoute(page, { routeId, pathname: path });
 }
 
+async function prepareModelPicker(page: Page) {
+  await prepareChat(page);
+  await page.locator(`${activePane} .agent-chat__input textarea`).first().click();
+  const trigger = page.locator(`${activePane} [data-chat-model-select]`);
+  await trigger.waitFor({ state: "visible" });
+  await trigger.click();
+  await page.locator("[data-chat-model-search]").waitFor();
+  await trigger.click();
+}
+
+async function searchModels(page: Page) {
+  await page.locator("[data-chat-model-search]").pressSequentially(modelQuery);
+  await page.locator('[data-chat-model-option="example/model-999"]').waitFor();
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll<HTMLElement>("[data-chat-model-option]")].filter((option) =>
+        option.checkVisibility(),
+      ).length === 1,
+  );
+}
+
 export const interactionScenarios: readonly InteractionScenario[] = [
   {
     id: "session-switch",
@@ -332,9 +330,20 @@ export const interactionScenarios: readonly InteractionScenario[] = [
     id: "sidebar-toggle",
     route: controlUiSessionPath(sessionKeys[0]),
     expected: "The 1,000-session sidebar closes and reopens.",
-    prepare: async (page) => {
+    prepare: async (page, gateway) => {
       await prepareChat(page);
       await navigation(page, "sessions");
+      const more = page.locator(
+        ".sidebar-session-pagination--roster > .sidebar-session-pagination__button",
+      );
+      for (const offset of [200, 400, 600, 800]) {
+        await more.click();
+        await gateway.waitForRequest("sessions.list", {
+          match: { source: "sidebar", offset, limit: 200 },
+        });
+        await frames(page);
+      }
+      await more.waitFor({ state: "hidden" });
     },
     run: async (page) => {
       if (await page.locator(".shell--mobile-nav").count()) {
@@ -400,33 +409,28 @@ export const interactionScenarios: readonly InteractionScenario[] = [
     id: "model-picker-open-search",
     route: controlUiSessionPath(sessionKeys[0]),
     expected: "The 1,000-model picker opens and filters to Warm model 0999.",
-    prepare: async (page) => {
-      await prepareChat(page);
-      await page.locator(`${activePane} .agent-chat__input textarea`).first().click();
-      const trigger = page.locator(`${activePane} [data-chat-model-select]`);
-      await trigger.waitFor({ state: "visible" });
-      await trigger.click();
-      await page
-        .locator('[data-chat-model-option="example/model-999"]')
-        .waitFor({ state: "attached" });
-      await trigger.click();
-    },
+    prepare: prepareModelPicker,
     run: async (page) => {
       await page.locator(`${activePane} [data-chat-model-select]`).click();
-      await page.locator("[data-chat-model-search]").pressSequentially(modelQuery);
-      await page.locator('[data-chat-model-option="example/model-999"]').waitFor();
-      await page.waitForFunction(
-        () =>
-          [...document.querySelectorAll<HTMLElement>("[data-chat-model-option]")].filter((option) =>
-            option.checkVisibility(),
-          ).length === 1,
-      );
+      await searchModels(page);
     },
+  },
+  {
+    id: "model-picker-search",
+    route: controlUiSessionPath(sessionKeys[0]),
+    expected: "The already-open 1,000-model picker filters to Warm model 0999.",
+    prepare: async (page) => {
+      await prepareModelPicker(page);
+      await page.locator(`${activePane} [data-chat-model-select]`).click();
+      await page.locator("[data-chat-model-search]").waitFor();
+      await frames(page);
+    },
+    run: searchModels,
   },
   ...(["sessions", "cron"] as const).map((route): InteractionScenario => ({
     id: `${route}-open`,
     route: "/new",
-    expected: `The warm ${route} route opens from the Pages navigation.`,
+    expected: `The warm ${route} route opens its default window from the Pages navigation.`,
     prepare: async (page, gateway) => warmRoute(page, gateway, route),
     run: async (page, gateway) => {
       await (await routeLink(page, route)).click();
@@ -471,6 +475,31 @@ export const interactionScenarios: readonly InteractionScenario[] = [
       await page.waitForFunction(
         () => document.querySelectorAll(".sessions-table tbody .session-data-row").length === 1,
       );
+    },
+  },
+  {
+    id: "cron-search-typing-pending",
+    route: pathForRoute("cron"),
+    expected: "Typing updates the filter while one held request retains all 500 jobs.",
+    prepare: async (page, gateway) => {
+      await prepareCron(page);
+      await page.getByRole("searchbox", { name: "Search automations" }).click();
+      await gateway.deferNext("cron.list");
+    },
+    run: async (page, gateway) => {
+      const before = (await gateway.getRequests("cron.list")).length;
+      const search = page.getByRole("searchbox", { name: "Search automations" });
+      await search.pressSequentially(cronQuery);
+      await gateway.waitForRequest("cron.list", { match: { query: "W", offset: 0 } });
+      await frames(page);
+      if (
+        (await search.inputValue()) !== cronQuery ||
+        (await page.locator(".cron-table__row").count()) !== 500 ||
+        (await page.locator(".cron-table").getAttribute("aria-busy")) !== "true" ||
+        (await gateway.getRequests("cron.list")).length - before !== 1
+      ) {
+        throw new Error("Expected the typed filter and 500 retained rows with one pending request");
+      }
     },
   },
   {

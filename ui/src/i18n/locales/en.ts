@@ -71,6 +71,7 @@ export const en: TranslationMap & {
       sessionDiff: TranslationMap & Record<"title" | "show", string>;
       sessionSharing: TranslationMap & Record<"draft", string>;
       workspaceFiles: TranslationMap & Record<"copyPath", string>;
+      toolCards: TranslationMap;
       codeBlock: TranslationMap;
       commandResults: TranslationMap & { fast: TranslationMap };
       commands: TranslationMap;
@@ -93,6 +94,18 @@ export const en: TranslationMap & {
       pullRequests: TranslationMap & Record<"open" | "draft" | "merged" | "closed", string>;
       processesPanel: TranslationMap;
     };
+  aboutPage: TranslationMap &
+    Record<
+      | "artifactDetails"
+      | "commit"
+      | "built"
+      | "unavailable"
+      | "copyCommit"
+      | "copiedCommit"
+      | "gateway",
+      string
+    >;
+  dashboardsPage: TranslationMap;
   configForm: TranslationMap & { sections: TranslationMap };
   configPage: TranslationMap;
   profilePage: TranslationMap & {
@@ -744,27 +757,7 @@ export const en: TranslationMap & {
     placementReloadBlocked: "Recovery needs a reload. Unsaved starts will be lost.",
     discardUnsavedAndReload: "Discard unsaved starts and reload",
   },
-  dashboardsPage: {
-    emptyTitle: "No dashboards yet",
-    emptyDescription: "Dashboards created in your tasks will appear here.",
-    loadError: "Could not load dashboards: {error}",
-    openFocusMode: "Open dashboard in focus mode",
-    live: "Live",
-    byAuthor: "By {author}",
-    updated: "Updated {time}",
-    updatedUnknown: "Update time unknown",
-    totalLabel: "dashboards",
-    searchLabel: "Search dashboards",
-    searchPlaceholder: "Search dashboards…",
-    authorFilter: "Author",
-    allAuthors: "All authors",
-    sortLabel: "Sort",
-    sortUpdated: "Recently updated",
-    sortTitle: "Title A–Z",
-    resultCount: "Dashboards: {count}",
-    noResultsTitle: "No matching dashboards",
-    noResultsDescription: "Try another search or author.",
-  },
+  dashboardsPage: {},
   dashboardDocument: {
     close: "Close dashboard",
     missingSession: "No dashboard session was specified.",
@@ -1615,34 +1608,13 @@ export const en: TranslationMap & {
     workerDesktop: {},
   },
   aboutPage: {
-    productName: "OpenClaw",
-    tagline: "Your personal AI assistant, running on your own devices.",
-    waveHello: "Wave hello to Clawd",
-    linksLabel: "Community and resources",
-    linkWebsite: "Website",
-    linkDocs: "Docs",
-    linkSupport: "Support",
-    linkGitHub: "GitHub",
-    linkDiscord: "Discord",
-    linkX: "X (Twitter)",
-    linkChangelog: "Changelog",
-    license: "© 2026 OpenClaw Foundation — MIT License.",
-    artifactTitle: "Control UI",
-    artifactSubtitle: "Identity embedded when this browser artifact was built.",
     artifactDetails: "Control UI build details",
-    version: "Version",
     commit: "Commit",
-    branch: "Branch",
     built: "Built",
     unavailable: "Unavailable",
     copyCommit: "Copy full commit hash",
-    copyingCommit: "Copying commit hash",
     copiedCommit: "Commit hash copied",
-    copyCommitFailed: "Could not copy commit hash",
     gateway: "Gateway",
-    gatewayVersion: "Connected Gateway version",
-    gatewayVersionHint:
-      "Reported by the active Gateway connection; separate from this Control UI build.",
   },
   appsPage: {},
   presence: {
@@ -2720,15 +2692,6 @@ export const en: TranslationMap & {
       summary: "Summary",
       toolInput: "Tool input",
       toolOutput: "Tool output",
-      providerResponse: "Provider tool response",
-      executionOutput: "Execution output",
-      showFullOutput: "Show full output",
-      fullOutputUnavailable: "Full output unavailable. Only the captured output is shown.",
-      copyOutput: "Copy available output",
-      downloadOutput: "Download available output",
-      outputLoadFailed: "Could not load the full output. Try again.",
-      outputDownloadFailed: "Could not download the output. Try again.",
-      toolError: "Tool error",
       rawDetails: "Raw details",
       activity: {
         titleOne: "1 operation",
@@ -2755,11 +2718,7 @@ export const en: TranslationMap & {
       },
       showRawDetails: "Show raw details",
       hideRawDetails: "Hide raw details",
-      viewMode: "Tool detail view",
-      diff: "Diff",
-      raw: "Raw",
       openFile: "Open file",
-      openDetails: "Open tool details in side panel",
       widgetActions: "Widget actions",
       copyToClipboard: "Copy to clipboard",
       downloadFile: "Download file",
@@ -2786,7 +2745,6 @@ export const en: TranslationMap & {
       outcomeUnknown: "Outcome unknown",
       exitCode: "Exit code {code}",
       failureCount: "{count} failed",
-      noOutputFailed: "No output — tool failed.",
       noOutputSucceeded: "No output — tool completed successfully.",
       noResult: "No result available.",
       review: {

@@ -25,7 +25,7 @@ import {
   sessionCatalogListClient,
 } from "./app-sidebar-session-catalog-live.ts";
 import type { SidebarSessionMutationScope } from "./app-sidebar-session-types.ts";
-import { createPanelRefreshStatus, type PanelRefreshStatus } from "./panel-refresh-status.ts";
+import { createPanelRefreshStatus, type PanelRefreshStatus } from "./panel-refresh-status-state.ts";
 import {
   applySessionCatalogContinuation,
   archiveSessionCatalog as archiveSessionCatalogData,
@@ -467,6 +467,7 @@ export class SessionDataOwner implements SessionCatalogDataOwner {
       this.clearSessionCache();
     }
     publishSidebarSessionList(this, { ...snapshot, ...presentation });
+    publishSidebarSessionError(this, snapshot.error, "list");
     this.requestSessionDataUpdate();
   };
 
