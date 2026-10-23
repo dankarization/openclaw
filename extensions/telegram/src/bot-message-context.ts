@@ -11,7 +11,7 @@ import type {
   TelegramGroupConfig,
 } from "openclaw/plugin-sdk/config-contracts";
 import { createLazyRuntimeModule } from "openclaw/plugin-sdk/lazy-runtime";
-import { deriveLastRoutePolicy, normalizeAccountId } from "openclaw/plugin-sdk/routing";
+import { normalizeAccountId } from "openclaw/plugin-sdk/routing";
 import { logVerbose } from "openclaw/plugin-sdk/runtime-env";
 import {
   expandTelegramAllowFromWithAccessGroups,
@@ -36,8 +36,8 @@ import {
   resolveTelegramThreadSpec,
 } from "./bot/helpers.js";
 import {
+  applyTelegramTargetSession,
   resolveTelegramConversationRoute,
-  resolveTelegramTargetSession,
 } from "./conversation-route.js";
 import { enforceTelegramDmAccess } from "./dm-access.js";
 import { isTelegramForumTopicTitleUpdate } from "./forum-service-message.js";
@@ -320,7 +320,7 @@ export const buildTelegramMessageContext = async ({
     topicName = topic.topicName;
   }
 
-  const sessionKey = resolveTelegramTargetSession({
+  route = applyTelegramTargetSession({
     cfg,
     route,
     chatId,
@@ -332,14 +332,7 @@ export const buildTelegramMessageContext = async ({
         (msg.is_topic_message === true || isTelegramForumTopicTitleUpdate(msg))) ||
       resolveTelegramBotHasTopicsEnabled(primaryCtx.me),
   });
-  route = {
-    ...route,
-    sessionKey,
-    lastRoutePolicy: deriveLastRoutePolicy({
-      sessionKey,
-      mainSessionKey: route.mainSessionKey,
-    }),
-  };
+  const { sessionKey } = route;
   const activationOverride = await resolveGroupActivation({
     sessionKey,
     agentId: route.agentId,
@@ -472,10 +465,7 @@ export const buildTelegramMessageContext = async ({
     statusReactionsConfig?.enabled === true &&
     shouldSendAckReaction;
   const resolvedStatusReactionEmojis = statusReactionsEnabled
-    ? resolveTelegramStatusReactionEmojis({
-        initialEmoji: ackReaction,
-        overrides: undefined,
-      })
+    ? resolveTelegramStatusReactionEmojis(ackReaction)
     : null;
   const statusReactionVariantsByEmoji = resolvedStatusReactionEmojis
     ? buildTelegramStatusReactionVariants(resolvedStatusReactionEmojis)
