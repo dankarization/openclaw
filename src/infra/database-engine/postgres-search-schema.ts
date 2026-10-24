@@ -2,17 +2,16 @@ import type { PostgresSqlConnection } from "../sql-connection.js";
 import {
   getSqliteDatabaseAdmission,
   publishSqliteDatabaseAdmission,
-  type SqliteDatabaseAdmissionKey,
+  type SqliteDatabaseFactKey,
 } from "../sqlite-database-admission.js";
 import { DatabaseSearchCapabilityUnavailableError } from "./capability-unavailable.js";
 import type { SearchSchema } from "./contract.js";
 
 export const pgSearchName = (name: string) => `"${name.replaceAll('"', '""')}"`;
 export const searchConfig = "openclaw_simple_unaccent";
-const key: SqliteDatabaseAdmissionKey<string> = {
+const key: SqliteDatabaseFactKey<string[]> = {
   name: "database.postgres.search",
   schemaDependent: true,
-  read: (value) => (typeof value === "string" ? value : undefined),
 };
 
 /** Called only by store admission; query paths consume these retained facts. */
@@ -23,7 +22,7 @@ export function admitPostgresSearch(
 ): (() => void) | undefined {
   const signature = JSON.stringify(schema);
   const retained = getSqliteDatabaseAdmission(db, key);
-  if (retained === signature) {
+  if (retained?.includes(signature)) {
     return undefined;
   }
   const required = new Set<string>();
@@ -75,27 +74,109 @@ export function admitPostgresSearch(
       `PostgreSQL search capability unavailable: insufficient CREATE privilege. Have the database owner grant CREATE on schema ${pgSearchName(namespace)} (or on the database before initial admission).`,
     );
   }
-  return () => publishSqliteDatabaseAdmission(db, key, signature);
+  return () => publishPostgresSearch(db, schema);
+}
+
+export function publishPostgresSearch(db: PostgresSqlConnection, schema: SearchSchema): void {
+  publishSqliteDatabaseAdmission(db, key, [
+    ...(getSqliteDatabaseAdmission(db, key) ?? []),
+    JSON.stringify(schema),
+  ]);
 }
 
 export function assertPostgresSearchAdmitted(
   db: PostgresSqlConnection,
   schema: SearchSchema,
 ): void {
-  if (!db.isOpen || getSqliteDatabaseAdmission(db, key) !== JSON.stringify(schema)) {
-    throw new Error(
+  if (!db.isOpen || !getSqliteDatabaseAdmission(db, key)?.includes(JSON.stringify(schema))) {
+    throw new DatabaseSearchCapabilityUnavailableError(
+      schema.mode !== "keyword-only" && Object.keys(schema.vector ?? {}).length
+        ? "vector"
+        : "fullText",
       "PostgreSQL search requires matching store admission; reopen the store with its search schema.",
     );
   }
 }
 
+/** Canonical bytes remain binary64; the derived vector rounds once to float32. */
+export function postgresVectorDecoderSql(
+  extensionSchema: string,
+  version: 1 | 2 = 1,
+  replace = false,
+): string {
+  const ext = pgSearchName(extensionSchema);
+  if (version === 1) {
+    return `CREATE ${replace ? "OR REPLACE " : ""}FUNCTION openclaw_vector(bytes bytea, dimensions integer) RETURNS ${ext}.vector
+LANGUAGE plpgsql IMMUTABLE STRICT AS $$
+DECLARE vals real[] := '{}'; bits bigint; exponent integer; fraction double precision; value double precision;
+BEGIN
+  IF octet_length(bytes) <> dimensions * 8 THEN RAISE EXCEPTION 'embedding dimension mismatch; rebuild the derived vector index'; END IF;
+  FOR i IN 0..dimensions-1 LOOP
+    bits := 0;
+    FOR j IN 0..7 LOOP bits := bits | (get_byte(bytes, i*8+j)::bigint << (j*8)); END LOOP;
+    exponent := ((bits >> 52) & 2047)::integer;
+    IF exponent = 2047 THEN RAISE EXCEPTION 'embedding must be finite'; END IF;
+    fraction := (bits & 4503599627370495)::double precision / 4503599627370496;
+    IF exponent < 873 OR (exponent = 873 AND fraction = 0) THEN value := 0;
+    ELSE value := (1 + fraction) * power(2::double precision, exponent - 1023); END IF;
+    IF bits < 0 THEN value := -value; END IF;
+    vals := array_append(vals, value::real);
+  END LOOP;
+  RETURN vals::${ext}.vector;
+END $$;`;
+  }
+  return `CREATE ${replace ? "OR REPLACE " : ""}FUNCTION openclaw_vector(bytes bytea, dimensions integer) RETURNS ${ext}.vector
+LANGUAGE plpgsql IMMUTABLE STRICT AS $$
+DECLARE vals double precision[]; first_nonfinite integer;
+BEGIN
+  IF octet_length(bytes) <> dimensions * 8 THEN RAISE EXCEPTION 'embedding dimension mismatch; rebuild the derived vector index'; END IF;
+  -- Flatten TOAST once: repeated get_byte calls otherwise detoast the entire embedding.
+  bytes := bytes || '\\x'::bytea;
+  WITH bits AS MATERIALIZED (
+    SELECT i,
+      get_byte(bytes, i*8)::bigint |
+      (get_byte(bytes, i*8+1)::bigint << 8) |
+      (get_byte(bytes, i*8+2)::bigint << 16) |
+      (get_byte(bytes, i*8+3)::bigint << 24) |
+      (get_byte(bytes, i*8+4)::bigint << 32) |
+      (get_byte(bytes, i*8+5)::bigint << 40) |
+      (get_byte(bytes, i*8+6)::bigint << 48) |
+      (get_byte(bytes, i*8+7)::bigint << 56) AS b
+    FROM generate_series(0, dimensions-1) AS i
+  ), parts AS (
+    SELECT i, b, ((b >> 52) & 2047)::integer AS exponent,
+      (b & 4503599627370495)::double precision / 4503599627370496 AS fraction
+    FROM bits
+  )
+  SELECT coalesce(array_agg(
+    CASE WHEN b < 0 THEN -1::double precision ELSE 1::double precision END *
+    CASE WHEN exponent = 2047 OR exponent < 873 OR (exponent = 873 AND fraction = 0)
+      THEN 0::double precision
+      ELSE (1 + fraction) * power(2::double precision, exponent - 1023)
+    END ORDER BY i
+  ), ARRAY[]::double precision[]), min(i) FILTER (WHERE exponent = 2047)
+  INTO vals, first_nonfinite FROM parts;
+  IF first_nonfinite IS NOT NULL THEN
+    -- Preserve the old left-to-right overflow versus nonfinite error precedence.
+    PERFORM vals[1:first_nonfinite]::real[];
+    RAISE EXCEPTION 'embedding must be finite';
+  END IF;
+  RETURN vals::real[]::${ext}.vector;
+END $$;`;
+}
+
 /** Deterministic derived DDL joins the store's generated DDL hash and exact catalog seal. */
-export function postgresSearchSql(schema: SearchSchema, namespace: string): string {
+export function postgresSearchSql(
+  schema: SearchSchema,
+  namespace: string,
+  shared: { text?: boolean; vector?: boolean } = {},
+  decoderVersion: 1 | 2 = 1,
+): string {
   const ext = pgSearchName(schema.extensionSchema ?? "public");
   const config = `${pgSearchName(namespace)}.${pgSearchName(searchConfig)}`;
   const configLiteral = `'${config.replaceAll("'", "''")}'`;
   const statements: string[] = [];
-  if (Object.keys(schema.text ?? {}).length) {
+  if (Object.keys(schema.text ?? {}).length && !shared.text) {
     statements.push(`CREATE TEXT SEARCH CONFIGURATION ${config} (COPY = pg_catalog.simple);
 ALTER TEXT SEARCH CONFIGURATION ${config} ALTER MAPPING FOR hword, hword_part, word, numword, numhword, hword_numpart WITH ${ext}.unaccent, pg_catalog.simple;`);
   }
@@ -116,26 +197,8 @@ CREATE INDEX ${pgSearchName(`${index.table}_search_gin`)} ON ${table} USING gin(
   if (schema.mode === "keyword-only") {
     return statements.join("\n");
   }
-  if (Object.keys(schema.vector ?? {}).length) {
-    // Canonical bytes are IEEE754 little-endian binary64. Only this derived value rounds to float32.
-    statements.push(`CREATE FUNCTION openclaw_vector(bytes bytea, dimensions integer) RETURNS ${ext}.vector
-LANGUAGE plpgsql IMMUTABLE STRICT AS $$
-DECLARE vals real[] := '{}'; bits bigint; exponent integer; fraction double precision; value double precision;
-BEGIN
-  IF octet_length(bytes) <> dimensions * 8 THEN RAISE EXCEPTION 'embedding dimension mismatch; rebuild the derived vector index'; END IF;
-  FOR i IN 0..dimensions-1 LOOP
-    bits := 0;
-    FOR j IN 0..7 LOOP bits := bits | (get_byte(bytes, i*8+j)::bigint << (j*8)); END LOOP;
-    exponent := ((bits >> 52) & 2047)::integer;
-    IF exponent = 2047 THEN RAISE EXCEPTION 'embedding must be finite'; END IF;
-    fraction := (bits & 4503599627370495)::double precision / 4503599627370496;
-    IF exponent < 873 OR (exponent = 873 AND fraction = 0) THEN value := 0;
-    ELSE value := (1 + fraction) * power(2::double precision, exponent - 1023); END IF;
-    IF bits < 0 THEN value := -value; END IF;
-    vals := array_append(vals, value::real);
-  END LOOP;
-  RETURN vals::${ext}.vector;
-END $$;`);
+  if (Object.keys(schema.vector ?? {}).length && !shared.vector) {
+    statements.push(postgresVectorDecoderSql(schema.extensionSchema ?? "public", decoderVersion));
   }
   for (const index of Object.values(schema.vector ?? {})) {
     const source = index.postgres;
@@ -146,12 +209,18 @@ END $$;`);
       owner = pgSearchName(source.source),
       id = pgSearchName(source.key),
       embedding = pgSearchName(source.embedding);
-    const project = `INSERT INTO ${table}(id, embedding) SELECT ${id}, openclaw_vector(${embedding}, ${source.dimensions}) FROM ${owner} WHERE ${embedding} IS NOT NULL`;
+    // Empty canonical bytes mean a text-only row, including NOT NULL source columns.
+    const project = `INSERT INTO ${table}(id, embedding) SELECT ${id}, openclaw_vector(${embedding}, ${source.dimensions}) FROM ${owner} WHERE octet_length(${embedding}) > 0`;
     statements.push(`CREATE TABLE ${table} (id TEXT PRIMARY KEY REFERENCES ${owner}(${id}) ON UPDATE CASCADE ON DELETE CASCADE, embedding ${ext}.vector(${source.dimensions}) NOT NULL);
 CREATE FUNCTION ${pgSearchName(`${index.table}_sync`)}() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  DELETE FROM ${table} WHERE id = NEW.${id};
-  IF NEW.${embedding} IS NOT NULL THEN INSERT INTO ${table}(id, embedding) VALUES (NEW.${id}, openclaw_vector(NEW.${embedding}, ${source.dimensions})); END IF;
+  IF TG_OP = 'UPDATE' AND OLD.${embedding} IS NOT DISTINCT FROM NEW.${embedding} THEN RETURN NEW; END IF;
+  IF octet_length(NEW.${embedding}) > 0 THEN
+    INSERT INTO ${table}(id, embedding) VALUES (NEW.${id}, openclaw_vector(NEW.${embedding}, ${source.dimensions}))
+    ON CONFLICT (id) DO UPDATE SET embedding = EXCLUDED.embedding;
+  ELSE
+    DELETE FROM ${table} WHERE id = NEW.${id};
+  END IF;
   RETURN NEW;
 END $$;
 CREATE TRIGGER ${pgSearchName(`${index.table}_sync`)} AFTER INSERT OR UPDATE OF ${embedding} ON ${owner} FOR EACH ROW EXECUTE FUNCTION ${pgSearchName(`${index.table}_sync`)}();
@@ -177,7 +246,7 @@ export function rebuildPostgresSearch(db: PostgresSqlConnection, schema: SearchS
   for (const index of Object.values(schema.vector ?? {})) {
     const source = index.postgres!;
     db.exec(
-      `DELETE FROM ${pgSearchName(index.table)}; INSERT INTO ${pgSearchName(index.table)}(id, embedding) SELECT ${pgSearchName(source.key)}, openclaw_vector(${pgSearchName(source.embedding)}, ${source.dimensions}) FROM ${pgSearchName(source.source)} WHERE ${pgSearchName(source.embedding)} IS NOT NULL`,
+      `DELETE FROM ${pgSearchName(index.table)}; INSERT INTO ${pgSearchName(index.table)}(id, embedding) SELECT ${pgSearchName(source.key)}, openclaw_vector(${pgSearchName(source.embedding)}, ${source.dimensions}) FROM ${pgSearchName(source.source)} WHERE octet_length(${pgSearchName(source.embedding)}) > 0`,
     );
   }
 }

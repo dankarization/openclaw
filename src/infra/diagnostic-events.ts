@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
-import type { EmbeddedAgentExecutionPhase } from "../agents/embedded-agent-runner/execution-phase.js";
+import { formatErrorStackWithMessage } from "@openclaw/normalization-core/error-coercion";
+import type { EmbeddedAgentExecutionPhaseInfo } from "../agents/embedded-agent-runner/execution-phase.js";
+import type { IsolatedCompletionPurpose } from "../agents/isolated-completion-purpose.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { pluginInstanceInvocation } from "../plugins/plugin-instance-invocation.js";
 import { resolveGlobalSingleton } from "../shared/global-singleton.js";
@@ -13,6 +15,11 @@ import {
   type InternalDiagnosticEventInterest,
   updateInternalDiagnosticEventInterest,
 } from "./diagnostic-event-listener-presence.js";
+import {
+  ASYNC_DIAGNOSTIC_EVENT_NAMES,
+  PRIORITY_ASYNC_DIAGNOSTIC_EVENT_NAMES,
+  PUBLIC_EXCLUDED_DIAGNOSTIC_EVENT_NAMES,
+} from "./diagnostic-event-queue-policy.js";
 import {
   cloneDiagnosticValueForListener,
   createDiagnosticMetadataForListener,
@@ -34,7 +41,7 @@ import type {
   DiagnosticRuntimeMeasurementFields,
   DiagnosticWorkerRequestFields,
 } from "./diagnostic-process-types.js";
-import type { DiagnosticGatewayRpcFields } from "./diagnostic-rpc-types.js";
+import type { DiagnosticGatewayFields } from "./diagnostic-rpc-types.js";
 import type {
   DiagnosticAgentCommentaryFields,
   DiagnosticRunScopeFields,
@@ -78,14 +85,14 @@ type DiagnosticBaseEvent = {
 type DiagnosticSessionEvent = DiagnosticBaseEvent &
   Pick<DiagnosticRunScopeFields, "sessionKey" | "sessionId">;
 
-type DiagnosticGatewayRpcEvent = DiagnosticBaseEvent & DiagnosticGatewayRpcFields;
-
 type DiagnosticUsageEvent = DiagnosticSessionEvent & {
   type: "model.usage";
   channel?: string;
   agentId?: string;
   provider?: string;
   model?: string;
+  purpose?: IsolatedCompletionPurpose;
+  runtimeKind?: "cli" | "harness";
   usage: {
     input?: number;
     output?: number;
@@ -405,21 +412,13 @@ type DiagnosticRunProgressEvent = DiagnosticSessionEvent & {
  * EmbeddedAgentExecutionPhase contract (type-only import keeps this module
  * runtime-independent of the agents layer).
  */
-type DiagnosticRunExecutionPhaseEvent = DiagnosticBaseEvent & {
-  type: "run.execution_phase";
-  sessionKey?: string;
-  sessionId: string;
-  runId: string;
-  phase: EmbeddedAgentExecutionPhase;
-  provider?: string;
-  model?: string;
-  backend?: string;
-  source?: string;
-  tool?: string;
-  toolCallId?: string;
-  itemId?: string;
-  firstModelCallStarted?: boolean;
-};
+type DiagnosticRunExecutionPhaseEvent = DiagnosticBaseEvent &
+  EmbeddedAgentExecutionPhaseInfo & {
+    type: "run.execution_phase";
+    sessionKey?: string;
+    sessionId: string;
+    runId: string;
+  };
 
 type DiagnosticHeartbeatEvent = DiagnosticBaseEvent & {
   type: "diagnostic.heartbeat";
@@ -774,7 +773,7 @@ type DiagnosticTelemetryExporterEvent = DiagnosticBaseEvent & {
 };
 
 export type DiagnosticEventPayload =
-  | DiagnosticGatewayRpcEvent
+  | (DiagnosticBaseEvent & DiagnosticGatewayFields)
   | (DiagnosticBaseEvent & DiagnosticRuntimeMeasurementFields)
   | (DiagnosticBaseEvent & DiagnosticWorkerRequestFields)
   | DiagnosticUsageEvent
@@ -962,47 +961,12 @@ type DiagnosticEventsGlobalState = {
 const MAX_ASYNC_DIAGNOSTIC_EVENTS = 10_000;
 const MAX_ASYNC_DIAGNOSTIC_EVENTS_PER_TURN = 100;
 const DIAGNOSTIC_EVENTS_STATE_KEY = Symbol.for("openclaw.diagnosticEvents.state.v1");
-const ASYNC_DIAGNOSTIC_EVENT_TYPES = new Set<DiagnosticEventPayload["type"]>([
-  "worker.request",
-  "diagnostic.gc",
-  "gateway.event_loop.sample",
-  "gateway.main_thread.stall",
-  "gateway.http.cancelled",
-  "gateway.rpc",
-  "tool.execution.started",
-  "tool.execution.completed",
-  "tool.execution.error",
-  "tool.execution.blocked",
-  "skill.used",
-  "exec.process.completed",
-  "exec.approval.followup_suppressed",
-  "message.delivery.started",
-  "message.delivery.completed",
-  "message.delivery.error",
-  "talk.event",
-  "model.call.started",
-  "model.call.completed",
-  "model.call.error",
-  "model.response.observed",
-  "run.progress",
-  "run.execution_phase",
-  "agent.commentary",
-  "harness.run.completed",
-  "harness.run.error",
-  "context.assembled",
-  "log.record",
-]);
-const PRIORITY_ASYNC_DIAGNOSTIC_EVENT_TYPES = new Set<DiagnosticEventPayload["type"]>([
-  // Trusted lifecycle terminals must displace best-effort diagnostics; dropping one
-  // can strand the recorder's active span after its producer already finished.
-  "tool.execution.completed",
-  "tool.execution.error",
-  "tool.execution.blocked",
-  "model.call.completed",
-  "model.call.error",
-  "harness.run.completed",
-  "harness.run.error",
-]);
+const ASYNC_DIAGNOSTIC_EVENT_TYPES = new Set<DiagnosticEventPayload["type"]>(
+  ASYNC_DIAGNOSTIC_EVENT_NAMES,
+);
+const PRIORITY_ASYNC_DIAGNOSTIC_EVENT_TYPES = new Set<DiagnosticEventPayload["type"]>(
+  PRIORITY_ASYNC_DIAGNOSTIC_EVENT_NAMES,
+);
 
 const diagnosticEventsState = resolveGlobalSingleton<DiagnosticEventsGlobalState>(
   DIAGNOSTIC_EVENTS_STATE_KEY,
@@ -1068,7 +1032,8 @@ function dispatchDiagnosticEvent(
             (metadataForListener ??= createDiagnosticMetadataForListener(metadata)),
           );
         } catch (err) {
-          const errorMessage = err instanceof Error ? (err.stack ?? err.message) : String(err);
+          const errorMessage =
+            err instanceof Error ? formatErrorStackWithMessage(err) : String(err);
           console.error(
             `[diagnostic-events] listener error type=${enriched.type} seq=${enriched.seq}: ${errorMessage}`,
           );
@@ -1083,21 +1048,21 @@ function dispatchDiagnosticEvent(
         const event = eventForListener();
         metadataForListener ??= createDiagnosticMetadataForListener(metadata);
         const otel = isTrustedOtelDiagnosticListener(listener);
+        const hostPluginId = otel ? options.hostPluginId : undefined;
         let privateDataForListener = EMPTY_DIAGNOSTIC_PRIVATE_DATA;
-        if (interest?.includePrivateData !== false && (privateData || otel)) {
+        if (interest?.includePrivateData !== false && (privateData || hostPluginId)) {
           // Retain the host-owned transport for independently updated OTel installs.
           const cloned = structuredClone(privateData ?? {});
-          if (otel) {
+          if (hostPluginId) {
+            Object.assign(cloned, { hostPluginId });
+          } else if (otel) {
             Reflect.deleteProperty(cloned, "hostPluginId");
-            if (options.hostPluginId) {
-              Object.assign(cloned, { hostPluginId: options.hostPluginId });
-            }
           }
           privateDataForListener = deepFreezeDiagnosticValue(cloned);
         }
         listener(event, metadataForListener, privateDataForListener);
       } catch (err) {
-        const errorMessage = err instanceof Error ? (err.stack ?? err.message) : String(err);
+        const errorMessage = err instanceof Error ? formatErrorStackWithMessage(err) : String(err);
         console.error(
           `[diagnostic-events] trusted listener error type=${enriched.type} seq=${enriched.seq}: ${errorMessage}`,
         );
@@ -1619,14 +1584,7 @@ export function hasPendingInternalDiagnosticEvent(
 export function onDiagnosticEvent(listener: (evt: DiagnosticEventPayload) => void): () => void {
   return onInternalDiagnosticEvent((event) => listener(event), {
     includeTrusted: [],
-    exclude: [
-      "log.record",
-      "gateway.rpc",
-      "gateway.event_loop.sample",
-      "gateway.main_thread.stall",
-      "gateway.http.cancelled",
-      "diagnostic.gc",
-    ],
+    exclude: PUBLIC_EXCLUDED_DIAGNOSTIC_EVENT_NAMES,
   });
 }
 

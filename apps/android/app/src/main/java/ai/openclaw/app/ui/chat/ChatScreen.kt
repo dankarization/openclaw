@@ -2370,6 +2370,7 @@ internal fun ChatBubble(
           resolverReady = inlineWidgetResolverReady,
           inboundMediaBasePath = sourcePreviewConfig?.basePath,
           loadImage = loadImageArtifact,
+          loadMedia = loadMediaArtifact,
         )
       } else {
         ChatMessageTextSurface(isUser) {
