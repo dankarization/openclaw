@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { createDeferred } from "../../test/helpers/promise.js";
 import type { ChannelStreamingProgressConfig } from "../config/types.base.js";
 import { projectAgentToolActivity } from "../infra/agent-activity-events.js";
@@ -100,6 +100,204 @@ beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
+});
+
+describe("consecutive tool runs", () => {
+  function setup(overrides: Partial<ChannelProgressDraftCompositorParams> = {}) {
+    const { progress } = createProgress(
+      { label: false, toolProgress: true, maxLines: 3 },
+      { compactToolRuns: true, preparedItems: true, ...overrides },
+    );
+    const tool = (id: string, name = "bash", status = "running") =>
+      progress.pushItemEvent({ itemId: `tool:${id}`, kind: "tool", name, status });
+    const labels = () =>
+      progress.getSnapshot().lines.map((line) => (typeof line === "string" ? line : line.label));
+    return { progress, tool, labels };
+  }
+
+  it("counts invocations beyond the row budget, not starts, ends or replays", async () => {
+    const { progress, tool, labels } = setup();
+    for (let index = 1; index <= 12; index++) {
+      await tool(`${index}`);
+      expect(labels()).toEqual([index === 1 ? "Bash" : `Bash ×${index}`]);
+      await tool(`${index}`, "bash", "completed");
+      await tool(`${index}`, "bash", "completed");
+      expect(labels()).toEqual([index === 1 ? "Bash" : `Bash ×${index}`]);
+    }
+    await tool("other", "read");
+    await tool("13");
+    expect(labels()).toEqual(["Bash ×12", "Read", "Bash"]);
+    await tool("1", "bash", "completed");
+    expect(labels()).toEqual(["Bash ×12", "Read", "Bash"]);
+    progress.markFinalReplyDelivered();
+    expect(progress.beginNewTurn()).toBe(true);
+    await tool("1");
+    expect(labels()).toEqual(["Bash"]);
+  });
+
+  it("splits runs around late failures and keeps approvals and authored events", async () => {
+    const { progress, tool, labels } = setup();
+    await tool("1");
+    await tool("2");
+    await tool("3");
+    await tool("2", "bash", "failed");
+    expect(labels()).toEqual(["Bash ×2", "Bash"]);
+    expect(progress.getSnapshot().lines.at(-1)).toMatchObject({ id: "tool:2", status: "failed" });
+    await tool("4");
+    expect(labels()).toEqual(["Bash ×2", "Bash", "Bash"]);
+    expect(progress.getSnapshot().lines.at(-1)).toMatchObject({ id: "tool:4" });
+    await progress.pushApprovalEvent({
+      approvalId: "approval-1",
+      phase: "requested",
+      command: "printf fixture",
+    });
+    expect(
+      progress
+        .getSnapshot()
+        .lines.some((line) => typeof line === "object" && line.kind === "approval"),
+    ).toBe(true);
+    await tool("5");
+    expect(labels().at(-1)).toBe("Bash");
+    await progress.pushPreambleHeadline("Checking the next step", { itemId: "preamble-1" });
+    await tool("6");
+    expect(labels().slice(-2)).toEqual(["Bash", "Bash"]);
+  });
+
+  it("does not count unkeyed calls, detailed rows or colliding truncated titles", async () => {
+    const { progress, tool, labels } = setup();
+    await tool("1");
+    await progress.pushToolProgress({
+      kind: "tool",
+      toolName: "bash",
+      label: "Bash",
+      text: "Bash",
+    });
+    await tool("2");
+    expect(labels()).not.toContain("Bash ×2");
+    for (const id of ["detail-1", "detail-2"]) {
+      await progress.pushToolProgress({
+        id,
+        kind: "tool",
+        toolName: "bash",
+        label: "Bash",
+        text: "Bash command",
+        detail: "command",
+      });
+    }
+    expect(labels().slice(-2)).toEqual(["Bash", "Bash"]);
+    for (const id of ["title-1", "title-2"]) {
+      await progress.pushToolProgress({
+        id,
+        kind: "item",
+        toolName: "api",
+        label: "Same…title",
+        text: "Same…title",
+      });
+    }
+    expect(labels().slice(-2)).toEqual(["Same…title", "Same…title"]);
+  });
+
+  it("surfaces a late failure without replaying an evicted run", async () => {
+    const { progress, tool, labels } = setup();
+    await tool("1");
+    await tool("2");
+    await tool("read", "read");
+    await tool("write", "write");
+    await tool("api", "api");
+    expect(labels()).not.toContain("Bash ×2");
+    await tool("1", "bash", "failed");
+    expect(progress.getSnapshot().lines.at(-1)).toMatchObject({ id: "tool:1", status: "failed" });
+    await tool("1", "bash", "failed");
+    expect(labels().filter((label) => label === "Bash")).toHaveLength(1);
+    expect(labels()).not.toContain("Bash ×2");
+  });
+
+  it.each([1, 3])(
+    "keeps new failures visible across run eviction with %i rows",
+    async (maxLines) => {
+      const { progress, tool } = setup({
+        entry: { streaming: { mode: "progress", progress: { toolProgress: true, maxLines } } },
+      });
+      await tool("1");
+      await tool("2");
+      await tool("3");
+      await tool("2", "bash", "failed");
+      expect(progress.getSnapshot().lines.at(-1)).toMatchObject({
+        id: "tool:2",
+        status: "failed",
+      });
+      await tool("read", "read");
+      await tool("write", "write");
+      await tool("1", "bash", "failed");
+      expect(progress.getSnapshot().lines.at(-1)).toMatchObject({
+        id: "tool:1",
+        status: "failed",
+      });
+      await tool("1", "bash", "failed");
+      expect(progress.getSnapshot().lines.at(-1)).toMatchObject({
+        id: "tool:1",
+        status: "failed",
+      });
+      await tool("3", "bash", "completed");
+      expect(progress.getSnapshot().lines.at(-1)).toMatchObject({
+        id: "tool:1",
+        status: "failed",
+      });
+    },
+  );
+
+  it("retracts individual members without discarding the rest of a run", async () => {
+    const { progress, tool, labels } = setup();
+    await tool("1");
+    await tool("2");
+    await tool("3");
+    await progress.pushItemEvent({ itemId: "tool:2", hideFromChannelProgress: true });
+    expect(labels()).toEqual(["Bash ×2"]);
+    await progress.pushItemEvent({ itemId: "tool:1", hideFromChannelProgress: true });
+    expect(labels()).toEqual(["Bash"]);
+  });
+
+  it.each([
+    { compactToolRuns: false },
+    { mode: "partial" as const },
+    {
+      entry: {
+        streaming: {
+          mode: "progress" as const,
+          progress: { toolProgress: true, commandText: "raw" as const },
+        },
+      },
+    },
+  ])("leaves non-target modes unchanged: %j", async (overrides) => {
+    const { tool, labels } = setup(overrides);
+    await tool("1");
+    await tool("2");
+    expect(labels()).toEqual(["Bash", "Bash"]);
+  });
+
+  it("keeps different activity visible by compacting unnamed Automations, not descriptions or errors", async () => {
+    const { progress, tool, labels } = setup();
+    for (let index = 1; index <= 4; index++) {
+      await tool(`automation-${index}`, "automations");
+    }
+    await tool("read", "read");
+    await tool("automation-5", "automations");
+    await tool("automation-6", "automations");
+    expect(labels()).toEqual(["Automations ×4", "Read", "Automations ×2"]);
+    await progress.pushToolProgress({
+      id: "automation-detail",
+      kind: "tool",
+      toolName: "automations",
+      label: "Automations",
+      text: "Automations: inspect schedule",
+      detail: "inspect schedule",
+    });
+    await tool("automation-7", "automations");
+    await tool("automation-8", "automations", "failed");
+    expect(labels()).toEqual(["Automations", "Automations", "Automations"]);
+    expect(progress.getSnapshot().lines[0]).toMatchObject({ detail: "inspect schedule" });
+    expect(progress.getSnapshot().lines[2]).toMatchObject({ status: "failed" });
+  });
 });
 
 it.each(["NO_REPLY", "_NO_REPLY_", "no_reply"])(

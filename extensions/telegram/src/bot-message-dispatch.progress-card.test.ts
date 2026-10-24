@@ -30,6 +30,84 @@ import { renderTelegramProgressDraftPreview } from "./progress-draft-preview.js"
 import type * as TelegramEditModule from "./send-edit.js";
 
 describeTelegramDispatch("dispatchTelegramMessage progress cards", () => {
+  it.each([
+    { richMessages: false, commandText: "status" },
+    { richMessages: true, commandText: "status" },
+    { richMessages: false, commandText: "raw" },
+  ] as const)(
+    "compacts only consecutive safe tool invocations ($richMessages, $commandText)",
+    async ({ richMessages, commandText }) => {
+      const { answerDraftStream } = setupDraftStreams();
+      dispatchReplyWithBufferedBlockDispatcher.mockImplementation(async ({ replyOptions }) => {
+        const text = () => answerDraftStream.updatePreview.mock.lastCall?.[0].text ?? "";
+        const start = async (id: string, name = "bash") => {
+          await emitToolStart(replyOptions, {
+            toolCallId: id,
+            name,
+            phase: "start",
+            args:
+              name === "read"
+                ? { path: "/fixture/readme.md" }
+                : { command: `printf fixture-${id}` },
+          });
+          await answerDraftStream.flush();
+        };
+        for (let index = 1; index <= 3; index++) {
+          await start(`${index}`);
+          if (commandText === "status") {
+            expect(text().match(/Bash/g)).toHaveLength(1);
+            expect(text()).toContain(index === 1 ? "Bash" : `Bash ×${index}`);
+            expect(text()).not.toContain("fixture-");
+          } else {
+            expect(text().match(/Bash/g)).toHaveLength(index);
+            expect(text()).not.toContain("×");
+            expect(text()).toContain(`fixture-${index}`);
+          }
+          for (let replay = 0; replay < 2; replay++) {
+            await replyOptions?.onItemEvent?.({
+              itemId: `tool:${index}`,
+              toolCallId: `${index}`,
+              kind: "tool",
+              name: "bash",
+              phase: "end",
+              status: "completed",
+            });
+          }
+        }
+        await start("read", "read");
+        await start("4");
+        if (commandText === "status") {
+          expect(text().match(/Bash/g)).toHaveLength(2);
+          expect(text()).toContain("Bash ×3");
+          expect(text()).toContain("Read");
+          expect(text()).not.toContain("Bash ×4");
+        }
+        await replyOptions?.onItemEvent?.({
+          itemId: "tool:4",
+          toolCallId: "4",
+          kind: "tool",
+          name: "bash",
+          phase: "end",
+          status: "failed",
+        });
+        expect(text()).toContain("failed");
+        return { queuedFinal: false };
+      });
+      await dispatchWithContext({
+        context: createContext({
+          ctxPayload: createDirectSessionPayload(),
+          threadSpec: { id: undefined, scope: "none" },
+          replyThreadId: undefined,
+        }),
+        streamMode: "progress",
+        telegramCfg: {
+          richMessages,
+          streaming: { mode: "progress", progress: { toolProgress: true, commandText } },
+        },
+      });
+    },
+  );
+
   it("keeps a full plan and recent activity after failed named tool items", () => {
     const richMessages = true;
     const commandLines = Array.from({ length: 8 }, (_, index) =>
