@@ -4,107 +4,33 @@ import ai.openclaw.app.node.asArrayOrNull
 import ai.openclaw.app.node.asObjectOrNull
 import ai.openclaw.app.node.asStringOrNull
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
-import kotlin.math.sign
+import kotlinx.serialization.json.JsonObject
 
-/** One gateway session-group catalog entry (`sessions.groups.*`). */
-internal data class GatewaySessionGroup(
-  val name: String,
-  val position: Int,
-)
-
-private val sessionGroupsJson = Json { ignoreUnknownKeys = true }
-
-/**
- * Parses a `sessions.groups.list` / mutation payload.
- * Null when `groups` is absent so a partial error body cannot wipe the catalog cache.
- */
 internal data class SessionGroupCatalogSnapshot(
-  val groups: List<GatewaySessionGroup>,
-  val sectionOrder: List<String>,
-  val supportsAppendOnly: Boolean = false,
+  val names: List<String> = emptyList(),
+  val sectionOrder: List<String> = emptyList(),
 )
 
 internal fun parseSessionGroupCatalog(payload: String): SessionGroupCatalogSnapshot? {
-  val groups = parseSessionGroupsPayload(payload) ?: return null
-  val root = sessionGroupsJson.parseToJsonElement(payload).asObjectOrNull()
-  return SessionGroupCatalogSnapshot(
-    groups = groups,
-    sectionOrder = parseSessionSectionOrder(payload),
-    supportsAppendOnly = (root?.get("appendOnly") as? JsonPrimitive)?.contentOrNull == "true",
-  )
-}
-
-internal fun parseSessionGroupsPayload(payload: String): List<GatewaySessionGroup>? {
-  val root =
-    runCatching { sessionGroupsJson.parseToJsonElement(payload).asObjectOrNull() }.getOrNull()
-      ?: return null
+  val root = Json.parseToJsonElement(payload).asObjectOrNull() ?: return null
   val groups = root["groups"].asArrayOrNull() ?: return null
-  return groups
-    .mapIndexedNotNull { index, element ->
-      val record = element.asObjectOrNull() ?: return@mapIndexedNotNull null
-      val name = record["name"].asStringOrNull()?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapIndexedNotNull null
-      val position = (record["position"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull() ?: index
-      GatewaySessionGroup(name = name, position = position)
-    }.sortedWith(compareBy<GatewaySessionGroup> { it.position }.thenBy { it.name })
-}
-
-/**
- * One-shot import of device-local folder names into the gateway catalog.
- * A live catalog cached from another gateway is not legacy input.
- * `canPut` is false when the gateway advertises methods and omits `sessions.groups.put`.
- */
-internal data class SessionGroupMigrationDecision(
-  val putLegacy: Boolean,
-  val consumeLegacy: Boolean,
-  val markMigrated: Boolean,
-)
-
-internal fun decideSessionGroupMigration(
-  listedNames: List<String>,
-  legacyNames: List<String>,
-  canPut: Boolean,
-): SessionGroupMigrationDecision {
-  val listed = unionSessionGroupNames(listedNames, emptyList()).toSet()
-  val legacy = unionSessionGroupNames(legacyNames, emptyList())
-  val hasUnimportedLegacy = legacy.any { it !in listed }
-  val putLegacy = canPut && hasUnimportedLegacy
-  val consumeLegacy = legacy.isNotEmpty() && !hasUnimportedLegacy
-  val markMigrated = !hasUnimportedLegacy
-  return SessionGroupMigrationDecision(
-    putLegacy = putLegacy,
-    consumeLegacy = consumeLegacy,
-    markMigrated = markMigrated,
-  )
-}
-
-/** Catalog order, then names not already present. Blank names are dropped. */
-internal fun unionSessionGroupNames(
-  existing: List<String>,
-  extra: List<String>,
-): List<String> {
-  val names = mutableListOf<String>()
-  for (name in existing + extra) {
-    val trimmed = name.trim()
-    if (trimmed.isNotEmpty() && trimmed !in names) names.add(trimmed)
-  }
-  return names
+  val names =
+    groups
+      .mapNotNull { it.asObjectOrNull() }
+      .sortedBy { it["position"]?.asStringOrNull()?.toIntOrNull() ?: Int.MAX_VALUE }
+      .mapNotNull { it["name"].asStringOrNull()?.trim()?.takeIf(String::isNotEmpty) }
+      .distinct()
+  return SessionGroupCatalogSnapshot(names, parseSessionSectionOrder(root))
 }
 
 private val sidebarBuiltInSections = listOf("ungrouped", "groups", "work")
 
-/** Tokens from a groups payload. Missing or invalid entries are dropped, not invented. */
-internal fun parseSessionSectionOrder(payload: String): List<String> {
-  val root = runCatching { sessionGroupsJson.parseToJsonElement(payload).asObjectOrNull() }.getOrNull() ?: return emptyList()
-  val raw = root["sectionOrder"].asArrayOrNull() ?: return emptyList()
-  val tokens = mutableListOf<String>()
-  for (element in raw) {
-    val token = sidebarSectionToken(element.asStringOrNull() ?: continue) ?: continue
-    if (token !in tokens) tokens.add(token)
-  }
-  return tokens
-}
+private fun parseSessionSectionOrder(root: JsonObject): List<String> =
+  root["sectionOrder"]
+    .asArrayOrNull()
+    .orEmpty()
+    .mapNotNull { it.asStringOrNull()?.let(::sidebarSectionToken) }
+    .distinct()
 
 /**
  * Same section order as web `normalizeSessionSectionOrder` / Mac `orderedSections`.
@@ -158,77 +84,3 @@ private fun sidebarSectionToken(raw: String): String? {
   }
   return trimmed.takeIf { it in sidebarBuiltInSections }
 }
-
-/**
- * Web `moveArrayEntry`: move [source] before or after [target] and keep every
- * other token, including hidden `work`, so the phone writes the same
- * `sectionOrder` the computer already displays.
- */
-internal fun moveSidebarSection(
-  order: List<String>,
-  source: String,
-  target: String,
-  after: Boolean,
-): List<String> {
-  if (source == target) return order
-  val ordered = order.toMutableList()
-  val sourceIndex = ordered.indexOf(source)
-  val targetIndex = ordered.indexOf(target)
-  if (sourceIndex < 0 || targetIndex < 0) return order
-  val moved = ordered.removeAt(sourceIndex)
-  val insertion = ordered.indexOf(target) + if (after) 1 else 0
-  ordered.add(insertion, moved)
-  return ordered
-}
-
-/**
- * One step along the sections the sidebar actually shows. Hidden tokens stay
- * put, so a folder moves onto its visible neighbor instead of landing inside
- * Groups or under a provider catalog by skipping a row the phone does not draw.
- */
-internal fun moveSidebarSectionByDirection(
-  order: List<String>,
-  visibleTokens: List<String>,
-  source: String,
-  direction: Int,
-): List<String>? {
-  if (direction == 0) return null
-  val visible = visibleTokens.filter { it in order }.distinct()
-  val index = visible.indexOf(source)
-  if (index < 0) return null
-  val target = visible.getOrNull(index + direction.sign) ?: return null
-  val next = moveSidebarSection(order, source, target, after = direction > 0)
-  return next.takeIf { it != order }
-}
-
-/** Category names in shared section order. Built-ins and catalogs are not names. */
-internal fun sidebarCategoryNames(order: List<String>): List<String> {
-  val names = mutableListOf<String>()
-  for (token in order) {
-    if (!token.startsWith("category:")) continue
-    val name = token.removePrefix("category:").trim()
-    if (name.isNotEmpty() && name !in names) names.add(name)
-  }
-  return names
-}
-
-/** Reorders visible sections against the fresh catalog, retaining other clients' hidden catalogs. */
-internal fun moveSessionGroupCatalogSection(
-  catalog: SessionGroupCatalogSnapshot,
-  catalogIds: List<String>,
-  visibleTokens: List<String>,
-  source: String,
-  direction: Int,
-): List<String>? =
-  moveSidebarSectionByDirection(
-    order =
-      normalizeSidebarSectionOrder(
-        stored = catalog.sectionOrder,
-        knownGroups = catalog.groups.map { it.name },
-        catalogIds =
-          (catalogIds + catalog.sectionOrder.filter { it.startsWith("catalog:") }.map { it.removePrefix("catalog:") }).distinct(),
-      ),
-    visibleTokens = visibleTokens,
-    source = source,
-    direction = direction,
-  )

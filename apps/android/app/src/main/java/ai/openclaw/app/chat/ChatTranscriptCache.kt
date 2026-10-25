@@ -6,7 +6,6 @@ import androidx.room3.Insert
 import androidx.room3.OnConflictStrategy
 import androidx.room3.Query
 import androidx.room3.withWriteTransaction
-import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
@@ -35,6 +34,8 @@ private data class CachedMessageContent(
   val sizeBytes: Long? = null,
   val durationMs: Long? = null,
   val playback: String? = null,
+  // Older cached payloads omit this key and load as untranscribed.
+  val transcribed: Boolean = false,
   val toolActivity: ChatToolActivity? = null,
 )
 
@@ -147,29 +148,8 @@ internal data class CachedGatewayOwnerEntity(
   val agentId: String,
 )
 
-@Entity(tableName = "cached_session_group_catalogs", primaryKeys = ["gatewayId"])
-internal data class CachedSessionGroupCatalogEntity(
-  val gatewayId: String,
-  val namesJson: String,
-  val sectionOrderJson: String,
-)
-
-internal data class CachedSessionGroupCatalog(
-  val names: List<String>,
-  val sectionOrder: List<String>,
-)
-
 @Dao
 internal interface ChatCacheDao {
-  @Query("SELECT * FROM cached_session_group_catalogs WHERE gatewayId = :gatewayId")
-  fun observeSessionGroupCatalog(gatewayId: String): Flow<CachedSessionGroupCatalogEntity?>
-
-  @Insert(onConflict = OnConflictStrategy.REPLACE)
-  suspend fun upsertSessionGroupCatalog(row: CachedSessionGroupCatalogEntity)
-
-  @Query("DELETE FROM cached_session_group_catalogs WHERE gatewayId = :gatewayId")
-  suspend fun deleteSessionGroupCatalog(gatewayId: String)
-
   @Query("SELECT agentId FROM cached_gateway_owners WHERE gatewayId = :gatewayId")
   suspend fun lastDefaultAgentId(gatewayId: String): String?
 
@@ -365,6 +345,7 @@ class RoomChatTranscriptCache internal constructor(
               sizeBytes = part.sizeBytes,
               durationMs = part.durationMs,
               playback = part.playback,
+              transcribed = part.transcribed,
               toolActivity = part.toolActivity,
             )
           },
@@ -454,7 +435,7 @@ class RoomChatTranscriptCache internal constructor(
                   CachedMessageContent(type = part.type, toolActivity = part.toolActivity)
                 }
 
-                (isImage && !part.artifactId.isNullOrBlank() && !part.url.isNullOrBlank()) ||
+                (isImage && part.imageLoadKey() != null && !part.url.isNullOrBlank()) ||
                   part.type == "audio" || part.type == "video" || part.type == "file" -> {
                   CachedMessageContent(
                     type = part.type,
@@ -469,6 +450,7 @@ class RoomChatTranscriptCache internal constructor(
                     sizeBytes = part.sizeBytes,
                     durationMs = part.durationMs.takeUnless { isImage },
                     playback = part.playback.takeUnless { isImage },
+                    transcribed = part.transcribed,
                   )
                 }
 
@@ -551,7 +533,6 @@ class RoomChatTranscriptCache internal constructor(
       dao.deleteMessages(gateway)
       dao.deleteSessionsForGateway(gateway)
       dao.deleteGatewayOwner(gateway)
-      dao.deleteSessionGroupCatalog(gateway)
     }
   }
 

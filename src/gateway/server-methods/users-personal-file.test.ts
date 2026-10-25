@@ -21,6 +21,7 @@ import type {
 } from "../../state/user-profiles.types.js";
 import { createGatewayMethodRegistry } from "../methods/registry.js";
 import { captureGatewayOperatorRunAuthority } from "../operator-run-authority.js";
+import { gatewayConnect, gatewayProfile } from "../server/client-fixtures.test-support.js";
 import type { GatewayClient } from "./client-types.js";
 import type { GatewayRequestHandlerOptions } from "./types.js";
 import { usersPersonalFileHandlers } from "./users-personal-file.js";
@@ -74,6 +75,7 @@ vi.mock("../../state/user-profile-list.js", () => ({
     };
     await state.profileReady?.();
     return {
+      readCurrentRevision: readCurrentProfile,
       readCurrentProfile,
       emailBindingIds: [],
       readCurrentFacts: () => ({
@@ -135,19 +137,8 @@ beforeEach(async () => {
   config = { agents: { defaults: { workspace } } };
   client = {
     connId: "alice-connection",
-    connect: {
-      minProtocol: 1,
-      maxProtocol: 1,
-      client: { id: "openclaw-control-ui", version: "test", platform: "test", mode: "webchat" },
-      role: "operator",
-      scopes: ["operator.read"],
-    },
-    authenticatedUserProfile: {
-      profileId: "alice-alias",
-      displayName: null,
-      hasAvatar: false,
-      updatedAt: 0,
-    },
+    connect: gatewayConnect(["operator.read"]),
+    authenticatedUserProfile: gatewayProfile("alice-alias", null, 0),
   };
   await fs.writeFile(path.join(workspace, "USER.md"), "Shared defaults");
 });
@@ -241,15 +232,28 @@ describe("personal USER.md self-service", () => {
     expect(
       (await execute({ action: "set", content: "Prefer examples.", expectedHash: null })).details,
     ).toMatchObject({ profileId: "alice", content: "Prefer examples." });
+    expect((await execute({ action: "get" })).details).toMatchObject({
+      profileId: "alice",
+      missing: false,
+      content: "Prefer examples.",
+    });
     expect(await fs.readFile(personalPath(), "utf8")).toBe("Prefer examples.");
     expect(await fs.readdir(path.join(workspace, "users"))).toEqual(["alice"]);
     expect(await fs.readFile(path.join(workspace, "USER.md"), "utf8")).toBe("Shared defaults");
+    expect(await loadPersonalUserBootstrapFile(workspace, "alice")).toMatchObject({
+      personalUser: true,
+      content: "Prefer examples.",
+      path: personalPath(),
+    });
   });
 
   function withRequesterTurn(test: Parameters<typeof withPersonalToolTurn>[1]) {
     const { identity } = toolTurn();
     return withPersonalToolTurn(
-      { owner: { profileId: "alice-alias", senderId: "alice", name: "Alice" } },
+      {
+        owner: { profileId: "alice-alias", senderId: "alice", name: "Alice" },
+        allowCollaborativeSteering: true,
+      },
       (turn) =>
         withGatewayToolCallerIdentity(
           { ...identity, operationalRunInstance: undefined, operatorAuthority: undefined },
@@ -508,26 +512,6 @@ describe("personal USER.md self-service", () => {
     await expect(
       createPersonalInstructionsTool("main").execute("anonymous", { action: "get" }),
     ).rejects.toThrow("authenticated Gateway user turn");
-  });
-
-  it("lets a read-only signed-in user create, read, and edit only their canonical file", async () => {
-    expect(await rpc("get")).toMatchObject({
-      ok: true,
-      result: { missing: true, hash: null, content: "", profileId: "alice" },
-    });
-    const created = await save("Prefer concise replies.");
-    expect(created).toMatchObject({ ok: true, result: { profileId: "alice", missing: false } });
-    expect(await fs.readFile(personalPath(), "utf8")).toBe("Prefer concise replies.");
-    expect(await rpc("get")).toMatchObject({ ok: true, result: created.result });
-    expect(await save("Prefer examples.", created.result.hash)).toMatchObject({ ok: true });
-    expect(await fs.readFile(personalPath(), "utf8")).toBe("Prefer examples.");
-    expect(await fs.readFile(path.join(workspace, "USER.md"), "utf8")).toBe("Shared defaults");
-    expect(await fs.readdir(path.join(workspace, "users"))).toEqual(["alice"]);
-    expect(await loadPersonalUserBootstrapFile(workspace, "alice")).toMatchObject({
-      personalUser: true,
-      content: "Prefer examples.",
-      path: personalPath(),
-    });
   });
 
   it("requires a hash for every save and detects concurrent creation and stale edits", async () => {

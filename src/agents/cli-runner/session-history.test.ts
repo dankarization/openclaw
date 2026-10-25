@@ -613,6 +613,7 @@ describe("canonical CLI history", () => {
     "orphaned-tool-use",
     "message-policy",
     "system-prompt",
+    "prompt-tools",
     "cwd",
     "mcp",
     "session-expired",
@@ -640,7 +641,7 @@ describe("canonical CLI history", () => {
 
 describe("resumed Claude session gaps", () => {
   it.each([false, true])(
-    "notes outside turns without replaying them (memory=%s)",
+    "hands off outside turns only to the resumed session (memory=%s)",
     async (memory) => {
       const { target, params } = await createSession();
       const admission = prepareSystemAgentRunAdmission({}, `gap-${memory}`, "main", "history-test");
@@ -687,25 +688,20 @@ describe("resumed Claude session gaps", () => {
           ...resumedClaudeSession,
         };
         const context = await loadCliSessionPromptContext(options);
-        expect(context.sessionGapContext).toBe(
-          '[OpenClaw: 2 messages occurred outside this Claude session from 1970-01-01T00:00:03.000Z to 1970-01-01T00:00:04.000Z, using "mock/test-model". Their contents are not included here. Before answering a question that may depend on these messages, call mcp__openclaw__sessions_history({"sessionKey":"agent:main:history","limit":100}) to read them; page older messages with offset if needed.]',
+        expect(context.sessionGapContext).toBeUndefined();
+        expect(context.resumeContext).toContain("PRIVATE-TOKEN-1");
+        expect(context.resumeContext).not.toContain("PRIVATE-TOKEN-0");
+        expect((await loadCliSessionPromptContext({ ...options, tools: [] })).resumeContext).toBe(
+          context.resumeContext,
         );
-        expect(context.sessionGapContext).not.toContain("PRIVATE-TOKEN");
-        expect(
-          (
-            await loadCliSessionPromptContext({
-              ...options,
-              tools: [],
-            })
-          ).sessionGapContext,
-        ).not.toContain("sessions_history");
         expect((await loadCliSessionPromptContext(params)).sessionGapContext).toBeUndefined();
         const unknown = await loadCliSessionPromptContext({
           ...options,
           rawTranscriptReseedReason: "auth-unknown",
         });
         expect(unknown).toMatchObject({
-          sessionGapContext: context.sessionGapContext,
+          resumeContext: context.resumeContext,
+          sessionGapContext: undefined,
           durableContext: undefined,
           reseedMessages: [],
         });
@@ -728,9 +724,13 @@ describe("resumed Claude session gaps", () => {
         }
         for (const reason of ["auth-profile", "auth-epoch"] as const) {
           expect(
-            (await loadCliSessionPromptContext({ ...options, rawTranscriptReseedReason: reason }))
-              .sessionGapContext,
-          ).toBeUndefined();
+            await loadCliSessionPromptContext({ ...options, rawTranscriptReseedReason: reason }),
+          ).toMatchObject({
+            resumeContext: undefined,
+            sessionGapContext: undefined,
+            reseedMessages: [],
+            durableContext: undefined,
+          });
         }
         // A fresh replacement after the switch may reseed, but never gets a resume-gap note.
         expect(
@@ -788,33 +788,24 @@ describe("buildCliSessionHistoryPrompt", () => {
     expect(prompt).toContain("<next_user_message>\nnew ask\n</next_user_message>");
   });
 
-  it("renders canonical saved timestamps and omits invalid or noncanonical timestamps", () => {
+  it("renders saved timestamps and preserves undated history", () => {
     const prompt = buildCliSessionHistoryPrompt({
       messages: [
         { role: "user", content: "dated ask", timestamp: "2026-06-17T16:00:00.000Z" },
-        { role: "assistant", content: "zero date answer", timestamp: "0" },
-        { role: "user", content: "year-only ask", timestamp: "2026" },
-        { role: "assistant", content: "invalid date answer", timestamp: "not-a-date" },
-        { role: "user", content: "offset date ask", timestamp: "2026-06-17T12:00:00-04:00" },
         { role: "assistant", content: "undated answer" },
       ],
       prompt: "new ask",
     });
 
     expect(prompt).toContain("[2026-06-17T16:00:00.000Z] User: dated ask");
-    expect(prompt).toMatch(
-      /Assistant: zero date answer[\s\S]*User: year-only ask[\s\S]*Assistant: invalid date answer[\s\S]*User: offset date ask[\s\S]*Assistant: undated answer/u,
-    );
-    expect(prompt).not.toMatch(
-      /\[(?:2000-01-01T00:00:00\.000Z|2026-01-01T00:00:00\.000Z|not-a-date|2026-06-17T12:00:00-04:00)\]/u,
-    );
+    expect(prompt).toContain("Assistant: undated answer");
     expect(prompt).toContain(RESEED_CURRENCY_GUIDANCE);
   });
 
   it("skips reseed text when the transcript has no renderable conversation", () => {
     expect(
       buildCliSessionHistoryPrompt({
-        messages: [{ role: "tool", content: "ignored" }],
+        messages: [{ role: "user", content: "" }],
         prompt: "new ask",
       }),
     ).toBeUndefined();

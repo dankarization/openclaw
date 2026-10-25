@@ -1,5 +1,4 @@
 import { isDeepStrictEqual } from "node:util";
-import { ok } from "@openclaw/normalization-core/result";
 import { listAgentIds } from "../agents/agent-scope.js";
 import { listSubagentSessionListRunsForControllers } from "../agents/subagents/registry/subagent-registry-read.js";
 import { readResolvedSessionEntriesInWorker } from "../config/sessions/session-accessor.entry.js";
@@ -62,6 +61,7 @@ export type GatewaySessionEntryReadPlan = {
 export async function resolveGatewaySessionStoreTargetInWorker(
   params: GatewaySessionStoreLookupParams & {
     assertActive?: () => void;
+    signal?: AbortSignal;
     onSelected?: (target: GatewaySessionStoreTargetWithStore) => void;
   },
 ): Promise<GatewaySessionStoreTargetWithStore> {
@@ -106,7 +106,7 @@ async function includeDirectChildEntriesInWorker(
   target: GatewaySessionStoreTargetWithStore,
   params: GatewaySessionStoreLookupParams,
 ): Promise<GatewaySessionStoreTargetWithStore> {
-  if (!params.includeStoreChildEntries || isIncognitoSessionKey(target.canonicalKey)) {
+  if (!params.includeStoreChildEntries) {
     return target;
   }
   try {
@@ -122,13 +122,7 @@ async function includeDirectChildEntriesInWorker(
       [...parentKeys],
     );
     for (const { sessionKey, entry } of children) {
-      if (
-        !parentKeys.has(sessionKey) &&
-        ((entry.parentSessionKey && parentKeys.has(entry.parentSessionKey)) ||
-          (entry.spawnedBy && parentKeys.has(entry.spawnedBy)))
-      ) {
-        target.store[sessionKey] = entry;
-      }
+      target.store[sessionKey] = entry;
     }
     const hintedKeys = [
       ...new Set(
@@ -205,134 +199,137 @@ async function prepareGatewaySessionStoreReadInWorker(
       expectedSource?: CapturedSessionEntryReadSource;
     }
   >();
-  const prepared = await inventoryRead.withRead(async (sources, assertCurrent) => {
-    const targetDiscoveryCache: GatewaySessionStoreDiscoveryCache = new Map();
-    for (const source of sources.agents) {
-      if (!source.result.available && source.result.reason !== "database-missing") {
-        throw new SessionStoreUnavailableError(
-          source.agentId,
-          source.result.reason,
-          source.result.error,
-        );
-      }
-      targetDiscoveryCache.set(source.agentId, {
-        existing: source.result.available ? source.result.targets : [],
-        fallback: {
-          agentId: source.agentId,
-          storePath: inventory.paths.get(source.agentId)!.configured,
-        },
-      });
-    }
-    const lookup = {
-      ...params,
-      cfg: inventory.config,
-      key: params.key,
-      env: inventory.env,
-      targetDiscoveryCache,
-      exactRead: retainPlan ? true : params.exactRead,
-      projection: params.projection,
-      preserveQualifiedAddress: params.preserveQualifiedAddress,
-    };
-    const prepareReads = async <T>(reads: readonly GatewaySessionStoreRead[], select: () => T) => {
-      assertCurrent();
-      const pending = reads.filter((read) => read.result === undefined);
-      // The public store-returning API retains its full-store default. Authority plans
-      // and explicit exact reads keep the bounded row operation below.
-      if (pending.some((read) => read.options.exactKeys === undefined)) {
-        const readNext = async (index: number): Promise<T> => {
-          const read = pending[index];
-          if (!read) {
-            return select();
-          }
-          return withSessionStoreReaderInWorker(
-            { agentId: read.agentId ?? agentId, storePath: read.storePath, env: inventory.env },
-            async ({ reader, database, continuation, assertCurrent: assertSourceCurrent }) => {
-              const result = await reader.readEntries(
-                {
-                  agentId: database.agentId,
-                  storePath: database.path,
-                  env: database.env,
-                  projection: read.options.projection === "list" ? "list" : "full",
-                  sessionKeys: read.options.exactKeys,
-                },
-                continuation,
-              );
-              assertSourceCurrent();
-              read.result = ok(
-                Object.fromEntries(
-                  result.entries.map(({ sessionKey, entry }) => [sessionKey, entry]),
-                ),
-              );
-              read.readSource = { agentId: database.agentId, path: database.path };
-              read.capturedReadSource = result.source;
-              return readNext(index + 1);
-            },
-            { dataOnly: true },
+  const prepared = await inventoryRead.withRead(
+    async (sources, assertCurrent) => {
+      const targetDiscoveryCache: GatewaySessionStoreDiscoveryCache = new Map();
+      for (const source of sources.agents) {
+        if (!source.result.available && source.result.reason !== "database-missing") {
+          throw new SessionStoreUnavailableError(
+            source.agentId,
+            source.result.reason,
+            source.result.error,
           );
-        };
-        return readNext(0);
+        }
+        targetDiscoveryCache.set(source.agentId, {
+          existing: source.result.available ? source.result.targets : [],
+          fallback: {
+            agentId: source.agentId,
+            storePath: inventory.paths.get(source.agentId)!.configured,
+          },
+        });
       }
-      return await withSessionEntriesFromStoresInWorker(
-        pending.map((read) => ({
-          agentId: read.agentId ?? agentId,
-          storePath: read.storePath,
-          sessionKeys: read.options.exactKeys!,
-          projection: read.options.projection === "list" ? ("list" as const) : ("exact" as const),
-          snapshotFields:
-            typeof read.options.projection === "object" ? read.options.projection : undefined,
-          env: inventory.env,
-        })),
-        (loaded) => {
-          assertCurrent();
-          for (const [index, read] of pending.entries()) {
-            const preparedRead = loaded[index]!;
-            read.result = ok(
-              Object.fromEntries(
-                preparedRead.result.entries.map(({ sessionKey, entry }) => [sessionKey, entry]),
-              ),
+      const lookup = {
+        ...params,
+        cfg: inventory.config,
+        key: params.key,
+        env: inventory.env,
+        targetDiscoveryCache,
+        exactRead: retainPlan ? true : params.exactRead,
+        projection: params.projection,
+        preserveQualifiedAddress: params.preserveQualifiedAddress,
+      };
+      const prepareReads = async <T>(
+        reads: readonly GatewaySessionStoreRead[],
+        select: () => T,
+      ) => {
+        assertCurrent();
+        const pending = reads.filter((read) => read.result === undefined);
+        // The public store-returning API retains its full-store default. Authority plans
+        // and explicit exact reads keep the bounded row operation below.
+        if (pending.some((read) => read.options.exactKeys === undefined)) {
+          const readNext = async (index: number): Promise<T> => {
+            const read = pending[index];
+            if (!read) {
+              return select();
+            }
+            return withSessionStoreReaderInWorker(
+              { agentId: read.agentId ?? agentId, storePath: read.storePath, env: inventory.env },
+              async ({ reader, database, continuation, assertCurrent: assertSourceCurrent }) => {
+                const result = await reader.readEntries(
+                  {
+                    agentId: database.agentId,
+                    storePath: database.path,
+                    env: database.env,
+                    projection: read.options.projection === "list" ? "list" : "full",
+                    sessionKeys: read.options.exactKeys,
+                  },
+                  continuation,
+                );
+                assertSourceCurrent();
+                read.result = Object.fromEntries(
+                  result.entries.map(({ sessionKey, entry }) => [sessionKey, entry]),
+                );
+                read.readSource = { agentId: database.agentId, path: database.path };
+                read.capturedReadSource = result.source;
+                return readNext(index + 1);
+              },
+              { dataOnly: true },
             );
-            read.readSource = {
-              agentId: preparedRead.database.agentId,
-              path: preparedRead.database.path,
-            };
-            const identity = readDatabasePathIdentitySync(preparedRead.database.path);
-            preparedRead.assertCurrent();
-            if (identity.key.startsWith("file:")) {
-              read.capturedReadSource = {
-                ...read.readSource,
-                databaseIdentity: identity.key.slice("file:".length),
-                databaseBirthtime: identity.birthtime,
-              };
-            }
-            if (retainPlan) {
-              captured.set(read, {
-                input: {
-                  agentId: preparedRead.database.agentId,
-                  storePath: preparedRead.database.path,
-                  sessionKeys: [...read.options.exactKeys!],
-                  projection: "exact",
-                  env: inventory.env,
-                },
-                source: read.readSource,
-                expectedSource: read.capturedReadSource,
-              });
-            }
-          }
-          return select();
-        },
-        { ordered: onSelected !== undefined },
-      );
-    };
-    const selected =
-      retainPlan || onSelected
-        ? await prepareGatewaySessionStoreTargetReadPlan(lookup, prepareReads, onSelected)
-        : {
-            target: await prepareGatewaySessionStoreTargetReadOnly(lookup, prepareReads),
-            plan: undefined,
           };
-    assertCurrent();
-    return selected;
-  }, params.assertActive);
+          return readNext(0);
+        }
+        return await withSessionEntriesFromStoresInWorker(
+          pending.map((read) => ({
+            agentId: read.agentId ?? agentId,
+            storePath: read.storePath,
+            sessionKeys: read.options.exactKeys!,
+            projection: read.options.projection === "list" ? ("list" as const) : ("exact" as const),
+            snapshotFields:
+              typeof read.options.projection === "object" ? read.options.projection : undefined,
+            env: inventory.env,
+          })),
+          (loaded) => {
+            assertCurrent();
+            for (const [index, read] of pending.entries()) {
+              const preparedRead = loaded[index]!;
+              read.result = Object.fromEntries(
+                preparedRead.result.entries.map(({ sessionKey, entry }) => [sessionKey, entry]),
+              );
+              read.readSource = {
+                agentId: preparedRead.database.agentId,
+                path: preparedRead.database.path,
+              };
+              const identity = readDatabasePathIdentitySync(preparedRead.database.path);
+              preparedRead.assertCurrent();
+              if (identity.key.startsWith("file:")) {
+                read.capturedReadSource = {
+                  ...read.readSource,
+                  databaseIdentity: identity.key.slice("file:".length),
+                  databaseBirthtime: identity.birthtime,
+                };
+              }
+              if (retainPlan) {
+                captured.set(read, {
+                  input: {
+                    agentId: preparedRead.database.agentId,
+                    storePath: preparedRead.database.path,
+                    sessionKeys: [...read.options.exactKeys!],
+                    projection: "exact",
+                    env: inventory.env,
+                  },
+                  source: read.readSource,
+                  expectedSource: read.capturedReadSource,
+                });
+              }
+            }
+            return select();
+          },
+          { ordered: onSelected !== undefined, signal: params.signal },
+        );
+      };
+      const selected =
+        retainPlan || onSelected
+          ? await prepareGatewaySessionStoreTargetReadPlan(lookup, prepareReads, onSelected)
+          : {
+              target: await prepareGatewaySessionStoreTargetReadOnly(lookup, prepareReads),
+              plan: undefined,
+            };
+      assertCurrent();
+      return selected;
+    },
+    params.assertActive,
+    params.signal,
+  );
   params.assertActive?.();
   if (!retainPlan || !prepared.plan) {
     return { target: prepared.target };
@@ -384,8 +381,8 @@ async function prepareGatewaySessionStoreReadInWorker(
         ) {
           throw new Error("Prepared session lookup source changed");
         }
-        read.result = ok(
-          Object.fromEntries(current.entries.map(({ sessionKey, entry }) => [sessionKey, entry])),
+        read.result = Object.fromEntries(
+          current.entries.map(({ sessionKey, entry }) => [sessionKey, entry]),
         );
         read.readSource = current.source;
         read.capturedReadSource = current.capturedReadSource;
@@ -462,7 +459,6 @@ export async function loadGatewaySessionEntryReadOnlyInWorker(
 /** Retain the original lookup domain for a later synchronous admission predicate. */
 export async function prepareGatewaySessionEntryReadOnlyInWorker(
   params: Parameters<typeof loadGatewaySessionEntryReadOnlyInWorker>[0],
-  onSelected?: (target: GatewaySessionStoreTargetWithStore) => void,
 ): Promise<{
   loaded: Awaited<ReturnType<typeof loadGatewaySessionEntryReadOnlyInWorker>>;
   readPlan?: GatewaySessionEntryReadPlan;
@@ -474,7 +470,6 @@ export async function prepareGatewaySessionEntryReadOnlyInWorker(
       projection: params.projection ?? "full",
     },
     true,
-    onSelected,
   );
   params.assertActive?.();
   const select = (current: GatewaySessionStoreTargetWithStore) => {

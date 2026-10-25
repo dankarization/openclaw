@@ -1,4 +1,6 @@
 import { expect, it } from "vitest";
+import { pauseVirtualClock } from "../test-helpers/control-ui-e2e.ts";
+import { twoFrames } from "./chat-presentation.test-support.ts";
 import {
   createNewSessionPageE2eSuite,
   installMockGateway,
@@ -6,7 +8,7 @@ import {
 
 const suite = createNewSessionPageE2eSuite();
 suite.define(() => {
-  it("keeps model options stable while typing with unrelated session updates", async () => {
+  it("keeps model options stable and welcome recents current through typing and row updates", async () => {
     await suite.withPage({ viewport: { width: 1440, height: 900 } }, async ({ page }) => {
       const gateway = await installMockGateway(page, {
         models: [
@@ -24,26 +26,33 @@ suite.define(() => {
           kind: "direct",
           childOwnerSessionKeys: [],
           label: "Research session " + index,
-          updatedAt: 1000 + index,
+          // Keep the changed row in the admitted shared page, not overflow
+          // whose promotion correctly requires an authoritative membership read.
+          updatedAt: 2000 - index,
         })),
       });
+      await page.clock.install();
       await page.goto(suite.server.baseUrl + "new");
-      await page.locator('[data-chat-model-option="fixture/model-1999"]').waitFor({
+      const modelTrigger = page.locator("[data-chat-model-select]");
+      await modelTrigger.click();
+      await page.locator('[data-chat-model-option="openai/gpt-5.5"]').waitFor({
         state: "attached",
       });
+      await modelTrigger.click();
       const input = page.locator(".new-session-page__message");
       await input.fill("Warmup ");
-      await input.focus();
-      await page.evaluate(
-        () =>
-          new Promise<void>((resolve) => {
-            requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-          }),
-      );
+      await twoFrames(page);
+      const sessionKey = "agent:main:dashboard:typing-0";
+      const sidebarRow = page.locator(`aside.sidebar [data-session-key="${sessionKey}"]`).first();
+      await expect.poll(() => sidebarRow.textContent()).toContain("Research session 0");
+      await pauseVirtualClock(page);
       const observation = await page.evaluateHandle(() => {
         let catalogLabelReads = 0;
         const textarea = document.querySelector(".new-session-page__message");
-        const modelOption = document.querySelector('[data-chat-model-option="fixture/model-1999"]');
+        const modelOption = document.querySelector('[data-chat-model-option="openai/gpt-5.5"]');
+        if (!modelOption || !textarea) {
+          throw new Error("Expected the selected model row and composer to remain mounted");
+        }
         // oxlint-disable-next-line typescript/unbound-method -- Reflect.apply preserves the original receiver.
         const original = String.prototype.toLocaleLowerCase;
         // Count preparation even when Solid suppresses identical DOM writes.
@@ -52,72 +61,54 @@ suite.define(() => {
           this: string,
           ...args: Parameters<string["toLocaleLowerCase"]>
         ) {
-          if (/^Model \d+$/.test(this)) {
-            catalogLabelReads += 1;
-          }
+          catalogLabelReads += /^Model \d+$/.test(this) ? 1 : 0;
           return Reflect.apply(original, this, args);
         };
-        return {
-          finish() {
-            // oxlint-disable-next-line no-extend-native -- Restore the page-local instrumentation.
-            String.prototype.toLocaleLowerCase = original;
-            return {
-              catalogLabelReads,
-              sameTextarea: textarea === document.querySelector(".new-session-page__message"),
-              sameModelOption:
-                modelOption ===
-                document.querySelector('[data-chat-model-option="fixture/model-1999"]'),
-            };
-          },
+        return () => {
+          // oxlint-disable-next-line no-extend-native -- Restore the page-local instrumentation.
+          String.prototype.toLocaleLowerCase = original;
+          return {
+            catalogLabelReads,
+            sameTextarea: textarea === document.querySelector(".new-session-page__message"),
+            sameModelOption:
+              modelOption === document.querySelector('[data-chat-model-option="openai/gpt-5.5"]'),
+          };
         };
       });
-      const samples: number[] = [];
-      const sessionKey = "agent:main:dashboard:typing-0";
       const row = await gateway.getSessionRow(sessionKey);
-      const requestsBefore = await gateway.getRequests();
-      for (const key of "abcdefghij") {
+      const updateRow = async (label: string) => {
+        const now = await page.evaluate(() => Date.now());
         await gateway.emitGatewayEvent("sessions.changed", {
           agentId: "main",
           sessionKey,
           reason: "patch",
           ancestorSessions: [],
-          session: {
-            ...row,
-            label: "Background update " + key,
-            displayName: "Background update " + key,
-            updatedAt: Date.now(),
-            snapshotAt: Date.now(),
-          },
+          session: { ...row, label, displayName: label, updatedAt: now, snapshotAt: now },
         });
-        const start = performance.now();
+      };
+      const requestsBefore = await gateway.getRequests();
+      for (const key of "abcdefghij") {
+        await updateRow("Background update " + key);
         await input.press(key);
-        await page.evaluate(
-          () =>
-            new Promise<void>((resolve) => {
-              requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-            }),
-        );
-        samples.push(performance.now() - start);
+        await page.clock.runFor(32);
       }
-      // Keep timing diagnostic-only: the deterministic regression is catalog work,
-      // not a wall-clock threshold sensitive to the machine running this test.
-      console.log("New Session key + two frames (ms)", samples);
+      // Cross the event-collection window, but not the independent 60-second fallback.
+      await page.clock.fastForward(5_001);
       expect(await input.inputValue()).toBe("Warmup abcdefghij");
-      expect(await observation.evaluate((value) => value.finish())).toEqual({
+      expect(await observation.evaluate((finish) => finish())).toEqual({
         catalogLabelReads: 0,
         sameTextarea: true,
         sameModelOption: true,
       });
-      await expect
-        .poll(() =>
-          page
-            .locator('aside.sidebar [data-session-key="' + sessionKey + '"]')
-            .first()
-            .textContent(),
-        )
-        .toContain("Background update j");
+      await expect.poll(() => sidebarRow.textContent()).toContain("Background update j");
       expect((await gateway.getRequests()).slice(requestsBefore.length)).toEqual([]);
       await observation.dispose();
+      // Reveal catches up from the current owner, not a retained mutable roster.
+      await input.fill("");
+      const recent = page.locator(".agent-chat__recent-name").first();
+      await expect.poll(() => recent.textContent()).toBe("Background update j");
+      await updateRow("Visible recent update");
+      await expect.poll(() => recent.textContent()).toBe("Visible recent update");
     });
   });
 });

@@ -68,7 +68,6 @@ import androidx.compose.ui.test.filter
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
-import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -220,16 +219,13 @@ class SidebarGatewayPickerTest {
     drainWithMainLooper { withTimeout(5_000) { model.chatHistoryLoading.first { !it } } }
     composeRule.onNodeWithContentDescription("Show Sidebar").performClick()
     capture("catalog-chat-sidebar")
-    val create =
-      composeRule.onNode(
-        hasContentDescription("New session") and hasAnyAncestor(hasText("Codex")),
-      )
-    create.assertIsEnabled()
+    val actions = composeRule.onNodeWithText("Codex").onChildren().filter(hasClickAction())
+    actions.assertCountEquals(1)
     composeRule.runOnIdle {
       scopes.value = listOf("operator.read", "operator.write")
       ReflectionHelpers.getField<MutableStateFlow<NodeRuntime.GatewayControlPage?>>(runtime, "_gatewayControlPage").value = null
     }
-    create.assertIsEnabled().performClick()
+    actions.onFirst().assertIsEnabled().performClick()
     drainWithMainLooper { withTimeout(5_000) { model.chatSessionKey.first { it == "agent:main:dashboard:catalog-chat" } } }
     composeRule.runOnIdle {
       assertEquals(listOf("sessions.create" to """{"agentId":"main","catalogId":"codex"}"""), requests.filter { it.first == "sessions.create" })
