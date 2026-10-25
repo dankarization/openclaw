@@ -14,8 +14,16 @@ import { resolveTelegramDirectTopicNameCacheScope, updateTopicName } from "./top
 
 describeTelegramDispatch("Telegram generated topic refinement", () => {
   const sessionKey = "agent:default:telegram:direct:123";
-  const context = (text: string) =>
-    createContext({ ctxPayload: { SessionKey: sessionKey, RawBody: text } });
+  const context = (text: string) => {
+    const result = createContext();
+    result.ctxPayload = {
+      ...result.ctxPayload,
+      SessionKey: sessionKey,
+      RawBody: text,
+      CommandAuthorized: true,
+    };
+    return result;
+  };
   const reply = () => {
     dispatchReplyWithBufferedBlockDispatcher.mockImplementation(async ({ dispatcherOptions }) => {
       await dispatcherOptions.deliver({ text: "Reply" }, { kind: "final" });
