@@ -28,7 +28,7 @@ function createCallbackActions() {
 }
 
 describe("sendTelegramQuestionFeedback", () => {
-  it("sends the custom-input prompt before retiring question controls", async () => {
+  it("keeps question controls available after requesting custom input", async () => {
     const actions = createCallbackActions();
 
     await sendTelegramQuestionFeedback({
@@ -39,14 +39,8 @@ describe("sendTelegramQuestionFeedback", () => {
       user: { id: 42, is_bot: false, first_name: "Ayaan" },
     });
 
-    const [replyOrder] = actions.replyToCallbackChat.mock.invocationCallOrder;
-    const [clearOrder] = actions.clearCallbackButtons.mock.invocationCallOrder;
-    expect(replyOrder).toBeDefined();
-    expect(clearOrder).toBeDefined();
-    if (replyOrder === undefined || clearOrder === undefined) {
-      throw new Error("Expected both custom-input feedback operations");
-    }
-    expect(replyOrder).toBeLessThan(clearOrder);
+    expect(actions.replyToCallbackChat).toHaveBeenCalledOnce();
+    expect(actions.clearCallbackButtons).not.toHaveBeenCalled();
   });
 
   it("keeps question controls when Telegram rejects the custom-input prompt", async () => {
@@ -87,5 +81,26 @@ describe("handleTelegramQuestionCallback", () => {
       }),
     ).resolves.toBeUndefined();
     expect(feedback).toHaveBeenCalledOnce();
+  });
+  it("prompts for a keyed custom answer on an indexed question", async () => {
+    const feedback = vi.fn(async () => {});
+    await handleTelegramQuestionCallback({
+      callback: {
+        questionId: callback.questionId,
+        questionIndex: 1,
+        intent: "custom-input",
+      },
+      cfg: {} as never,
+      senderId: "42",
+      feedback,
+      resolveQuestion: vi.fn(async () => ({
+        status: "custom-input" as const,
+        questionId: "details",
+      })),
+    });
+    expect(feedback).toHaveBeenCalledWith(
+      'Reply with your answer. To answer out of order, use "details: your answer".',
+      "custom-input",
+    );
   });
 });

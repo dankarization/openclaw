@@ -101,7 +101,7 @@ export function createTelegramCallbackMessageActions(params: {
   };
 }
 type ResolveQuestionParams = Parameters<typeof questionGatewayRuntime.resolveOption>[0];
-type QuestionFeedbackMode = "terminal" | "retry" | "custom-input";
+type QuestionFeedbackMode = "terminal" | "retry" | "custom-input" | "pending";
 
 export async function sendTelegramQuestionFeedback(params: {
   actions: TelegramCallbackMessageActions;
@@ -114,9 +114,7 @@ export async function sendTelegramQuestionFeedback(params: {
     await params.actions.clearCallbackButtons().catch(() => {});
   }
   const groupCustomInput = params.mode === "custom-input" && params.isGroup;
-  const text = groupCustomInput
-    ? `${params.user.first_name}, reply with your own answer.`
-    : params.text;
+  const text = groupCustomInput ? `${params.user.first_name}, ${params.text}` : params.text;
   await params.actions.replyToCallbackChat(
     text,
     params.mode === "custom-input"
@@ -139,16 +137,14 @@ export async function sendTelegramQuestionFeedback(params: {
         }
       : undefined,
   );
-  if (params.mode === "custom-input") {
-    // Keep the existing answer route until Telegram accepts its replacement.
-    await params.actions.clearCallbackButtons().catch(() => {});
-  }
 }
 
 export async function handleTelegramQuestionCallback(params: {
   callback: TelegramQuestionCallback;
   cfg: ResolveQuestionParams["cfg"];
   senderId: string;
+  authorize?: () => boolean | Promise<boolean>;
+  expectedSessionKey?: string;
   feedback: (text: string, mode: QuestionFeedbackMode) => Promise<unknown>;
 }): Promise<void> {
   try {
@@ -157,22 +153,42 @@ export async function handleTelegramQuestionCallback(params: {
       questionId: params.callback.questionId,
       ...(params.callback.intent === "custom-input"
         ? { customInput: true }
-        : { optionIndex: params.callback.optionIndex }),
+        : params.callback.intent === "done"
+          ? { done: true }
+          : { optionIndex: params.callback.optionIndex, selected: params.callback.selected }),
+      ...(params.callback.questionIndex !== undefined
+        ? { questionIndex: params.callback.questionIndex }
+        : {}),
+      ...(params.authorize ? { authorize: params.authorize } : {}),
       senderId: params.senderId,
+      expectedSessionKey: params.expectedSessionKey,
       clientDisplayName: "Telegram question",
     });
+    if (result.status === "denied") {
+      return;
+    }
     if (params.callback.intent === "custom-input") {
       const terminal = result.status === "already-terminal";
       await params.feedback(
-        terminal ? "This question was already answered." : "Reply with your own answer.",
+        terminal
+          ? "This question was already answered."
+          : params.callback.questionIndex !== undefined && result.status === "custom-input"
+            ? `Reply with your answer. To answer out of order, use "${result.questionId}: your answer".`
+            : "Reply with your own answer.",
         terminal ? "terminal" : "custom-input",
       );
       return;
     }
     await params
       .feedback(
-        result.status === "answered" ? "Answer submitted." : "This question was already answered.",
-        "terminal",
+        result.status === "answered"
+          ? "Answer submitted."
+          : result.status === "pending"
+            ? result.completed
+              ? "Answer saved. Waiting for the other questions."
+              : "Choice saved. Select more or tap Done."
+            : "This question was already answered.",
+        result.status === "pending" ? "pending" : "terminal",
       )
       .catch(() => {});
   } catch (error) {

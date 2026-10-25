@@ -20,7 +20,8 @@ import {
   type QuestionClient,
   type QuestionClientResolutionOwner,
 } from "./question-prompt-client.ts";
-import { parseQuestion } from "./question-prompt-parse.ts";
+import { saveQuestionProgressForState } from "./question-prompt-progress.ts";
+import { parseQuestionRecord } from "./question-prompt-record.ts";
 import {
   clearSecretQuestionDrafts,
   parseQuestionSubmissionResult,
@@ -48,6 +49,10 @@ export type QuestionPrompt = Pick<
   submitting: boolean;
   error: string | null;
   drafts: Map<string, QuestionDraft>;
+  draftAnswers?: QuestionAnswers;
+  draftRevision?: number;
+  draftCompletedIds?: string[];
+  saveProgress?: (questionId: string, values: string[]) => Promise<void>;
   secretStoreAllowedHostsDraft?: string;
   revision: number;
 };
@@ -200,6 +205,24 @@ function storeQuestionRecord(
 ): void {
   const revision = ++state.revision;
   const drafts = previous?.drafts ?? new Map();
+  if (
+    record.status === "pending" &&
+    (record.draftRevision ?? 0) > (previous?.draftRevision ?? -1)
+  ) {
+    for (const question of record.questions) {
+      const values = record.draftAnswers?.answers[question.questionId];
+      if (!values || question.isSecret) {
+        continue;
+      }
+      const options = new Set(question.options.map((option) => option.value ?? option.label));
+      drafts.set(question.questionId, {
+        selected: new Set(values.filter((value) => options.has(value))),
+        freeText: values
+          .filter((value) => !options.has(value))
+          .join(question.answerFormat === "lines" ? "\n" : ""),
+      });
+    }
+  }
   if (record.status !== "pending") {
     clearSecretQuestionDrafts(record.questions, drafts);
   }
@@ -217,6 +240,29 @@ function storeQuestionRecord(
         : false,
     error: record.status === "pending" ? (previous?.error ?? null) : null,
     drafts,
+    ...(record.status === "pending" &&
+    !record.questions.some((question) => question.isSecret || question.secretStore)
+      ? {
+          saveProgress: (questionId: string, values: string[]) =>
+            saveQuestionProgressForState(
+              state,
+              id,
+              questionId,
+              values,
+              (payload) => {
+                const next = parseQuestionRecord(payload);
+                if (next?.status !== "pending") {
+                  return;
+                }
+                storeQuestionRecord(state, id, next, state.prompts.get(id));
+                state.onChange();
+              },
+              (answers) =>
+                state.client &&
+                publishQuestionClientResolution(state.client, { id, status: "answered", answers }),
+            ),
+        }
+      : {}),
     ...(previous?.secretStoreAllowedHostsDraft !== undefined
       ? { secretStoreAllowedHostsDraft: previous.secretStoreAllowedHostsDraft }
       : {}),

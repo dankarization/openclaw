@@ -80,8 +80,9 @@ Rich Telegram surfaces: formatted messages, inline keyboards, agent message acti
 
     An account with `capabilities: []` inherits the channel capabilities. Use `capabilities: { inlineButtons: "off" }` to disable inline buttons explicitly.
 
-    `ask_user` uses these native controls for one single-select question.
-    Choices use one row each, and **Other…** opens Telegram's reply input.
+    `ask_user` uses native inline keyboards for one to three questions. Each
+    question is sent separately; multi-select adds **Done**. **Other…** opens
+    Telegram's reply input. These controls do not require rich-message buttons.
 
     Shared `message` tool example (`action: "send"`, `channel: "telegram"`):
 
