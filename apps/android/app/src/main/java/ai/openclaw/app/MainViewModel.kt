@@ -544,6 +544,7 @@ class MainViewModel internal constructor(
     runtimeState(initial = SessionGroupCatalogSnapshot()) { it.chat.sessionGroupCatalog }
   internal val sessionRosterHasMore: StateFlow<Boolean> = runtimeState(initial = false) { it.chat.sessionRosterHasMore }
   internal val sessionRosterLoadingMore: StateFlow<Boolean> = runtimeState(initial = false) { it.chat.sessionRosterLoadingMore }
+  internal val sessionRosterLoadFailed: StateFlow<Boolean> = runtimeState(initial = false) { it.chat.sessionRosterLoadFailed }
 
   internal fun refreshSessionGroups() = ensureRuntime().chat.refreshSessionGroups()
 

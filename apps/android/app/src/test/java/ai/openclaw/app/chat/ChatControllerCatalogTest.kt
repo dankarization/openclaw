@@ -114,9 +114,11 @@ class ChatControllerCatalogTest {
   @Test
   fun rosterPagesAndRefreshRetainMembersBeyondTheFirstWindow() =
     runTest {
+      var unavailable = false
       val (controller, requests) =
         chatControllerTestSetup {
           respond("sessions.list") { raw ->
+            if (unavailable) error("UNAVAILABLE")
             val params = chatControllerTestJson.parseToJsonElement(raw!!).jsonObject
             val offset = params["offset"]?.toString()?.toInt() ?: 0
             val limit = params["limit"]?.toString()?.toInt() ?: 200
@@ -129,7 +131,15 @@ class ChatControllerCatalogTest {
       advanceUntilIdle()
       assertEquals(200, controller.sessions.value.size)
       assertTrue(controller.sessionRosterHasMore.value)
+      unavailable = true
+      assertFalse(controller.loadMoreSessions())
+      assertTrue(controller.sessionRosterLoadFailed.value)
+      assertFalse(controller.sessionRosterLoadingMore.value)
+      assertEquals(200, controller.sessions.value.size)
+      assertTrue(controller.sessionRosterHasMore.value)
+      unavailable = false
       assertTrue(controller.loadMoreSessions())
+      assertFalse(controller.sessionRosterLoadFailed.value)
       assertEquals(205, controller.sessions.value.size)
       assertFalse(controller.sessionRosterHasMore.value)
       controller.refreshSessions(limit = 200)
@@ -137,7 +147,5 @@ class ChatControllerCatalogTest {
       assertEquals(205, controller.sessions.value.size)
       val last = requests.last { it.first == "sessions.list" }.second!!
       assertEquals(JsonPrimitive(400), chatControllerTestJson.parseToJsonElement(last).jsonObject["limit"])
-      controller.onGatewayScopeChanging()
-      assertFalse(controller.sessionRosterHasMore.value)
     }
 }

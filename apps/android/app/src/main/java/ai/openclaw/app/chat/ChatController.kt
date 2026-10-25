@@ -835,6 +835,8 @@ class ChatController internal constructor(
   internal val sessionRosterHasMore: StateFlow<Boolean> = sessionRosterHasMoreMutable.asStateFlow()
   private val sessionRosterLoadingMoreMutable = MutableStateFlow(false)
   internal val sessionRosterLoadingMore: StateFlow<Boolean> = sessionRosterLoadingMoreMutable.asStateFlow()
+  private val sessionRosterLoadFailedMutable = MutableStateFlow(false)
+  internal val sessionRosterLoadFailed: StateFlow<Boolean> = sessionRosterLoadFailedMutable.asStateFlow()
   private val sessionRosterLoadMutex = Mutex()
 
   private fun clearSessionRosterPaging() {
@@ -842,6 +844,7 @@ class ChatController internal constructor(
     sessionRosterLoadedLimit = null
     sessionRosterHasMoreMutable.value = false
     sessionRosterLoadingMoreMutable.value = false
+    sessionRosterLoadFailedMutable.value = false
   }
 
   // One acknowledgement per unread episode: the pending flag clears when the
@@ -1293,9 +1296,15 @@ class ChatController internal constructor(
       val offset = sessionRosterNextOffset ?: return false
       if (sessionsListArchived || !sessionRosterHasMoreMutable.value) return false
       val owner = currentCacheScope()
+      val ownerAgentId = resolveAgentIdForSessionKey(_sessionKey.value)
       sessionRosterLoadingMoreMutable.value = true
+      sessionRosterLoadFailedMutable.value = false
       try {
-        fetchSessions(sessionsListLimit ?: SIDEBAR_SESSION_ROSTER_LIMIT, offset = offset, append = true)
+        val loaded = fetchSessions(sessionsListLimit ?: SIDEBAR_SESSION_ROSTER_LIMIT, offset = offset, append = true)
+        if (owner == currentCacheScope() && ownerAgentId == resolveAgentIdForSessionKey(_sessionKey.value)) {
+          sessionRosterLoadFailedMutable.value = !loaded
+        }
+        loaded
       } finally {
         if (owner == currentCacheScope()) sessionRosterLoadingMoreMutable.value = false
       }

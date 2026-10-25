@@ -483,6 +483,7 @@ internal fun OpenClawSidebar(
   val groupCatalog by viewModel.sessionGroupCatalog.collectAsState()
   val rosterHasMore by viewModel.sessionRosterHasMore.collectAsState()
   val rosterLoadingMore by viewModel.sessionRosterLoadingMore.collectAsState()
+  val rosterLoadFailed by viewModel.sessionRosterLoadFailed.collectAsState()
   val storedGroups = (groupCatalog.names + localGroups).distinct()
   val questions by viewModel.chatQuestions.collectAsState()
   val approvalInbox by viewModel.execApprovalInbox.collectAsState()
@@ -983,6 +984,9 @@ internal fun OpenClawSidebar(
             }
           }
           if (rosterHasMore) {
+            if (rosterLoadFailed) {
+              SidebarCatalogStatus(nativeString("Could not load more sessions. Try again."), palette)
+            }
             SidebarActionRow(
               label = nativeString(if (rosterLoadingMore) "Loading" else "Load more sessions"),
               icon = Icons.Default.KeyboardArrowDown,
