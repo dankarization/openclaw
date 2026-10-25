@@ -31,6 +31,10 @@ describeTelegramDispatch("Telegram generated topic refinement", () => {
     expect(bot.api.editForumTopic).toHaveBeenLastCalledWith(123, 777, { name: "Topic label" });
     mockDefaultSessionEntry({ sessionId: "s1", systemSent: true });
     generateTopicLabel.mockResolvedValue("Fix release signing");
+    await dispatchWithContext({
+      context: { ...context("/review disabled task"), skillFilter: ["another-skill"] },
+      bot,
+    });
     for (const text of ["/status", "/unknown task", ...Array<string>(5).fill("/review signing")]) {
       await dispatchWithContext({ context: context(text), bot });
     }

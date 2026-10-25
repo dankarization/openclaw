@@ -21,6 +21,7 @@ export async function updateTelegramTopicLabel(params: {
   threadId: number;
   userMessage: string;
   prompt: string;
+  skillFilter?: string[];
   firstTurn: boolean;
   loadFreshSessionEntry: FreshTelegramSessionEntryLoader;
   isSuperseded: () => boolean;
@@ -42,6 +43,7 @@ export async function updateTelegramTopicLabel(params: {
     workspaceDir: resolveAgentWorkspaceDir(params.cfg, params.agentId),
     sessionEntry: entry,
     sessionKey: params.sessionKey,
+    skillFilter: params.skillFilter,
   });
   let userMessage = params.userMessage;
   if (params.firstTurn) {

@@ -460,6 +460,7 @@ export const dispatchTelegramMessage = async (
         threadId: dispatchContext.threadSpec.id!,
         userMessage,
         prompt: autoTopicConfig.prompt,
+        skillFilter: dispatchContext.skillFilter,
         firstTurn: isFirstTurnInSession,
         loadFreshSessionEntry,
         isSuperseded: isDispatchSuperseded,

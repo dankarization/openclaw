@@ -383,9 +383,11 @@ vi.mock("openclaw/plugin-sdk/models-provider-runtime", async (importOriginal) =>
 
 vi.mock("openclaw/plugin-sdk/skill-commands-runtime", async (importOriginal) => ({
   ...(await importOriginal<typeof import("openclaw/plugin-sdk/skill-commands-runtime")>()),
-  prepareSkillCommandsForWorkspace: vi.fn(async () => [
-    { name: "review", skillName: "review", description: "Review a task" },
-  ]),
+  prepareSkillCommandsForWorkspace: vi.fn(async (params: { skillFilter?: string[] }) =>
+    params.skillFilter && !params.skillFilter.includes("review")
+      ? []
+      : [{ name: "review", skillName: "review", description: "Review a task" }],
+  ),
   prepareSkillCommandsForAgents: (
     ...args: Parameters<TelegramBotFixtureMocks["prepareSkillCommandsForAgents"]>
   ) => telegramDepsForTest.prepareSkillCommandsForAgents(...args),
