@@ -1,5 +1,5 @@
 import { resetPluginStateStoreForTests } from "openclaw/plugin-sdk/plugin-state-test-runtime";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import {
   createBot,
   createContext,
@@ -26,9 +26,10 @@ describeTelegramDispatch("Telegram generated topic refinement", () => {
   it("renames through dispatch after six task follow-ups, once, including registered skills", async () => {
     reply();
     const bot = createBot();
+    const editForumTopic = vi.spyOn(bot.api, "editForumTopic");
     mockDefaultSessionEntry({ sessionId: "s1" });
     await dispatchWithContext({ context: context("Plan the release"), bot });
-    expect(bot.api.editForumTopic).toHaveBeenLastCalledWith(123, 777, { name: "Topic label" });
+    expect(editForumTopic).toHaveBeenLastCalledWith(123, 777, { name: "Topic label" });
     mockDefaultSessionEntry({ sessionId: "s1", systemSent: true });
     generateTopicLabel.mockResolvedValue("Fix release signing");
     await dispatchWithContext({
@@ -38,22 +39,23 @@ describeTelegramDispatch("Telegram generated topic refinement", () => {
     for (const text of ["/status", "/unknown task", ...Array<string>(5).fill("/review signing")]) {
       await dispatchWithContext({ context: context(text), bot });
     }
-    expect(bot.api.editForumTopic).toHaveBeenCalledTimes(1);
+    expect(editForumTopic).toHaveBeenCalledTimes(1);
     resetTelegramTopicNameCacheForTest();
     resetPluginStateStoreForTests();
     await dispatchWithContext({ context: context("Fix the certificate"), bot });
-    expect(bot.api.editForumTopic).toHaveBeenLastCalledWith(123, 777, {
+    expect(editForumTopic).toHaveBeenLastCalledWith(123, 777, {
       name: "Fix release signing",
     });
     for (let index = 0; index < 7; index++) {
       await dispatchWithContext({ context: context("More detail"), bot });
     }
-    expect(bot.api.editForumTopic).toHaveBeenCalledTimes(2);
+    expect(editForumTopic).toHaveBeenCalledTimes(2);
   });
 
   it("preserves a manual rename during inference", async () => {
     reply();
     const bot = createBot();
+    const editForumTopic = vi.spyOn(bot.api, "editForumTopic");
     const initial = context("Plan the release");
     const scope = resolveTelegramDirectTopicNameCacheScope(initial.turn.storePath, "default");
     mockDefaultSessionEntry({ sessionId: "s1" });
@@ -67,29 +69,31 @@ describeTelegramDispatch("Telegram generated topic refinement", () => {
       return "Fix release signing";
     });
     await dispatchWithContext({ context: context("Fix it"), bot });
-    expect(bot.api.editForumTopic).toHaveBeenCalledTimes(1);
+    expect(editForumTopic).toHaveBeenCalledTimes(1);
   });
 
   it("does not refine generated names belonging to a previous session", async () => {
     reply();
     const bot = createBot();
+    const editForumTopic = vi.spyOn(bot.api, "editForumTopic");
     mockDefaultSessionEntry({ sessionId: "s1" });
     await dispatchWithContext({ context: context("Plan the release"), bot });
     mockDefaultSessionEntry({ sessionId: "s2", systemSent: true });
     for (let index = 0; index < 7; index++) {
       await dispatchWithContext({ context: context("New conversation"), bot });
     }
-    expect(bot.api.editForumTopic).toHaveBeenCalledTimes(1);
+    expect(editForumTopic).toHaveBeenCalledTimes(1);
   });
 
   it("preserves a manual name in the metadata owner's scope when the session uses another store", async () => {
     reply();
     const bot = createBot();
+    const editForumTopic = vi.spyOn(bot.api, "editForumTopic");
     mockDefaultSessionEntry({ sessionId: "s1" });
     const initial = context("Plan the release");
     initial.topicNameCacheScope = "separate-account-owner-store";
     await updateTopicName(123, 777, { name: "My project" }, initial.topicNameCacheScope);
     await dispatchWithContext({ context: initial, bot });
-    expect(bot.api.editForumTopic).not.toHaveBeenCalled();
+    expect(editForumTopic).not.toHaveBeenCalled();
   });
 });
