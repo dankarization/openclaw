@@ -25,7 +25,10 @@ import {
   resolveTelegramPromptContextSource,
 } from "./prompt-context-projection.js";
 import { registerTelegramQuestionDelivery } from "./question-finalization.js";
-import { buildTelegramQuestionRichMessage } from "./question-rich-message.js";
+import {
+  buildTelegramQuestionRichMessage,
+  updateTelegramQuestionRichMessage,
+} from "./question-rich-message.js";
 import { resolveTelegramRichMessages } from "./rich-messages-config.js";
 import type { TelegramSendOpts } from "./send-message-types.js";
 import { loadTelegramSendModule, type TelegramSendModule } from "./send-runtime.js";
@@ -428,6 +431,28 @@ export function createTelegramOutboundAdapter(
         (deliveredPart?.kind !== "text" &&
           result.meta !== undefined &&
           telegramCaptionDeliveryMetadata.has(result.meta));
+      const questionId = (payload.channelData?.askUser as { questionId?: unknown } | undefined)
+        ?.questionId;
+      const richQuestionMessage =
+        result.meta?.telegramHasRichQuestionButtons === true
+          ? (() => {
+              const prepared = canonicalizeTelegramPresentationPayload(payload, {
+                allowWebAppButtons: parseTelegramTarget(target.to).chatType === "direct",
+                richTables: true,
+              });
+              const telegramData = prepared.channelData?.telegram as
+                | TelegramPayloadData
+                | undefined;
+              return buildTelegramQuestionRichMessage({
+                payload,
+                buttons: resolveTelegramInlineButtons({
+                  buttons: telegramData?.buttons,
+                  presentation: prepared.presentation,
+                  interactive: prepared.interactive,
+                }),
+              });
+            })()
+          : undefined;
       registerTelegramQuestionDelivery({
         accountId,
         chatId,
@@ -446,12 +471,22 @@ export function createTelegramOutboundAdapter(
             verbose: false,
           });
         },
-        annotate: async (finalText) => {
+        annotate: async (finalText, statusLine) => {
           const { editMessageTelegram } = await loadSendModule();
+          const terminalRichMessage =
+            typeof questionId === "string" && richQuestionMessage
+              ? updateTelegramQuestionRichMessage({
+                  richMessage: richQuestionMessage,
+                  questionId,
+                  mode: "inactive",
+                  footerText: statusLine,
+                })
+              : undefined;
           await editMessageTelegram(chatId, messageId, finalText, {
             cfg,
             accountId,
             verbose: false,
+            ...(terminalRichMessage ? { richMessage: terminalRichMessage } : {}),
             ...(isCaptionDelivery ? { editMode: "caption" } : {}),
           });
         },

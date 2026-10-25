@@ -62,6 +62,7 @@ export type RichMessageButton = {
   callback_data?: string;
   url?: string;
   web_app?: { url: string };
+  disabled?: Record<string, never>;
 };
 
 export type InputRichBlockButtons = {

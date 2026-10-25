@@ -4,6 +4,7 @@ import type { RegisterTelegramHandlerParams } from "./bot-handlers.types.js";
 import { buildTelegramThreadParams, type TelegramThreadSpec } from "./bot/helpers.js";
 import type { TelegramCallbackButton } from "./button-types.js";
 import type { TelegramQuestionCallback } from "./question-callback-data.js";
+import { updateTelegramQuestionRichMessage } from "./question-rich-message.js";
 import { buildInlineKeyboard } from "./send.js";
 
 type TelegramCallbackReplyParams = Omit<
@@ -48,6 +49,34 @@ export function createTelegramCallbackMessageActions(params: {
         reply_markup: buildInlineKeyboard(buttons) ?? { inline_keyboard: [] },
       }),
     );
+  };
+
+  const editCallbackQuestionRichMessage = async (input: {
+    questionId: string;
+    questionIndex?: number;
+    selectedOptionIndex?: number;
+    mode: "selected" | "completed" | "inactive";
+  }): Promise<boolean> => {
+    const richMessage = updateTelegramQuestionRichMessage({
+      richMessage: callbackMessage.rich_message,
+      ...input,
+    });
+    if (!richMessage) {
+      return false;
+    }
+    try {
+      await bot.api.raw.editMessageText({
+        chat_id: callbackMessage.chat.id,
+        message_id: callbackMessage.message_id,
+        rich_message: richMessage,
+        ...callbackBusinessParams,
+      });
+    } catch (error) {
+      if (!String(error).includes("message is not modified")) {
+        throw error;
+      }
+    }
+    return true;
   };
 
   const deleteCallbackMessage = async () => {
@@ -95,6 +124,7 @@ export function createTelegramCallbackMessageActions(params: {
     editCallbackMessage,
     clearCallbackButtons: () => editCallbackButtons([]),
     editCallbackButtons,
+    editCallbackQuestionRichMessage,
     editCallbackMessageWithButtons,
     deleteCallbackMessage,
     replyToCallbackChat,
@@ -146,9 +176,11 @@ export async function handleTelegramQuestionCallback(params: {
   authorize?: () => boolean | Promise<boolean>;
   expectedSessionKey?: string;
   feedback: (text: string, mode: QuestionFeedbackMode) => Promise<unknown>;
+  updateRichMessage?: TelegramCallbackMessageActions["editCallbackQuestionRichMessage"];
+  resolveQuestion?: typeof questionGatewayRuntime.resolveOption;
 }): Promise<void> {
   try {
-    const result = await questionGatewayRuntime.resolveOption({
+    const result = await (params.resolveQuestion ?? questionGatewayRuntime.resolveOption)({
       cfg: params.cfg,
       questionId: params.callback.questionId,
       ...(params.callback.intent === "custom-input"
@@ -168,6 +200,18 @@ export async function handleTelegramQuestionCallback(params: {
       return;
     }
     if (params.callback.intent === "custom-input") {
+      if (result.status === "already-terminal") {
+        const updated = await params
+          .updateRichMessage?.({
+            questionId: params.callback.questionId,
+            questionIndex: params.callback.questionIndex,
+            mode: "inactive",
+          })
+          .catch(() => false);
+        if (updated) {
+          return;
+        }
+      }
       const terminal = result.status === "already-terminal";
       await params.feedback(
         terminal
@@ -177,6 +221,24 @@ export async function handleTelegramQuestionCallback(params: {
             : "Reply with your own answer.",
         terminal ? "terminal" : "custom-input",
       );
+      return;
+    }
+    const updated = await params
+      .updateRichMessage?.({
+        questionId: params.callback.questionId,
+        questionIndex: params.callback.questionIndex,
+        ...(params.callback.intent === "select"
+          ? { selectedOptionIndex: params.callback.optionIndex }
+          : {}),
+        mode:
+          result.status === "answered" || (result.status === "pending" && result.completed)
+            ? "completed"
+            : result.status === "pending"
+              ? "selected"
+              : "inactive",
+      })
+      .catch(() => false);
+    if (updated) {
       return;
     }
     await params

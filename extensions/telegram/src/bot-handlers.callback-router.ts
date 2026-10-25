@@ -299,6 +299,7 @@ export function createTelegramCallbackRouter({
               senderId,
               context: eventAuthContext,
             }),
+          updateRichMessage: actions.editCallbackQuestionRichMessage,
           feedback: async (text, mode) =>
             await sendTelegramQuestionFeedback({
               actions,

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   handleTelegramQuestionCallback,
   sendTelegramQuestionFeedback,
+  createTelegramCallbackMessageActions,
   type TelegramCallbackMessageActions,
 } from "./bot-handlers.callback-actions.js";
 
@@ -20,6 +21,8 @@ function createCallbackActions() {
     editCallbackMessage: vi.fn<TelegramCallbackMessageActions["editCallbackMessage"]>(),
     clearCallbackButtons,
     editCallbackButtons: vi.fn<TelegramCallbackMessageActions["editCallbackButtons"]>(),
+    editCallbackQuestionRichMessage:
+      vi.fn<TelegramCallbackMessageActions["editCallbackQuestionRichMessage"]>(),
     editCallbackMessageWithButtons:
       vi.fn<TelegramCallbackMessageActions["editCallbackMessageWithButtons"]>(),
     deleteCallbackMessage: vi.fn<TelegramCallbackMessageActions["deleteCallbackMessage"]>(),
@@ -101,6 +104,104 @@ describe("handleTelegramQuestionCallback", () => {
     expect(feedback).toHaveBeenCalledWith(
       'Reply with your answer. To answer out of order, use "details: your answer".',
       "custom-input",
+    );
+  });
+});
+
+describe("rich question callback updates", () => {
+  it("edits the clicked message after an accepted answer without posting a duplicate receipt", async () => {
+    const updateRichMessage = vi.fn(async () => true);
+    const feedback = vi.fn(async () => {});
+    await handleTelegramQuestionCallback({
+      callback: { ...callback, questionIndex: 0 },
+      cfg: {} as never,
+      senderId: "42",
+      updateRichMessage,
+      feedback,
+      resolveQuestion: vi.fn(async () => ({
+        status: "pending" as const,
+        questionId: "target",
+        optionValue: "Staging",
+        selectedValues: ["Staging"],
+        completed: true,
+      })),
+    });
+    expect(updateRichMessage).toHaveBeenCalledWith({
+      questionId: callback.questionId,
+      questionIndex: 0,
+      selectedOptionIndex: 1,
+      mode: "completed",
+    });
+    expect(feedback).not.toHaveBeenCalled();
+  });
+
+  it("turns a stale rich callback inactive without another task continuation", async () => {
+    const updateRichMessage = vi.fn(async () => true);
+    const feedback = vi.fn(async () => {});
+    const resolveQuestion = vi.fn(async () => ({
+      status: "already-terminal" as const,
+      reason: "already-terminal" as const,
+    }));
+    await handleTelegramQuestionCallback({
+      callback,
+      cfg: {} as never,
+      senderId: "42",
+      updateRichMessage,
+      feedback,
+      resolveQuestion,
+    });
+    expect(resolveQuestion).toHaveBeenCalledOnce();
+    expect(updateRichMessage).toHaveBeenCalledWith({
+      questionId: callback.questionId,
+      selectedOptionIndex: 1,
+      mode: "inactive",
+    });
+    expect(feedback).not.toHaveBeenCalled();
+  });
+
+  it("sends disabled rich buttons through Telegram editMessageText", async () => {
+    const edit = vi.fn(async () => ({}));
+    const actions = createTelegramCallbackMessageActions({
+      bot: { api: { raw: { editMessageText: edit } } } as never,
+      callbackMessage: {
+        chat: { id: 42 },
+        message_id: 99,
+        rich_message: {
+          blocks: [
+            { type: "paragraph", text: "Choose a target" },
+            {
+              type: "buttons",
+              buttons: [{ text: "Staging", callback_data: `tgq1:${callback.questionId}:0` }],
+            },
+            {
+              type: "buttons",
+              buttons: [{ text: "Review", callback_data: `tgq1:${callback.questionId}:1` }],
+            },
+          ],
+        },
+      } as never,
+      threadSpec: {} as never,
+    });
+    expect(
+      await actions.editCallbackQuestionRichMessage({
+        questionId: callback.questionId,
+        selectedOptionIndex: 0,
+        mode: "completed",
+      }),
+    ).toBe(true);
+    expect(edit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        chat_id: 42,
+        message_id: 99,
+        rich_message: {
+          blocks: [
+            { type: "paragraph", text: "Choose a target" },
+            { type: "buttons", buttons: [{ text: "✓ Staging", disabled: {} }] },
+            { type: "buttons", buttons: [{ text: "Review", disabled: {} }] },
+            { type: "footer", text: "Answer saved." },
+          ],
+        },
+      }),
     );
   });
 });
