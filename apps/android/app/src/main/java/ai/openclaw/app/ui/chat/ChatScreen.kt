@@ -190,7 +190,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -235,14 +234,12 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
@@ -301,7 +298,6 @@ private enum class ChatComposerPickerPage { Models, Permissions }
 internal object ChatUserMessageDisclosurePolicy {
   const val collapsedLineLimit = 12
   const val collapsedCharacterLimit = 700
-  const val viewportFraction = 0.6f
 
   fun collapsedPreview(text: String): String? {
     var end = minOf(text.length, collapsedCharacterLimit)
@@ -320,47 +316,6 @@ internal object ChatUserMessageDisclosurePolicy {
     if (end == text.length) return null
     return text.substring(0, end).trimEnd() + "…"
   }
-
-  fun viewportCollapsedPreview(
-    text: String,
-    viewportHeightPx: Int?,
-    maxWidthPx: Int,
-    measurer: TextMeasurer,
-    style: TextStyle,
-  ): String? {
-    val fixedPreview = collapsedPreview(text)
-    if (viewportHeightPx == null || viewportHeightPx <= 0 || maxWidthPx <= 0 || maxWidthPx == Constraints.Infinity) {
-      return fixedPreview
-    }
-    val candidate = fixedPreview?.removeSuffix("…") ?: text
-    val layout = measurer.measure(candidate, style = style, constraints = Constraints(maxWidth = maxWidthPx))
-    val heightLimit =
-      maxOf((viewportHeightPx * viewportFraction).toInt(), ceil(layout.getLineBottom(0)).toInt())
-    if (layout.size.height <= heightLimit) return fixedPreview
-
-    val lastLine = (0 until layout.lineCount).last { layout.getLineBottom(it) <= heightLimit.toFloat() }
-    val lastVisibleEnd = layout.getLineEnd(lastLine, visibleEnd = true)
-
-    fun preview(end: Int): String {
-      val safeEnd =
-        if (end in 1 until candidate.length && candidate[end - 1].isHighSurrogate() && candidate[end].isLowSurrogate()) end - 1 else end
-      return candidate.substring(0, safeEnd).trimEnd() + "…"
-    }
-
-    // The ellipsis itself can wrap onto another line. Fit the rendered preview,
-    // rather than only the unsuffixed source, inside the reader's height budget.
-    var low = 1
-    var high = lastVisibleEnd.coerceAtLeast(1)
-    while (low < high) {
-      val middle = (low + high + 1) / 2
-      if (measurer.measure(preview(middle), style = style, constraints = Constraints(maxWidth = maxWidthPx)).size.height <= heightLimit) {
-        low = middle
-      } else {
-        high = middle - 1
-      }
-    }
-    return preview(low)
-  }
 }
 
 internal fun shouldUseUserMessageDisclosure(
@@ -370,7 +325,7 @@ internal fun shouldUseUserMessageDisclosure(
   isUser &&
     content.isNotEmpty() &&
     content.all { it.type == "text" } &&
-    chatMessagePlainText(content).isNotBlank()
+    ChatUserMessageDisclosurePolicy.collapsedPreview(chatMessagePlainText(content)) != null
 
 private class ChatBranchOpening(
   val session: ChatModelPickerSession,
@@ -2550,76 +2505,57 @@ private fun ChatUserMessageText(
   expanded: Boolean,
   onExpandedChange: (Boolean) -> Unit,
 ) {
-  val navigation = LocalChatReaderNavigation.current
-  val viewportHeightPx by remember(navigation) {
-    derivedStateOf { navigation?.viewportHeight(Int.MAX_VALUE)?.takeIf { it in 1 until Int.MAX_VALUE } }
-  }
-  val style = ClawTheme.type.body.copy(fontWeight = FontWeight.Normal)
-  val measurer = rememberTextMeasurer()
+  val preview = ChatUserMessageDisclosurePolicy.collapsedPreview(plainText)
   val action = key(plainText) { rememberChatReaderAction() }
   val requester = remember(action) { BringIntoViewRequester() }
   var pendingPlacement by remember(action) { mutableStateOf<CompletableDeferred<IntSize>?>(null) }
-  BoxWithConstraints {
-    val preview =
-      remember(plainText, viewportHeightPx, constraints.maxWidth, measurer, style) {
-        ChatUserMessageDisclosurePolicy.viewportCollapsedPreview(
-          text = plainText,
-          viewportHeightPx = viewportHeightPx,
-          maxWidthPx = constraints.maxWidth,
-          measurer = measurer,
-          style = style,
-        )
-      }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-      if (preview != null && !expanded) {
-        val anchor = rememberChatReaderAnchor(plainText)
-        Text(
-          text = preview,
-          modifier = anchor?.modifier ?: Modifier,
-          onTextLayout = anchor?.onTextLayout,
-          style = style,
-          color = ClawTheme.colors.text,
-        )
-      } else {
-        Column(
-          modifier =
-            Modifier.bringIntoViewRequester(requester).onGloballyPositioned { coordinates ->
-              pendingPlacement?.let { pending ->
-                pendingPlacement = null
-                pending.complete(coordinates.size)
-              }
-            },
-          verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-          textParts.forEach { text ->
-            ChatMarkdown(
-              text = text,
-              textColor = ClawTheme.colors.text,
-              isStreaming = false,
-              bodyStyle = style,
-            )
-          }
-        }
-      }
-
-      if (preview != null) {
-        val toggleLabel = if (expanded) nativeString("Close") else nativeString("View all")
-        ChatMessageDisclosureButton(toggleLabel) {
-          // Repeated actions from one render keep the same open/close intent.
-          onExpandedChange(!expanded)
-          if (expanded) {
+  if (preview != null && !expanded) {
+    val anchor = rememberChatReaderAnchor(plainText)
+    Text(
+      text = preview,
+      modifier = anchor?.modifier ?: Modifier,
+      onTextLayout = anchor?.onTextLayout,
+      style = ClawTheme.type.body.copy(fontWeight = FontWeight.Normal),
+      color = ClawTheme.colors.text,
+    )
+  } else {
+    Column(
+      modifier =
+        Modifier.bringIntoViewRequester(requester).onGloballyPositioned { coordinates ->
+          pendingPlacement?.let { pending ->
             pendingPlacement = null
-            action.pause()
-          } else {
-            // Only this tap requests a reveal. Restored expansion and ordinary re-layout
-            // keep their reading position; placement, not a guessed frame delay, admits it.
-            val placement = CompletableDeferred<IntSize>()
-            pendingPlacement = placement
-            action.launch {
-              val size = placement.await()
-              requester.bringIntoView(Rect(0f, 0f, size.width.toFloat(), action.viewportHeight(size.height).toFloat()))
-            }
+            pending.complete(coordinates.size)
           }
+        },
+      verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+      textParts.forEach { text ->
+        ChatMarkdown(
+          text = text,
+          textColor = ClawTheme.colors.text,
+          isStreaming = false,
+          bodyStyle = ClawTheme.type.body.copy(fontWeight = FontWeight.Normal),
+        )
+      }
+    }
+  }
+
+  if (preview != null) {
+    val toggleLabel = if (expanded) nativeString("Close") else nativeString("View all")
+    ChatMessageDisclosureButton(toggleLabel) {
+      // Repeated actions from one render keep the same open/close intent.
+      onExpandedChange(!expanded)
+      if (expanded) {
+        pendingPlacement = null
+        action.pause()
+      } else {
+        // Only this tap requests a reveal. Restored expansion and ordinary re-layout
+        // keep their reading position; placement, not a guessed frame delay, admits it.
+        val placement = CompletableDeferred<IntSize>()
+        pendingPlacement = placement
+        action.launch {
+          val size = placement.await()
+          requester.bringIntoView(Rect(0f, 0f, size.width.toFloat(), action.viewportHeight(size.height).toFloat()))
         }
       }
     }

@@ -27,41 +27,19 @@ class ChatAttachmentMessageTest {
   }
 
   @Test
-  fun transcriptionMarkerIsSplitOutOfTheTextAndUnquoted() {
-    val text = ChatMessageContent(type = "text", text = "See attached.\n**[Transcription]**\n> First line.\n> Second line.")
-    val parts = splitChatAttachmentMessage(listOf(image, text, voice))
-    assertEquals(listOf(image, voice), parts.content)
-    assertEquals("First line.\nSecond line.", parts.transcript)
-  }
-
-  @Test
-  fun authorTextSurvivesNextToTheTranscript() {
-    val text = ChatMessageContent(type = "text", text = "Check this\n**[Transcription]**\n> spoken")
-    val parts = splitChatAttachmentMessage(listOf(text))
-    assertEquals(listOf(ChatMessageContent(type = "text", text = "Check this")), parts.content)
-    assertEquals("spoken", parts.transcript)
-  }
-
-  @Test
-  fun transcriptionMarkerKeepsAuthoredMarkdownIndentationAndTrailingSpaces() {
-    val caption = "    val answer = 42  "
-    val text = ChatMessageContent(type = "text", text = "$caption\n\n**[Transcription]**\n> spoken")
-    val parts = splitChatAttachmentMessage(listOf(text, transcribedVoice))
-    assertEquals(listOf(ChatMessageContent(type = "text", text = caption), transcribedVoice), parts.content)
-    assertEquals("spoken", parts.transcript)
+  fun authoredTranscriptionHeadingAndBlockquoteStayText() {
+    val text = ChatMessageContent(type = "text", text = "Notes\n[Transcription]\n> quoted")
+    for (attachments in listOf(emptyList(), listOf(image, transcribedVoice))) {
+      val content = listOf(text) + attachments
+      val parts = splitChatAttachmentMessage(content)
+      assertEquals(content, parts.content)
+      assertNull(parts.transcript)
+    }
   }
 
   @Test
   fun ordinaryMarkdownIsUntouched() {
     val text = ChatMessageContent(type = "text", text = "**bold** and > not a transcript")
-    val parts = splitChatAttachmentMessage(listOf(text))
-    assertEquals(listOf(text), parts.content)
-    assertNull(parts.transcript)
-  }
-
-  @Test
-  fun bareTranscriptionMarkerKeepsTheOriginalText() {
-    val text = ChatMessageContent(type = "text", text = "**[Transcription]**")
     val parts = splitChatAttachmentMessage(listOf(text))
     assertEquals(listOf(text), parts.content)
     assertNull(parts.transcript)
@@ -77,39 +55,11 @@ class ChatAttachmentMessageTest {
   }
 
   @Test
-  fun authoredTranscriptionHeadingOverPlainTextStaysText() {
-    // Fails on base: the heading was dropped and the text became a transcript block.
-    val text = ChatMessageContent(type = "text", text = "[Transcription]\nPlease fill in this template")
-    val parts = splitChatAttachmentMessage(listOf(text))
-    assertEquals(listOf(text), parts.content)
-    assertNull(parts.transcript)
-  }
-
-  @Test
-  fun unquotedTranscriptIsSplitOnlyWhenTheTurnCarriesAVoiceNote() {
-    val text = ChatMessageContent(type = "text", text = "**[Transcription]**\nspoken words")
-    val parts = splitChatAttachmentMessage(listOf(image, text, voice))
-    assertEquals(listOf(image, voice), parts.content)
-    assertEquals("spoken words", parts.transcript)
-  }
-
-  @Test
   fun generatedVoiceNoteNamesAreHidden() {
     assertTrue(isGeneratedVoiceNoteName("voice-note-b9526ed8-69ef-44d1-ad36-0123456789ab.m4a"))
     assertFalse(isGeneratedVoiceNoteName("voice-note-for-mom.m4a"))
     assertFalse(isGeneratedVoiceNoteName("voice-note-b9526ed8-69ef-44d1-ad36-0123456789ab.mp3"))
     assertFalse(isGeneratedVoiceNoteName("meeting.m4a"))
-  }
-
-  @Test
-  fun transcriptUrlStaysInTheLinkPreviewInput() {
-    val text = ChatMessageContent(type = "text", text = "See attached.\n**[Transcription]**\n> look at https://example.com/page")
-    val parts = splitChatAttachmentMessage(listOf(image, text, voice))
-    assertEquals(listOf(image, voice), parts.content)
-    assertEquals(
-      listOf(ChatMessageContent(type = "text", text = "look at https://example.com/page")),
-      parts.linkPreviewContent.filter { it.type == "text" },
-    )
   }
 
   @Test
@@ -201,14 +151,5 @@ class ChatAttachmentMessageTest {
   fun queuedTextOnlyPlaceholderStaysText() {
     val parts = chatOutboxBubbleParts("See attached.", emptyList())
     assertEquals(listOf(ChatMessageContent(type = "text", text = "See attached.")), parts.map { it.content })
-  }
-
-  @Test
-  fun queuedFileNamesAreKeptForTheRendererToDecide() {
-    val named = ChatOutboxAttachment("voice-2", "audio", "audio/x-m4a", "site-visit.m4a", 7_000L, 100_000L)
-    val parts = chatOutboxBubbleParts("", listOf(named, queuedVoice))
-    assertEquals(listOf("site-visit.m4a", queuedVoice.fileName), parts.map { it.content.fileName })
-    assertFalse(isGeneratedVoiceNoteName("site-visit.m4a"))
-    assertTrue(isGeneratedVoiceNoteName(queuedVoice.fileName))
   }
 }

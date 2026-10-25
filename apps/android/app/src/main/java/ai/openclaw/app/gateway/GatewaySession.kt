@@ -835,7 +835,7 @@ class GatewaySession(
     source: String,
   ): GatewayLoadedImage? {
     val conn = readyConnection(expectedEndpointStableId) ?: return null
-    val image = conn.loadInboundImage(basePath, sessionKey, agentId, source)
+    val image = conn.loadInboundImage(basePath, sessionKey, agentId, source, guardRequestEnqueue(conn) { it() })
     return synchronized(lifecycleLock) { image.takeIf { currentConnection === conn && conn.isReady() } }
   }
 
@@ -1098,8 +1098,7 @@ class GatewaySession(
     private var connectRequestId: String? = null
     val tlsConfig: GatewayTlsConfig? = buildGatewayTlsConfig(target.tls)
     private val client: OkHttpClient = buildClient()
-    private val sourceFaviconLoader by lazy { GatewaySourceFaviconLoader(client) }
-    private val inboundImageLoader by lazy { GatewayInboundImageLoader(client) }
+    private val imageLoader by lazy { GatewayImageLoader(client) }
     private var controlUiReadCredentials: List<String> = emptyList()
     private val listener = Listener()
     private var socket: WebSocket? = null
@@ -1253,7 +1252,7 @@ class GatewaySession(
       hostname: String,
       withEnqueue: (() -> Unit) -> Unit,
     ): GatewayLoadedImage? =
-      sourceFaviconLoader.load(
+      imageLoader.loadFavicon(
         gatewayUrl = "${if (tlsConfig != null) "https" else "http"}://${formatGatewayAuthority(target.endpoint.host, target.endpoint.port)}",
         basePath = config.basePath,
         hostname = hostname,
@@ -1267,8 +1266,9 @@ class GatewaySession(
       sessionKey: String,
       agentId: String?,
       source: String,
+      withEnqueue: (() -> Unit) -> Unit,
     ): GatewayLoadedImage? =
-      inboundImageLoader.load(
+      imageLoader.loadInboundImage(
         gatewayUrl = "${if (tlsConfig != null) "https" else "http"}://${formatGatewayAuthority(target.endpoint.host, target.endpoint.port)}",
         basePath = basePath ?: target.endpoint.contextPath,
         source = source,
@@ -1276,6 +1276,7 @@ class GatewaySession(
         agentId = agentId,
         headers = mediaTransportHeaders(),
         credentials = controlUiReadCredentials,
+        withEnqueue = withEnqueue,
       )
 
     fun bufferedMedia(

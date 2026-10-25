@@ -20,8 +20,6 @@ internal data class ChatAttachmentMessageParts(
     get() = if (transcript == null) content else content + ChatMessageContent(type = "text", text = transcript)
 }
 
-private val TRANSCRIPTION_MARKER = Regex("""^\s*\**\s*\[\s*Transcri(?:ption|pt)\s*]\s*\**\s*:?\s*$""", RegexOption.IGNORE_CASE)
-
 /**
  * The Gateway's default transcript echo, `📝 "{transcript}"` (`DEFAULT_ECHO_TRANSCRIPT_FORMAT`
  * in src/media-understanding/echo-transcript.ts), appended as the last line(s) of the user turn.
@@ -29,23 +27,17 @@ private val TRANSCRIPTION_MARKER = Regex("""^\s*\**\s*\[\s*Transcri(?:ption|pt)\
 private const val ECHO_TRANSCRIPT_PREFIX = "\uD83D\uDCDD \""
 private const val ECHO_TRANSCRIPT_SUFFIX = "\""
 
-/**
- * Splits `**[Transcription]**` + quoted lines (or any payload when the turn carries a
- * voice note) out of user text and drops an exact "See attached." placeholder body when
- * the message carries any attachment.
- * Text without attachments or markers is returned unchanged.
- */
+/** Keeps authored text intact and projects the default echo only for transcribed voice notes. */
 internal fun splitChatAttachmentMessage(content: List<ChatMessageContent>): ChatAttachmentMessageParts {
   val hasAttachment = content.any { it.type != "text" }
   val voiceNotes = content.filter { it.type == "audio" || it.mimeType?.startsWith("audio/") == true }
-  val hasVoiceNote = voiceNotes.isNotEmpty()
   // Only Gateway-recorded transcription makes a `📝 "…"` line a transcript; otherwise it is a caption.
   val hasTranscribedVoiceNote = voiceNotes.any { it.transcribed }
   val transcripts = mutableListOf<String>()
   val parts =
     content.mapNotNull { part ->
       if (part.type != "text") return@mapNotNull part
-      val (body, transcript) = splitTranscriptText(part.text.orEmpty(), hasVoiceNote, hasTranscribedVoiceNote)
+      val (body, transcript) = splitEchoTranscript(part.text.orEmpty().lines(), hasTranscribedVoiceNote) ?: (part.text.orEmpty() to null)
       transcript?.let(transcripts::add)
       val cleaned = if (hasAttachment || transcript != null) stripAttachmentPlaceholder(body) else body
       when {
@@ -60,30 +52,6 @@ internal fun splitChatAttachmentMessage(content: List<ChatMessageContent>): Chat
 // The sender only synthesizes the placeholder for an entirely empty caption, so only an exact
 // placeholder body is dropped; a caption that merely starts with it is the author's text.
 private fun stripAttachmentPlaceholder(text: String): String = if (text.trim() == CHAT_ATTACHMENT_PLACEHOLDER_TEXT) "" else text
-
-private fun splitTranscriptText(
-  text: String,
-  hasVoiceNote: Boolean,
-  hasTranscribedVoiceNote: Boolean,
-): Pair<String, String?> {
-  val lines = text.lines()
-  val markerIndex = lines.indexOfFirst { TRANSCRIPTION_MARKER.matches(it) }
-  if (markerIndex < 0) return splitEchoTranscript(lines, hasTranscribedVoiceNote) ?: (text to null)
-  val payload = lines.drop(markerIndex + 1).dropWhile { it.isBlank() }.dropLastWhile { it.isBlank() }
-  // A bare marker with no payload is not a transcript; keep the author's text as written.
-  if (payload.isEmpty()) return text to null
-  // Without a voice note, only the quoted transcript block counts; an authored
-  // `[Transcription]` heading over plain text stays ordinary message text.
-  val quoted = payload.all { it.isBlank() || it.trimStart().startsWith(">") }
-  if (!quoted && !hasVoiceNote) return text to null
-  val transcript =
-    payload
-      .joinToString("\n") { line -> line.trimStart().removePrefix(">").removePrefix(" ") }
-      .trim()
-  if (transcript.isEmpty()) return text to null
-  val body = authoredTextBeforeTranscript(lines, markerIndex)
-  return body to transcript
-}
 
 /**
  * Splits the default `📝 "{transcript}"` echo off the end of a voice-note turn. Only a turn whose

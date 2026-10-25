@@ -274,6 +274,8 @@ class GatewaySessionCustomHeadersTest {
     runBlocking {
       val connected = CompletableDeferred<Unit>()
       val requests = ConcurrentLinkedQueue<RecordedRequest>()
+      val retiringRequest = CompletableDeferred<Unit>()
+      val releaseRetiringRequest = CountDownLatch(1)
       val imageBytes = byteArrayOf(5, 6, 7, 8)
       val trap = MockWebServer().apply { start() }
       val server =
@@ -305,6 +307,11 @@ class GatewaySessionCustomHeadersTest {
                   )
                 }
                 requests.add(request)
+                if (request.requestUrl?.queryParameter("source") == "media://inbound/retired.jpg") {
+                  retiringRequest.complete(Unit)
+                  check(releaseRetiringRequest.await(TEST_TIMEOUT_MS, TimeUnit.MILLISECONDS))
+                  return MockResponse().setResponseCode(401)
+                }
                 if (request.getHeader("Authorization") != "Bearer issued-device-token") return MockResponse().setResponseCode(401)
                 return when (request.requestUrl?.queryParameter("source")) {
                   "media://inbound/large.jpg" -> MockResponse().setHeader("Content-Type", "image/jpeg").setChunkedBody(Buffer().write(ByteArray(12 * 1024 * 1024 + 1)), 65_536)
@@ -365,7 +372,18 @@ class GatewaySessionCustomHeadersTest {
         assertNull(session.loadInboundImage(endpoint.stableId, null, "main", null, "media://inbound/.."))
         assertNull(session.loadInboundImage("wrong-endpoint", null, "main", null, source))
         assertEquals(before, requests.size)
+
+        val pendingImage =
+          async(Dispatchers.IO) {
+            runCatching { session.loadInboundImage(endpoint.stableId, null, "main", null, "media://inbound/retired.jpg") }.getOrNull()
+          }
+        withTimeout(TEST_TIMEOUT_MS) { retiringRequest.await() }
+        session.disconnect()
+        releaseRetiringRequest.countDown()
+        assertNull(withTimeout(TEST_TIMEOUT_MS) { pendingImage.await() })
+        assertEquals("A retired connection must not try the next read credential", before + 1, requests.size)
       } finally {
+        releaseRetiringRequest.countDown()
         session.disconnect()
         sessionScope.cancel()
         server.shutdown()

@@ -19,19 +19,11 @@ import android.widget.TextView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
@@ -82,66 +74,28 @@ class ChatMessageViewsTest {
   val composeRule = createComposeRule()
 
   @Test
-  @Config(sdk = [36], qualifiers = "en-rUS-w360dp-h800dp-420dpi")
-  @GraphicsMode(GraphicsMode.Mode.NATIVE)
-  fun voiceTranscriptDisclosureTracksReaderSpaceReservedByComposer() {
-    val transcript = List(6) { "Spoken detail ${it + 1} remains readable." }.joinToString("\n")
-    assertTrue(transcript.length < ChatUserMessageDisclosurePolicy.collapsedCharacterLimit)
-    assertEquals(null, ChatUserMessageDisclosurePolicy.collapsedPreview(transcript))
-    val composerHeight = mutableStateOf(220.dp)
-    var readerState: LazyListState? = null
-
+  fun sentPhotoAndVoiceNoteKeepTheirRowsWhenTranscriptionArrives() {
+    val photo = ChatMessageContent(type = "image", mimeType = "image/jpeg", fileName = "photo.jpg", url = "media://inbound/photo.jpg")
+    val voice = ChatMessageContent(type = "audio", fileName = "voice-note-b9526ed8-69ef-44d1-ad36-0123456789ab.m4a", durationMs = 5_000)
+    val content = mutableStateOf(listOf(photo, ChatMessageContent(type = "text", text = "See attached."), voice))
     composeRule.setContent {
       ClawDesignTheme {
-        Box(Modifier.size(360.dp, 420.dp)) {
-          val listState = rememberLazyListState()
-          val scope = rememberCoroutineScope()
-          val navigation = remember(scope, listState) { ChatReaderNavigation(scope, listState) }
-          SideEffect { readerState = listState }
-          ChatPaneLayout(
-            tabletopPanes = null,
-            features = emptyList(),
-            minimumInputHeight = 40.dp,
-            minimumHeaderHeight = 40.dp,
-            minimumReaderHeight = 40.dp,
-            touchTarget = 40.dp,
-            modifier = Modifier.fillMaxSize(),
-            header = { _, _ -> Box(Modifier.fillMaxWidth().height(48.dp)) },
-            transcript = {
-              CompositionLocalProvider(LocalChatReaderNavigation provides navigation) {
-                LazyColumn(
-                  state = listState,
-                  reverseLayout = true,
-                  modifier = Modifier.fillMaxSize().testTag("reader-viewport"),
-                ) {
-                  item { ChatVoiceTranscriptBlock(transcript = transcript, stateKey = "viewport-transcript") }
-                }
-              }
-            },
-            status = {},
-            composer = { _, _ -> Box(Modifier.fillMaxWidth().height(composerHeight.value)) },
-          )
-        }
+        GeometryTranscriptBubble(messageId = "media-message", role = "user", text = "", content = content.value)
       }
     }
+    composeRule.onNodeWithText("See attached.").assertDoesNotExist()
+    composeRule.onNodeWithText("Voice note").assertExists()
+    composeRule.onNodeWithText("0:05").assertExists()
+    composeRule.onNodeWithText("Image unavailable · Tap to retry").assertExists()
 
-    composeRule.waitForIdle()
-    val compactViewport = checkNotNull(readerState).layoutInfo.viewportSize.height
-    assertTrue(compactViewport > 0)
-    composeRule.onNodeWithText("View all").assertExists()
-    composeRule.onNodeWithText("Spoken detail 6 remains readable.", substring = true).assertDoesNotExist()
-
-    composeRule.onNodeWithText("View all").performScrollTo().performClick()
-    composeRule
-      .onNodeWithText("Spoken detail 6 remains readable.", substring = true, useUnmergedTree = true)
-      .performScrollTo()
-      .assertIsDisplayed()
-
-    composeRule.runOnIdle { composerHeight.value = 40.dp }
-    composeRule.waitForIdle()
-    assertTrue(checkNotNull(readerState).layoutInfo.viewportSize.height > compactViewport * 2)
-    composeRule.onNodeWithText("Close").assertDoesNotExist()
-    composeRule.onNodeWithText("View all").assertDoesNotExist()
+    composeRule.runOnIdle {
+      content.value = listOf(photo, ChatMessageContent(type = "text", text = "See attached.\n📝 \"A synthetic voice note.\""), voice.copy(transcribed = true))
+    }
+    composeRule.onNodeWithText("See attached.", substring = true).assertDoesNotExist()
+    composeRule.onNodeWithText("Voice note").assertExists()
+    composeRule.onNodeWithText("Image unavailable · Tap to retry").assertExists()
+    composeRule.onNodeWithTag("chat-voice-transcript", useUnmergedTree = true).assertExists()
+    composeRule.onNodeWithText("A synthetic voice note.", substring = true).assertExists()
   }
 
   @Test
@@ -717,13 +671,14 @@ class ChatMessageViewsTest {
     role: String,
     text: String,
     live: Boolean = false,
+    content: List<ChatMessageContent> = listOf(ChatMessageContent(type = "text", text = text)),
   ) {
     ChatBubble(
       messageId = messageId,
       entryId = null,
       role = role,
       live = live,
-      content = listOf(ChatMessageContent(type = "text", text = text)),
+      content = content,
       timestampMs = null,
       onReplyMessage = {},
       sessionActionsEnabled = false,

@@ -243,6 +243,7 @@ class ChatController internal constructor(
     scope: CoroutineScope,
     session: GatewaySession,
     json: Json,
+    isGatewayReady: () -> Boolean = { true },
     transcriptCache: ChatTranscriptCache? = null,
     cacheScope: () -> ChatCacheScope? = { null },
     currentDefaultAgentId: () -> String? = { "main" },
@@ -259,8 +260,12 @@ class ChatController internal constructor(
   ) : this(
     scope = scope,
     json = json,
-    requestGateway = { method, paramsJson -> session.request(method, paramsJson) },
+    requestGateway = { method, paramsJson ->
+      if (!isGatewayReady()) throw GatewayRequestNotEnqueued("Agent discovery is not ready")
+      session.request(method, paramsJson)
+    },
     requestGatewayForGateway = { gatewayId, method, paramsJson ->
+      if (!isGatewayReady()) throw GatewayRequestNotEnqueued("Agent discovery is not ready")
       session.requestForEndpoint(gatewayId, method, paramsJson)
     },
     gatewayAdvertisesMethod = gatewayAdvertisesMethod,
@@ -268,7 +273,7 @@ class ChatController internal constructor(
     currentGatewayCatalogRevision = currentGatewayCatalogRevision,
     sessionRouting = { session.sessionRouting },
     captureRequestLease = { gatewayScope ->
-      session.captureRequestLease(gatewayScope?.gatewayId)
+      if (isGatewayReady()) session.captureRequestLease(gatewayScope?.gatewayId) else null
     },
     transcriptCache = transcriptCache,
     cacheScope = cacheScope,
@@ -8410,7 +8415,7 @@ internal fun parseChatMessageCost(obj: JsonObject): ChatMessageCost? {
 
 /**
  * When the Gateway rewrites a user turn (e.g. with a voice transcription) the photo can survive
- * only in `__openclaw.media`. Restore inline, managed, and canonical inbound images; inbound
+ * only in `__openclaw.media`. Restore managed and canonical inbound images; inbound
  * references are loaded through the Gateway's authenticated assistant-media route.
  */
 private fun parseHistoryMediaImages(
@@ -8420,15 +8425,13 @@ private fun parseHistoryMediaImages(
   val facts = obj["__openclaw"].asObjectOrNull()?.get("media").asArrayOrNull() ?: return emptyList()
   return facts.mapNotNull { element ->
     val fact = element.asObjectOrNull() ?: return@mapNotNull null
-    val mimeType = fact["contentType"].asStringOrNull() ?: fact["mimeType"].asStringOrNull()
+    val mimeType = fact["contentType"].asStringOrNull()
     val kind = fact["kind"].asStringOrNull() ?: mimeType?.substringBefore('/')
     if (kind != "image" || mimeType.equals("image/svg+xml", ignoreCase = true)) return@mapNotNull null
     val url = (fact["url"] ?: fact["path"]).asStringOrNull()?.trim()
-    val artifactId = fact.nonBlankString("artifactId") ?: managedImageArtifactId(url)
-    val base64 =
-      (fact["base64"] ?: fact["content"]).asStringOrNull()?.takeIf { it.isNotBlank() && it.length <= CHAT_IMAGE_MAX_BASE64_CHARS }
-    if (artifactId == null && base64 == null && !isInboundMediaSource(url)) return@mapNotNull null
-    if (existing.any { it.type == "image" && ((artifactId != null && it.artifactId == artifactId) || (base64 != null && it.base64 == base64) || (url != null && it.url == url)) }) {
+    val artifactId = managedImageArtifactId(url)
+    if (artifactId == null && !isInboundMediaSource(url)) return@mapNotNull null
+    if (existing.any { it.type == "image" && ((artifactId != null && it.artifactId == artifactId) || (url != null && it.url == url)) }) {
       return@mapNotNull null
     }
     ChatMessageContent(
@@ -8437,7 +8440,6 @@ private fun parseHistoryMediaImages(
       fileName = fact["fileName"].asStringOrNull(),
       artifactId = artifactId,
       url = url,
-      base64 = base64,
       width = fact["width"].asLongOrNull()?.toInt(),
       height = fact["height"].asLongOrNull()?.toInt(),
       sizeBytes = fact["sizeBytes"].asLongOrNull(),

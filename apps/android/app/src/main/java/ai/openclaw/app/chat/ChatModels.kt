@@ -13,6 +13,10 @@ import java.util.Locale
 
 private val visibleChatMessageRoles = setOf("user", "assistant", "system", "custom", "toolresult")
 internal const val CHAT_IMAGE_MAX_BASE64_CHARS = 300 * 1024
+internal const val CHAT_COMPOSER_MAX_IMAGE_DECODED_BYTES = 6L * 1024L * 1024L
+
+/** Wire text for an attachment-only send. */
+internal const val CHAT_ATTACHMENT_PLACEHOLDER_TEXT = "See attached."
 
 /** Keeps transcript rows limited to roles Android renders as user-visible chat. */
 internal fun normalizeVisibleChatMessageRole(role: String?): String? =

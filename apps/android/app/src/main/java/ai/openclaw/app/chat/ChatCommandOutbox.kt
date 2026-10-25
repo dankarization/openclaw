@@ -1,6 +1,5 @@
 package ai.openclaw.app.chat
 
-import ai.openclaw.app.ui.chat.CHAT_COMPOSER_MAX_IMAGE_DECODED_BYTES
 import androidx.room3.ColumnInfo
 import androidx.room3.Dao
 import androidx.room3.Entity
@@ -790,13 +789,7 @@ class RoomChatCommandOutbox internal constructor(
     val database = openDatabase()
     val dao = database.outboxDao()
     return dao.attachmentsForCommands(listOf(id)).map { row ->
-      val chunks = dao.chunksForAttachment(row.id)
-      val bytes = ByteArray(chunks.sumOf { it.size })
-      var offset = 0
-      for (chunk in chunks) {
-        chunk.copyInto(bytes, offset)
-        offset += chunk.size
-      }
+      val bytes = loadAttachmentBytes(row.id) ?: ByteArray(0)
       LoadedOutboxAttachment(attachment = row.toAttachment(), bytes = bytes)
     }
   }
