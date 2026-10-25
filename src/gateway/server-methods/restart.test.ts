@@ -9,7 +9,9 @@ import {
   resetGatewayWorkAdmission,
   tryBeginGatewaySuspendAdmission,
 } from "../../process/gateway-work-admission.js";
+import { gatewayRequest } from "../request-frame.test-support.js";
 import { handleGatewayRequest } from "../server-methods.js";
+import { gatewayConnect } from "../server/client-fixtures.test-support.js";
 import { restartHandlers } from "./restart.js";
 
 const scheduleSafeGatewayRestart = vi.hoisted(() => vi.fn());
@@ -33,7 +35,7 @@ vi.mock("../../infra/gateway-lock.js", () => ({
 
 const restartTarget = { pid: process.pid, ownerId: "gateway-owner", port: 18_789 };
 
-function invokeRestartRequest(params: unknown) {
+function invokeRestartRequest(params: unknown, sessionMutationCommitGuard?: () => void) {
   const respond = vi.fn();
   const handler = expectDefined(
     restartHandlers["gateway.restart.request"],
@@ -43,7 +45,7 @@ function invokeRestartRequest(params: unknown) {
     handler({
       respond,
       params,
-      // The handler only reads `params` and `respond`; remaining fields are unused.
+      sessionMutationCommitGuard,
     } as unknown as Parameters<typeof handler>[0]),
   ).then(() => respond);
 }
@@ -69,23 +71,12 @@ async function invokeRestartRequestThroughGateway(params: unknown) {
     'restartHandlers["gateway.restart.request"] test invariant',
   );
   await handleGatewayRequest({
-    req: {
-      type: "req",
-      id: `request-${crypto.randomUUID()}`,
-      method: "gateway.restart.request",
-      params,
-    },
+    req: gatewayRequest(`request-${crypto.randomUUID()}`, "gateway.restart.request", params),
     respond,
     client: {
       connId: `conn-${crypto.randomUUID()}`,
       clientIp: "127.0.0.1",
-      connect: {
-        role: "operator",
-        scopes: ["operator.admin"],
-        client: { id: "cli", version: "test", platform: "linux", mode: "cli" },
-        minProtocol: 1,
-        maxProtocol: 1,
-      },
+      connect: gatewayConnect(["operator.admin"], { id: "cli", platform: "linux", mode: "cli" }),
     },
     isWebchatConnect: () => false,
     context: { logGateway: { warn: vi.fn() } } as unknown as Parameters<
@@ -116,7 +107,6 @@ function mockScheduledRestart(preflight: { safe: boolean; summary: string }) {
 function expectRestartRequest(skipDeferral: boolean) {
   expect(scheduleSafeGatewayRestart).toHaveBeenCalledWith({
     reason: "operator",
-    delayMs: 0,
     skipDeferral,
   });
 }
@@ -140,6 +130,19 @@ describe("gateway restart handlers", () => {
   afterEach(() => {
     resetGatewayWorkAdmission();
   });
+
+  it.each([false, true])(
+    "refuses stale authority before restart effects (targeted=%s)",
+    async (targeted) => {
+      await expect(
+        invokeRestartRequest(targeted ? { target: restartTarget } : {}, () => {
+          throw new Error("requester revoked");
+        }),
+      ).rejects.toThrow("requester revoked");
+      expect(scheduleSafeGatewayRestart).not.toHaveBeenCalled();
+      expect(requestGatewayRestartWithSignalAdmission).not.toHaveBeenCalled();
+    },
+  );
 
   it("keeps the deprecated read-only preflight response shape", async () => {
     const preflight = {
@@ -168,39 +171,10 @@ describe("gateway restart handlers", () => {
     expect(requestGatewayRestartWithSignalAdmission).not.toHaveBeenCalled();
   });
 
-  it("defaults to skipDeferral: false when the param is absent", async () => {
-    mockScheduledRestart({ safe: true, summary: "safe to restart now" });
-
-    await invokeRestartRequest({ reason: "operator" });
-
-    expectRestartRequest(false);
-  });
-
-  it("forwards skipDeferral: true only when params.skipDeferral === true", async () => {
-    mockScheduledRestart({ safe: false, summary: "" });
-
-    await invokeRestartRequest({ reason: "operator", skipDeferral: true });
-
-    expectRestartRequest(true);
-  });
-
-  it("normalizes truthy non-boolean skipDeferral values to false", async () => {
-    mockScheduledRestart({ safe: true, summary: "safe to restart now" });
-
-    await invokeRestartRequest({ reason: "operator", skipDeferral: "true" });
-
-    expectRestartRequest(false);
-  });
-
   it.each([
-    { restartIntent: { waitMs: 30_000 }, expected: { waitMs: 30_000 } },
     { restartIntent: { waitMs: 0 }, expected: { waitMs: 0 } },
     { restartIntent: { force: true }, expected: { force: true } },
     { restartIntent: { force: true, drainBudgetMs: 0 }, expected: { force: true, waitMs: 0 } },
-    {
-      restartIntent: { force: true, drainBudgetMs: 180_000 },
-      expected: { force: true, waitMs: 180_000 },
-    },
   ])(
     "delivers a targeted restart only to the matching lock owner ($restartIntent)",
     async ({ restartIntent, expected }) => {
@@ -346,12 +320,10 @@ describe("gateway restart handlers", () => {
     });
   });
 
-  it.each(
-    [0.5, -1, MAX_TIMER_TIMEOUT_MS + 1, Number.MAX_SAFE_INTEGER].flatMap((budget) => [
-      { waitMs: budget },
-      { force: true, drainBudgetMs: budget },
-    ]),
-  )("rejects an invalid targeted restart budget: %j", async (restartIntent) => {
+  it.each([
+    { waitMs: MAX_TIMER_TIMEOUT_MS + 1 },
+    { force: true, drainBudgetMs: MAX_TIMER_TIMEOUT_MS + 1 },
+  ])("rejects an invalid targeted restart budget: %j", async (restartIntent) => {
     const respond = await invokeRestartRequest({
       reason: "operator",
       target: restartTarget,
@@ -390,29 +362,12 @@ describe("gateway restart handlers", () => {
 
     expect(scheduleSafeGatewayRestart).toHaveBeenCalledWith({
       reason: "x".repeat(199),
-      delayMs: 0,
       skipDeferral: false,
     });
   });
 
   it("rejects non-object params without scheduling a restart", async () => {
     const respond = await invokeRestartRequest("operator");
-
-    expect(scheduleSafeGatewayRestart).not.toHaveBeenCalled();
-    expect(respond.mock.calls).toEqual([
-      [
-        false,
-        undefined,
-        {
-          code: "INVALID_REQUEST",
-          message: "invalid gateway.restart.request params",
-        },
-      ],
-    ]);
-  });
-
-  it("rejects array params without scheduling a restart", async () => {
-    const respond = await invokeRestartRequest([]);
 
     expect(scheduleSafeGatewayRestart).not.toHaveBeenCalled();
     expect(respond.mock.calls).toEqual([

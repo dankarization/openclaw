@@ -8,33 +8,43 @@ import {
 } from "./subagent-spawn.authority.test-support.js";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import "./subagent-spawn-model.mocks.shared.js";
-import { createDeferred } from "../../../../test/helpers/promise.js";
+import { awaitGateBeforeSettlement, createDeferred } from "../../../../test/helpers/promise.js";
 import { forkSessionEntryFromParent } from "../../../auto-reply/reply/session-fork.js";
+import { captureRuntimeConfigAsyncReader } from "../../../config/config.js";
 import {
   listSessionChildEntriesReadOnly,
   loadSessionEntry,
   loadTranscriptEvents,
-  replaceTranscriptEvents,
 } from "../../../config/sessions/session-accessor.js";
 import {
   resolveSqliteStoreScope,
   runExclusiveSqliteSessionWrite,
 } from "../../../config/sessions/session-accessor.sqlite-scope.js";
+import { replaceTranscriptEvents } from "../../../config/sessions/session-accessor.sqlite-transcript-write.test-support.js";
 import { LegacyContextEngine } from "../../../context-engine/legacy.js";
 import { registerChatAbortController } from "../../../gateway/chat-abort.js";
+import {
+  createCoreGatewayMethodDescriptors,
+  createGatewayMethodRegistry,
+} from "../../../gateway/methods/registry.js";
+import { createGatewayInstanceRuntime } from "../../../gateway/server-instance-runtime.js";
+import type { GatewayRecoveryRuntime } from "../../../gateway/server-instance-runtime.types.js";
 import { handleChatAbortRequest } from "../../../gateway/server-methods/chat-abort-handler.js";
 import { invokeChatAbortHandler } from "../../../gateway/server-methods/chat.abort.test-helpers.js";
 import { sessionDeleteHandlers } from "../../../gateway/server-methods/sessions-delete.js";
 import type { GatewayRequestContext } from "../../../gateway/server-methods/types.js";
-import { createSyntheticPluginRuntimeClient } from "../../../gateway/server-plugin-runtime-client.js";
+import type { DispatchGatewayMethodInProcessOptions } from "../../../gateway/server-plugin-in-process-dispatch.types.js";
 import { withPluginRuntimeGatewayRequestScope } from "../../../plugins/runtime/gateway-request-scope.js";
+import { captureSessionTarget } from "../../../sessions/session-controller.lifecycle.js";
+import { AsyncWorkScope } from "../../../shared/async-work-scope.js";
 import { getAdmittedRunDelegatedAuthority } from "../../admitted-run-context.js";
 import { finalizeAgentToolAvailability } from "../../agent-tool-availability.js";
 import { copyAgentToolMetadata } from "../../agent-tool-metadata.js";
 import { finalizeAgentTools } from "../../agent-tools.finalize.js";
 import type { AnyAgentTool } from "../../agent-tools.types.js";
+import { createEnteredGate } from "../../entered-gate.test-support.js";
 import { createAgentHarnessHostCapabilities } from "../../harness/host-capability.js";
 import { createAgentsWaitTool } from "../../tools/agents-wait-tool.js";
 import {
@@ -48,7 +58,74 @@ import { enqueueSwarmRun } from "../swarm/swarm-scheduler.js";
 import { testing as spawnTesting } from "./subagent-spawn.test-support.js";
 
 const fixture = installSpawnAuthorityFixture();
+beforeEach(async () => {
+  await captureRuntimeConfigAsyncReader()();
+});
 const { parentSessionKey, parentRunId, groupId, createBoundParent } = fixture;
+
+function createPreparationGateway(
+  context: Awaited<ReturnType<typeof createBoundParent>>["context"],
+  deleted: string[],
+) {
+  const gatewayContext = context as unknown as GatewayRequestContext;
+  const recovery = gatewayContext.recoveryRuntime;
+  if (!recovery) {
+    throw new Error("Preparation fixture requires its Gateway recovery owner");
+  }
+  const originalDispatch = recovery.dispatchSessionMethod;
+  const originalTrackExecution = gatewayContext.trackExecution;
+  const failures = new Set<unknown>();
+  const execution = new AsyncWorkScope(failures);
+  gatewayContext.trackExecution = <T>(run: () => T | Promise<T>) => execution.track(run);
+  const registry = createGatewayMethodRegistry(
+    createCoreGatewayMethodDescriptors({
+      "chat.abort": handleChatAbortRequest,
+      "sessions.delete": sessionDeleteHandlers["sessions.delete"]!,
+    }),
+  );
+  const runtime = createGatewayInstanceRuntime({
+    getContext: () => gatewayContext,
+    getMethodRegistry: () => registry,
+    isDispatchAvailable: () => !execution.isClosing,
+  });
+  const dispatchSessionMethod: GatewayRecoveryRuntime["dispatchSessionMethod"] = async <T>(
+    method: Parameters<GatewayRecoveryRuntime["dispatchSessionMethod"]>[0],
+    params: unknown,
+    options?: Parameters<GatewayRecoveryRuntime["dispatchSessionMethod"]>[2],
+  ) => {
+    const result = await runtime.recovery.dispatchSessionMethod<T>(method, params, options);
+    if (method === "sessions.delete") {
+      deleted.push((params as { key: string }).key);
+    } else if (method === "chat.abort") {
+      expect(result).toEqual(
+        expect.objectContaining({ aborted: true, runIds: [(params as { runId: string }).runId] }),
+      );
+    }
+    return result;
+  };
+  recovery.dispatchSessionMethod = dispatchSessionMethod;
+  return {
+    dispatchSessionMethod,
+    async close() {
+      try {
+        await AsyncWorkScope.runWhenAllIdle(
+          () => [execution],
+          () => execution.drain(),
+        );
+      } finally {
+        try {
+          runtime.close();
+        } finally {
+          recovery.dispatchSessionMethod = originalDispatch;
+          gatewayContext.trackExecution = originalTrackExecution;
+        }
+      }
+      if (failures.size > 0) {
+        throw new AggregateError([...failures], "Preparation Gateway cleanup failed");
+      }
+    },
+  };
+}
 
 describe("pending spawn preparation authority", () => {
   it.each(["closed", "live"])(
@@ -86,8 +163,7 @@ describe("pending spawn preparation authority", () => {
           },
         ],
       );
-      const writerEntered = createDeferred();
-      const releaseWriter = createDeferred();
+      const writerGate = createEnteredGate();
       const forkQueued = createDeferred<{ childSessionKey: string; initialSessionId: string }>();
       const forkSettled = createDeferred<
         Awaited<ReturnType<typeof forkSessionEntryFromParent>> | Error
@@ -96,18 +172,16 @@ describe("pending spawn preparation authority", () => {
       let blocker: Promise<void> | undefined;
       const dispatch = vi.fn();
       const deleted: string[] = [];
+      const gateway = createPreparationGateway(context, deleted);
       spawnTesting.setDepsForTest({
         forkSessionEntryFromParent: async (params) => {
           // Hold a genuine preceding database writer, then enqueue the real fork owner.
           blocker = runExclusiveSqliteSessionWrite(
             resolveSqliteStoreScope(storePath),
-            async () => {
-              writerEntered.resolve();
-              await releaseWriter.promise;
-            },
+            writerGate.wait,
             "session.transcript.batch",
           );
-          await writerEntered.promise;
+          await writerGate.entered;
           const initial = loadSessionEntry({ storePath, sessionKey: params.sessionKey })!;
           const pending = forkSessionEntryFromParent(params);
           forkQueued.resolve({
@@ -129,6 +203,7 @@ describe("pending spawn preparation authority", () => {
         dispatchGatewayMethodInProcess: async <T>(
           method: string,
           params: Record<string, unknown>,
+          options?: DispatchGatewayMethodInProcessOptions,
         ) => {
           if (method === "agent") {
             dispatch(params);
@@ -137,22 +212,11 @@ describe("pending spawn preparation authority", () => {
           if (method !== "sessions.delete") {
             throw new Error(`Unexpected spawn RPC ${method}`);
           }
-          let payload: unknown;
-          await sessionDeleteHandlers["sessions.delete"]!({
-            req: {} as never,
-            params,
-            context: context as unknown as GatewayRequestContext,
-            client: createSyntheticPluginRuntimeClient(),
-            isWebchatConnect: () => false,
-            respond: (ok, result, error) => {
-              if (!ok) {
-                throw new Error(error?.message ?? "delete failed");
-              }
-              payload = result;
-            },
+          return await gateway.dispatchSessionMethod<T>(method, params, {
+            timeoutMs: options?.timeoutMs,
+            signal: options?.signal,
+            assertCurrent: options?.sessionMutationCommitGuard,
           });
-          deleted.push(params.key as string);
-          return payload as T;
         },
       });
       const [tool] = finalizeAgentTools({
@@ -217,7 +281,7 @@ describe("pending spawn preparation authority", () => {
           expect(parent.controller.signal.aborted).toBe(false);
           expect(getAdmittedRunDelegatedAuthority(admitted)).toBeUndefined();
         }
-        releaseWriter.resolve();
+        writerGate.release();
         const result = await forkSettled.promise;
         const entry = loadSessionEntry({ storePath, sessionKey: childSessionKey })!;
         const transcript = await loadTranscriptEvents({
@@ -272,13 +336,17 @@ describe("pending spawn preparation authority", () => {
           ).toBe("synthetic attachment");
         }
       } finally {
-        releaseWriter.resolve();
+        writerGate.release();
         inspected.resolve();
         await blocker;
         await pending;
-        admission.close();
-        parent.cleanup();
-        bindingFixture.unregister();
+        try {
+          await gateway.close();
+        } finally {
+          admission.close();
+          parent.cleanup();
+          bindingFixture.unregister();
+        }
       }
     },
   );
@@ -326,8 +394,9 @@ describe("pending spawn preparation authority", () => {
         ],
       );
     }
-    const readChildKey = () =>
-      listSessionChildEntriesReadOnly({ storePath, sessionKey: parentSessionKey })[0]!.sessionKey;
+    const readChildKey = async () =>
+      (await listSessionChildEntriesReadOnly({ storePath, sessionKey: parentSessionKey }))[0]!
+        .sessionKey;
     const attachmentFixture = hasAttachments
       ? installSpawnAttachmentFixture({
           stateDir: fixture.stateDir,
@@ -338,7 +407,7 @@ describe("pending spawn preparation authority", () => {
               : closure === "native attachment files"
                 ? "files"
                 : undefined,
-          entered: () => entered.resolve(readChildKey()),
+          entered: async () => entered.resolve(await readChildKey()),
           release: release.promise,
         })
       : undefined;
@@ -353,6 +422,7 @@ describe("pending spawn preparation authority", () => {
     });
     const agentDispatch = vi.fn();
     const deleted: string[] = [];
+    const gateway = createPreparationGateway(context, deleted);
     spawnTesting.setDepsForTest({
       forkSessionEntryFromParent: async (params) => {
         const result = await forkSessionEntryFromParent(params);
@@ -364,7 +434,7 @@ describe("pending spawn preparation authority", () => {
       },
       resolveContextEngine: async () => {
         if (closure === "native engine resolution") {
-          entered.resolve(readChildKey());
+          entered.resolve(await readChildKey());
           await release.promise;
         }
         return Object.assign(new LegacyContextEngine(), { prepareSubagentSpawn: prepare });
@@ -372,6 +442,7 @@ describe("pending spawn preparation authority", () => {
       dispatchGatewayMethodInProcess: async <T>(
         method: string,
         params: Record<string, unknown>,
+        options?: DispatchGatewayMethodInProcessOptions,
       ) => {
         if (method === "agent") {
           agentDispatch(params);
@@ -379,7 +450,12 @@ describe("pending spawn preparation authority", () => {
             const childSessionKey = params.sessionKey as string;
             const child = loadSessionEntry({ storePath, sessionKey: childSessionKey })!;
             childController = registerChatAbortController({
-              chatAbortControllers: context.chatAbortControllers,
+              target: captureSessionTarget({
+                storeScope: storePath,
+                sessionKey: childSessionKey,
+                incarnation: child.sessionId,
+                agentId: "main",
+              }),
               runId: params.idempotencyKey as string,
               sessionKey: childSessionKey,
               sessionId: child.sessionId,
@@ -391,38 +467,14 @@ describe("pending spawn preparation authority", () => {
           }
           return { runId: params.idempotencyKey, status: "accepted" } as T;
         }
-        if (method === "chat.abort") {
-          const respond = await invokeChatAbortHandler({
-            handler: handleChatAbortRequest,
-            context,
-            request: params as { sessionKey: string; runId: string },
-            client: createSyntheticPluginRuntimeClient(),
-          });
-          expect(respond).toHaveBeenCalledWith(
-            true,
-            expect.objectContaining({ aborted: true, runIds: [params.runId] }),
-          );
-          return respond.mock.calls[0]![1] as T;
-        }
-        if (method !== "sessions.delete") {
+        if (method !== "chat.abort" && method !== "sessions.delete") {
           throw new Error(`Unexpected spawn RPC ${method}`);
         }
-        let payload: unknown;
-        await sessionDeleteHandlers["sessions.delete"]!({
-          req: {} as never,
-          params,
-          context: context as unknown as GatewayRequestContext,
-          client: createSyntheticPluginRuntimeClient(),
-          isWebchatConnect: () => false,
-          respond: (ok, result, error) => {
-            if (!ok) {
-              throw new Error(error?.message ?? "delete failed");
-            }
-            payload = result;
-          },
+        return await gateway.dispatchSessionMethod<T>(method, params, {
+          timeoutMs: options?.timeoutMs,
+          signal: options?.signal,
+          assertCurrent: options?.sessionMutationCommitGuard,
         });
-        deleted.push(params.key as string);
-        return payload as T;
       },
     });
     const invocationAbort = new AbortController();
@@ -511,12 +563,11 @@ describe("pending spawn preparation authority", () => {
     );
     try {
       // A rejected spawn never enters preparation; report it instead of waiting for the test timeout.
-      const childSessionKey = await Promise.race([
+      const childSessionKey = await awaitGateBeforeSettlement(
         entered.promise,
-        wrapped.then(() => {
-          throw new Error("Spawn settled before entering context preparation");
-        }),
-      ]);
+        wrapped,
+        "Spawn settled before entering context preparation",
+      );
       expect(subagentRuns.size, "no ownership transfer before preparation resolves").toBe(0);
       expect(loadSessionEntry({ storePath, sessionKey: childSessionKey })).toBeDefined();
       if (closure === "native acceptance") {
@@ -608,13 +659,17 @@ describe("pending spawn preparation authority", () => {
       release.resolve();
       acceptedGate.resolve();
       await forwarded;
-      childController?.cleanup();
       await wrappedOutcome;
-      host?.close();
-      admission.close();
-      parent.cleanup();
-      attachmentFixture?.restore();
-      bindingFixture?.unregister();
+      try {
+        await gateway.close();
+      } finally {
+        childController?.cleanup();
+        host?.close();
+        admission.close();
+        parent.cleanup();
+        attachmentFixture?.restore();
+        bindingFixture?.unregister();
+      }
     }
   });
 });

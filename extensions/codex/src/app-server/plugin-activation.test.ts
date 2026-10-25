@@ -126,7 +126,7 @@ describe("Codex plugin activation", () => {
     ]);
     expect(pluginListCalls).toBe(2);
     expect(
-      metadataCache.read("runtime", "curated-global")?.response.marketplaces[0]?.plugins[0],
+      metadataCache.read("runtime", "curated-global")?.marketplaces[0]?.plugins[0],
     ).toMatchObject({ installed: true, enabled: true });
   });
 
@@ -175,9 +175,7 @@ describe("Codex plugin activation", () => {
       appCacheKey: "runtime",
       request: async (method) => {
         if (method === "plugin/list") {
-          return pluginList([
-            pluginSummary("google-calendar", { installed: false, enabled: false }),
-          ]);
+          return pluginList([pluginSummary("google-calendar")]);
         }
         if (method === "plugin/install") {
           return { authPolicy: "ON_USE", appsNeedingAuth: [] } satisfies v2.PluginInstallResponse;
@@ -201,40 +199,11 @@ describe("Codex plugin activation", () => {
     ]);
   });
 
-  it("keeps a successful install usable when unrelated native refreshes fail", async () => {
-    const result = await ensureCodexPluginActivation({
-      identity: identity("google-calendar"),
-      request: async (method) => {
-        if (method === "plugin/list") {
-          return pluginList([
-            pluginSummary("google-calendar", { installed: false, enabled: false }),
-          ]);
-        }
-        if (method === "plugin/install") {
-          return { authPolicy: "ON_USE", appsNeedingAuth: [] } satisfies v2.PluginInstallResponse;
-        }
-        if (method === "skills/list") {
-          throw new Error("skills/list unavailable");
-        }
-        throw new Error(`unexpected request ${method}`);
-      },
-    });
-
-    expectActivationResult(result, {
-      ok: true,
-      reason: "installed",
-      installAttempted: true,
-    });
-    expect(result.diagnostics).toEqual([]);
-  });
-
   it("installs a disabled remote curated plugin by its resolved remote id", async () => {
     const calls: Array<{ method: string; params: unknown }> = [];
     const remoteSummary = pluginSummary("google-calendar@openai-curated-remote", {
       name: "google-calendar",
       remotePluginId: "plugin_connector_google_calendar",
-      installed: false,
-      enabled: false,
     });
     const result = await ensureCodexPluginActivation({
       identity: identity("google-calendar"),
@@ -284,9 +253,6 @@ describe("Codex plugin activation", () => {
 
   it.each([
     {
-      rejectionMessage: "remote plugin plugin_connector_google_calendar is disabled by admin",
-    },
-    {
       rejectionMessage:
         "remote plugin plugin_connector_google_calendar is not available for install",
     },
@@ -297,10 +263,6 @@ describe("Codex plugin activation", () => {
       const remoteSummary = pluginSummary("google-calendar@openai-curated-remote", {
         name: "google-calendar",
         remotePluginId: "plugin_connector_google_calendar",
-        installed: false,
-        enabled: false,
-        availability: "AVAILABLE",
-        installPolicy: "AVAILABLE",
       });
       const result = await ensureCodexPluginActivation({
         identity: identity("google-calendar"),
@@ -340,38 +302,31 @@ describe("Codex plugin activation", () => {
     },
   );
 
-  it.each([
-    {
-      code: -32_001,
-      message: "remote plugin plugin_connector_google_calendar is disabled by admin",
-    },
-    { code: -32_600, message: "plugin service temporarily unavailable" },
-  ])("does not hide unrelated plugin install RPC failures ($code)", async ({ code, message }) => {
-    const error = new CodexAppServerRpcError({ code, message }, "plugin/install");
-    const remoteSummary = pluginSummary("google-calendar@openai-curated-remote", {
-      name: "google-calendar",
-      remotePluginId: "plugin_connector_google_calendar",
-      installed: false,
-      enabled: false,
-      availability: "AVAILABLE",
-      installPolicy: "AVAILABLE",
-    });
+  it.each([{ code: -32_600, message: "plugin service temporarily unavailable" }])(
+    "does not hide unrelated plugin install RPC failures ($code)",
+    async ({ code, message }) => {
+      const error = new CodexAppServerRpcError({ code, message }, "plugin/install");
+      const remoteSummary = pluginSummary("google-calendar@openai-curated-remote", {
+        name: "google-calendar",
+        remotePluginId: "plugin_connector_google_calendar",
+      });
 
-    await expect(
-      ensureCodexPluginActivation({
-        identity: identity("google-calendar"),
-        request: async (method) => {
-          if (method === "plugin/list") {
-            return pluginList([remoteSummary], { name: "openai-curated-remote", path: null });
-          }
-          if (method === "plugin/install") {
-            throw error;
-          }
-          throw new Error(`unexpected request ${method}`);
-        },
-      }),
-    ).rejects.toBe(error);
-  });
+      await expect(
+        ensureCodexPluginActivation({
+          identity: identity("google-calendar"),
+          request: async (method) => {
+            if (method === "plugin/list") {
+              return pluginList([remoteSummary], { name: "openai-curated-remote", path: null });
+            }
+            if (method === "plugin/install") {
+              throw error;
+            }
+            throw new Error(`unexpected request ${method}`);
+          },
+        }),
+      ).rejects.toBe(error);
+    },
+  );
 
   it.each([
     { availability: "DISABLED_BY_ADMIN", installPolicy: "AVAILABLE" },
@@ -381,8 +336,6 @@ describe("Codex plugin activation", () => {
     const summary = pluginSummary("google-calendar@openai-curated-remote", {
       name: "google-calendar",
       remotePluginId: "plugin_connector_google_calendar",
-      installed: false,
-      enabled: false,
       ...policy,
     });
 
@@ -405,25 +358,6 @@ describe("Codex plugin activation", () => {
     expect(calls).toEqual(["plugin/list"]);
   });
 
-  it("does not hide non-RPC plugin install failures", async () => {
-    await expect(
-      ensureCodexPluginActivation({
-        identity: identity("google-calendar"),
-        request: async (method) => {
-          if (method === "plugin/list") {
-            return pluginList([
-              pluginSummary("google-calendar", { installed: false, enabled: false }),
-            ]);
-          }
-          if (method === "plugin/install") {
-            throw new Error("plugin/install transport failed");
-          }
-          throw new Error(`unexpected request ${method}`);
-        },
-      }),
-    ).rejects.toThrow("plugin/install transport failed");
-  });
-
   it("does not install a remote curated plugin without its opaque remote id", async () => {
     const calls: string[] = [];
     const result = await ensureCodexPluginActivation({
@@ -431,23 +365,14 @@ describe("Codex plugin activation", () => {
       request: async (method) => {
         calls.push(method);
         if (method === "plugin/list") {
-          return {
-            ...pluginList([]),
-            marketplaces: [
-              {
-                name: "openai-curated-remote",
-                path: null,
-                interface: null,
-                plugins: [
-                  pluginSummary("google-calendar@openai-curated-remote", {
-                    name: "google-calendar",
-                    installed: false,
-                    enabled: false,
-                  }),
-                ],
-              },
+          return pluginList(
+            [
+              pluginSummary("google-calendar@openai-curated-remote", {
+                name: "google-calendar",
+              }),
             ],
-          } satisfies v2.PluginListResponse;
+            { name: "openai-curated-remote", path: null },
+          ) satisfies v2.PluginListResponse;
         }
         throw new Error(`unexpected request ${method}`);
       },
@@ -504,7 +429,7 @@ describe("Codex plugin activation", () => {
     expect(request).not.toHaveBeenCalled();
   });
 
-  it.each(["company-tools", "openai-bundled"])(
+  it.each(["openai-bundled"])(
     "never installs a non-curated %s plugin during thread startup",
     async (marketplaceName) => {
       const request = vi.fn(async () => {

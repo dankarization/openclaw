@@ -318,12 +318,13 @@ internal fun parseChatPlanSteps(element: JsonElement?): List<ChatPlanStep> {
 
 internal fun parseChatProgressCardGetResult(element: JsonElement): ChatProgressCardGetResult {
   val result = element as? JsonObject ?: error("Invalid progressCard.get response")
-  if (!result.containsKey("card")) error("Invalid progressCard.get response")
-  val rawCard = result["card"]
-  if (rawCard == null || rawCard is JsonNull) {
+  val rawCard = result["card"] ?: error("Invalid progressCard.get response")
+  if (rawCard is JsonNull) {
     return ChatProgressCardGetResult(sessionKey = null, card = null)
   }
   val card = rawCard as? JsonObject ?: error("Invalid progressCard.get response")
+
+  fun integer(key: String): Long? = (card[key] as? JsonPrimitive)?.takeUnless { it.isString }?.content?.toLongOrNull()
   val sessionKey =
     card["sessionKey"]
       .asJsonStringOrNull()
@@ -331,19 +332,11 @@ internal fun parseChatProgressCardGetResult(element: JsonElement): ChatProgressC
       ?.takeIf { it.isNotEmpty() }
       ?: error("Invalid progress card session key")
   val revision =
-    (card["revision"] as? JsonPrimitive)
-      ?.takeUnless { it.isString }
-      ?.content
-      ?.toLongOrNull()
+    integer("revision")
       ?.takeIf { it in 1..Int.MAX_VALUE }
       ?.toInt()
       ?: error("Invalid progress card revision")
-  val updatedAt =
-    (card["updatedAt"] as? JsonPrimitive)
-      ?.takeUnless { it.isString }
-      ?.content
-      ?.toLongOrNull()
-      ?: error("Invalid progress card update time")
+  val updatedAt = integer("updatedAt") ?: error("Invalid progress card update time")
   val markdown =
     if (card.containsKey("markdown")) {
       card["markdown"].asJsonStringOrNull()
@@ -353,16 +346,12 @@ internal fun parseChatProgressCardGetResult(element: JsonElement): ChatProgressC
     }?.takeIf { it.isNotBlank() }
   val steps = parseChatPlanSteps(card["steps"])
   val parsedCard =
-    if (markdown == null && steps.isEmpty()) {
-      null
-    } else {
-      ChatProgressCard(
-        revision = revision,
-        updatedAt = updatedAt,
-        markdown = markdown,
-        steps = steps,
-      )
-    }
+    ChatProgressCard(
+      revision = revision,
+      updatedAt = updatedAt,
+      markdown = markdown,
+      steps = steps,
+    ).takeUnless { markdown == null && steps.isEmpty() }
   return ChatProgressCardGetResult(sessionKey = sessionKey, card = parsedCard)
 }
 
@@ -429,86 +418,6 @@ internal val defaultChatThinkingLevelSelection =
     options = emptyList(),
     isGatewayProvided = false,
   )
-
-/** Canonical effort ranks aligned with Gateway THINKING_LEVEL_RANKS. */
-private val chatThinkingLevelRanks =
-  mapOf(
-    "off" to 0,
-    "minimal" to 10,
-    "low" to 20,
-    "medium" to 30,
-    "adaptive" to 30,
-    "high" to 40,
-    "xhigh" to 60,
-    "max" to 70,
-    "ultra" to 80,
-  )
-
-internal fun chatThinkingLevelRank(level: String): Int = chatThinkingLevelRanks[level.trim().lowercase(Locale.US)] ?: -1
-
-/**
- * Clamps [level] onto Gateway-advertised [options].
- *
- * Aligns with Gateway resolveGatewaySessionThinkingLevel /
- * resolveSupportedThinkingLevelFromProfile:
- * - Membership wins.
- * - Explicit "ultra" is always preserved (including when omitted from lightweight
- *   picker metadata).
- * - Other canonical Gateway-effective levels omitted from picker metadata are preserved.
- *   Picker shape is not completeness: an Off/Ultra list can be an Off-only profile with
- *   runtime Ultra appended, and identity-only catalogs must not replace a stored level.
- * - Clamp only non-canonical levels. Auto-fallback never opts into Ultra.
- * - Among non-Ultra options: prefer highest non-off with rank <= requested; else lowest
- *   non-off; else Off.
- */
-internal fun clampThinkingLevelToOptions(
-  level: String,
-  options: List<ChatThinkingLevelOption>,
-): String {
-  val normalized = level.trim().lowercase(Locale.US).ifEmpty { "off" }
-  if (options.isEmpty()) return normalized
-  val ids =
-    options
-      .map { it.id.trim().lowercase(Locale.US) }
-      .filter { it.isNotEmpty() }
-      .distinct()
-  if (ids.isEmpty()) return normalized
-  if (normalized in ids) return normalized
-  // Existing session contract: Ultra can be effective while omitted from advertised options.
-  if (normalized == "ultra") return "ultra"
-
-  val requestedRank = chatThinkingLevelRank(normalized)
-  // Gateway resolveGatewaySessionThinkingLevel keeps a stored canonical level when the
-  // catalog entry is missing or identity-only, regardless of picker shape.
-  if (requestedRank >= 0) return normalized
-
-  // Mirror Gateway: a fallback must never opt into proactive Ultra orchestration.
-  val ranked =
-    ids.mapNotNull { id ->
-      if (id == "ultra") return@mapNotNull null
-      val rank = chatThinkingLevelRank(id)
-      if (rank < 0) null else id to rank
-    }
-  if (ranked.isEmpty()) {
-    return ids.firstOrNull { it == "off" } ?: "off"
-  }
-  if (requestedRank < 0) {
-    return ids.firstOrNull { it == "off" } ?: ranked.minBy { it.second }.first
-  }
-
-  val floor =
-    ranked
-      .filter { (id, rank) -> id != "off" && rank <= requestedRank }
-      .maxByOrNull { it.second }
-      ?.first
-  if (floor != null) return floor
-
-  val lowestNonOff =
-    ranked.filter { (id, _) -> id != "off" }.minByOrNull { it.second }?.first
-  if (lowestNonOff != null) return lowestNonOff
-
-  return ids.firstOrNull { it == "off" } ?: "off"
-}
 
 internal data class ChatActiveRunPresentation(
   val count: Int = 0,
@@ -625,6 +534,24 @@ internal fun isSessionRunActive(
     "queued", "running" -> hasActiveRun ?: true
     else -> false
   }
+
+internal data class ChatSessionPatch(
+  val key: String,
+  val ownerAgentId: String? = null,
+  val expectedSessionId: String? = null,
+  val label: String? = null,
+  val clearLabel: Boolean = false,
+  val category: String? = null,
+  val clearCategory: Boolean = false,
+  val snoozedUntil: Long? = null,
+  val clearSnooze: Boolean = false,
+  val color: String? = null,
+  val clearColor: Boolean = false,
+  val pinned: Boolean? = null,
+  val archived: Boolean? = null,
+  val unread: Boolean? = null,
+  val unreadExpectation: ChatSessionUnreadExpectation? = null,
+)
 
 data class ChatSessionUnreadExpectation(
   val markedUnreadAt: Long?,

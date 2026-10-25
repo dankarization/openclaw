@@ -1,5 +1,5 @@
 {
-  "startupJsGzipBytes": 372878,
-  "reason": "Native sidebar bridge landing: measured production startup JS 372,878 B after rebasing onto main, +1,107 B (0.298%) over the prior baseline within the approved sub-1% ceiling rule. Matched-toolchain main measured 372,406 B versus 372,597 B before final action-module extraction (+191 B); retain the existing 512 B growth and 64 B build-variance allowances.",
-  "updatedAt": "2026-10-02"
+  "startupJsGzipBytes": 281465,
+  "reason": "Streaming-only token-to-DOM: Peter accepted chat boot growth after the original experiment reduced streaming script CPU 8.6% and HTML assignments 2129 to 178. Settled rendering retains HTML plus DOMPurify; startup measures 281465 B with unchanged requests. Ratchet to the measured head.",
+  "updatedAt": "2026-10-25"
 }

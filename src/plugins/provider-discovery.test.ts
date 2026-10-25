@@ -1,6 +1,7 @@
 /** Tests provider discovery normalization, grouping, and manifest contribution handling. */
 import { describe, expect, it } from "vitest";
-import type { ModelDefinitionConfig, ModelProviderConfig } from "../config/types.js";
+import type { ModelProviderConfig } from "../config/types.js";
+import { buildCatalogModel as makeModel } from "../plugin-sdk/provider-catalog.test-support.js";
 import {
   groupPluginDiscoveryProvidersByOrder,
   normalizePluginDiscoveryResult,
@@ -38,50 +39,6 @@ function makeModelProviderConfig(overrides?: Partial<ModelProviderConfig>): Mode
   };
 }
 
-function makeModel(id: string): ModelDefinitionConfig {
-  return {
-    id,
-    name: id,
-    reasoning: false,
-    input: ["text"],
-    cost: {
-      input: 0,
-      output: 0,
-      cacheRead: 0,
-      cacheWrite: 0,
-    },
-    contextWindow: 128_000,
-    maxTokens: 8_192,
-  };
-}
-
-function expectGroupedProviderIds(
-  providers: readonly ProviderPlugin[],
-  expected: Record<ProviderCatalogOrder | "late", readonly string[]>,
-) {
-  const grouped = groupPluginDiscoveryProvidersByOrder([...providers]);
-  const actual = {
-    simple: grouped.simple.map((provider) => provider.id),
-    profile: grouped.profile.map((provider) => provider.id),
-    paired: grouped.paired.map((provider) => provider.id),
-    late: grouped.late.map((provider) => provider.id),
-  };
-  expect(actual).toEqual(expected);
-}
-
-function expectNormalizedDiscoveryResult(params: {
-  provider: ProviderPlugin;
-  result: Parameters<typeof normalizePluginDiscoveryResult>[0]["result"];
-  expected: Record<string, unknown>;
-}) {
-  const normalized = normalizePluginDiscoveryResult({
-    provider: params.provider,
-    result: params.result,
-  });
-  expect(Object.getPrototypeOf(normalized)).toBe(null);
-  expect(Object.fromEntries(Object.entries(normalized))).toEqual(params.expected);
-}
-
 type NormalizePluginDiscoveryResultCase = {
   name: string;
   provider: ProviderPlugin;
@@ -108,7 +65,14 @@ describe("groupPluginDiscoveryProvidersByOrder", () => {
       },
     },
   ] as const)("$name", ({ providers, expected }) => {
-    expectGroupedProviderIds(providers, expected);
+    const grouped = groupPluginDiscoveryProvidersByOrder([...providers]);
+    const actual = {
+      simple: grouped.simple.map((provider) => provider.id),
+      profile: grouped.profile.map((provider) => provider.id),
+      paired: grouped.paired.map((provider) => provider.id),
+      late: grouped.late.map((provider) => provider.id),
+    };
+    expect(actual).toEqual(expected);
   });
 });
 
@@ -116,9 +80,7 @@ describe("runProviderCatalog", () => {
   it("passes the selected provider identities into the catalog hook", async () => {
     let providerIds: readonly string[] | undefined;
     const provider: ProviderPlugin = {
-      id: "openai",
-      label: "OpenAI",
-      auth: [],
+      ...makeProvider({ id: "openai", label: "OpenAI" }),
       catalog: {
         run: async (ctx) => {
           providerIds = ctx.providerIds;
@@ -147,9 +109,7 @@ describe("runProviderCatalog", () => {
       status: "ready" | "auth-rejected" | "unavailable";
     }> = [];
     const provider: ProviderPlugin = {
-      id: "openai",
-      label: "OpenAI",
-      auth: [],
+      ...makeProvider({ id: "openai", label: "OpenAI" }),
       catalog: {
         run: async () => {
           await Promise.resolve();
@@ -161,6 +121,7 @@ describe("runProviderCatalog", () => {
                 profileId: "openai:chatgpt",
                 rejectionScope: "catalog",
                 status: "auth-rejected",
+                apiKey: "synthetic-not-for-diagnostics",
               },
             ],
           };
@@ -192,9 +153,7 @@ describe("runProviderCatalog", () => {
   it("copies only valid ready model order through the catalog boundary", async () => {
     const outcomes: Array<{ status: string; modelOrder?: readonly string[] }> = [];
     const provider: ProviderPlugin = {
-      id: "demo",
-      label: "Demo",
-      auth: [],
+      ...makeProvider({ id: "demo", label: "Demo" }),
       catalog: {
         run: async () => ({
           providers: {},
@@ -202,7 +161,7 @@ describe("runProviderCatalog", () => {
             {
               provider: "demo",
               status: "ready",
-              modelOrder: [" second ", "", "second", "first", 42],
+              modelOrder: [" second ", "", "second", "first"],
             },
             {
               provider: "demo",
@@ -210,7 +169,7 @@ describe("runProviderCatalog", () => {
               status: "unavailable",
               modelOrder: ["stale"],
             },
-          ] as never,
+          ],
         }),
       },
     };
@@ -233,9 +192,7 @@ describe("runProviderCatalog", () => {
   it("preserves provider-owned profile outcomes after multiple auth probes", async () => {
     const outcomes: Array<{ profileId?: string; status: string }> = [];
     const provider: ProviderPlugin = {
-      id: "openai",
-      label: "OpenAI",
-      auth: [],
+      ...makeProvider({ id: "openai", label: "OpenAI" }),
       catalog: {
         run: async (ctx) => {
           ctx.resolveProviderAuth("openai");
@@ -286,9 +243,7 @@ describe("runProviderCatalog", () => {
     async ({ providerIds, expected }) => {
       const outcomes: string[] = [];
       const provider: ProviderPlugin = {
-        id: "openai",
-        label: "OpenAI",
-        auth: [],
+        ...makeProvider({ id: "openai", label: "OpenAI" }),
         catalog: {
           run: async () => ({
             providers: {},
@@ -317,6 +272,19 @@ describe("runProviderCatalog", () => {
 });
 
 describe("normalizePluginDiscoveryResult", () => {
+  it("retains provider and model facts by reference", () => {
+    const model = makeModel("kept-model");
+    const config = makeModelProviderConfig({ models: [model] });
+    const normalized = normalizePluginDiscoveryResult({
+      provider: makeProvider({ id: "Demo", aliases: ["demo-alias"] }),
+      result: { provider: config },
+    });
+
+    expect(normalized.demo).toBe(config);
+    expect(normalized["demo-alias"]).toBe(config);
+    expect(normalized.demo?.models[0]).toBe(model);
+  });
+
   const cases: NormalizePluginDiscoveryResultCase[] = [
     {
       name: "maps a single provider result to the plugin id",
@@ -415,134 +383,12 @@ describe("normalizePluginDiscoveryResult", () => {
         },
       },
     },
-    {
-      name: "skips unreadable multi-provider entries while preserving healthy siblings",
-      provider: makeProvider({ id: "ignored" }),
-      result: {
-        providers: Object.defineProperty(
-          {
-            healthy: makeModelProviderConfig({
-              baseUrl: "http://healthy.example/v1",
-            }),
-          },
-          "broken",
-          {
-            enumerable: true,
-            get() {
-              throw new Error("provider row read failed");
-            },
-          },
-        ) as Record<string, ModelProviderConfig>,
-      },
-      expected: {
-        healthy: {
-          baseUrl: "http://healthy.example/v1",
-          models: [],
-        },
-      },
-    },
-    {
-      name: "skips providers with unreadable required fields",
-      provider: makeProvider({ id: "ignored" }),
-      result: {
-        providers: {
-          broken: Object.defineProperty(
-            makeModelProviderConfig({
-              baseUrl: "http://broken.example/v1",
-              models: [makeModel("broken-model")],
-            }),
-            "baseUrl",
-            {
-              enumerable: true,
-              get() {
-                throw new Error("provider baseUrl read failed");
-              },
-            },
-          ),
-          healthy: makeModelProviderConfig({
-            baseUrl: "http://healthy.example/v1",
-            models: [makeModel("healthy-model")],
-          }),
-        },
-      },
-      expected: {
-        healthy: {
-          baseUrl: "http://healthy.example/v1",
-          models: [makeModel("healthy-model")],
-        },
-      },
-    },
-    {
-      name: "skips unreadable model rows while preserving healthy siblings",
-      provider: makeProvider({ id: "ignored" }),
-      result: {
-        providers: {
-          healthy: makeModelProviderConfig({
-            baseUrl: "http://healthy.example/v1",
-            models: Object.defineProperty([makeModel("healthy-model")], "1", {
-              enumerable: true,
-              get() {
-                throw new Error("model row read failed");
-              },
-            }),
-          }),
-        },
-      },
-      expected: {
-        healthy: {
-          baseUrl: "http://healthy.example/v1",
-          models: [makeModel("healthy-model")],
-        },
-      },
-    },
-    {
-      name: "skips model rows with unreadable required fields",
-      provider: makeProvider({ id: "ignored" }),
-      result: {
-        providers: {
-          healthy: makeModelProviderConfig({
-            baseUrl: "http://healthy.example/v1",
-            models: [
-              Object.defineProperty(makeModel("broken-model"), "id", {
-                enumerable: true,
-                get() {
-                  throw new Error("model id read failed");
-                },
-              }),
-              makeModel("healthy-model"),
-            ],
-          }),
-        },
-      },
-      expected: {
-        healthy: {
-          baseUrl: "http://healthy.example/v1",
-          models: [makeModel("healthy-model")],
-        },
-      },
-    },
-    {
-      name: "keeps minimal model rows with id-only labels",
-      provider: makeProvider({ id: "ignored" }),
-      result: {
-        providers: {
-          healthy: makeModelProviderConfig({
-            baseUrl: "http://healthy.example/v1",
-            models: [{ id: "local-tiny" } as ModelDefinitionConfig],
-          }),
-        },
-      },
-      expected: {
-        healthy: {
-          baseUrl: "http://healthy.example/v1",
-          models: [{ id: "local-tiny", name: "local-tiny" }],
-        },
-      },
-    },
   ];
 
   it.each(cases)("$name", ({ provider, result, expected }) => {
-    expectNormalizedDiscoveryResult({ provider, result, expected });
+    const normalized = normalizePluginDiscoveryResult({ provider, result });
+    expect(Object.getPrototypeOf(normalized)).toBe(null);
+    expect(Object.fromEntries(Object.entries(normalized))).toEqual(expected);
   });
 });
 

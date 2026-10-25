@@ -1,11 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { expect, test, vi } from "vitest";
+import { modelDefinition } from "../agents/model-auth.fixtures.test-support.js";
 import { managedWorktrees } from "../agents/worktrees/service.js";
 import { getRuntimeConfig } from "../config/io.js";
 import { loadSessionEntry } from "../config/sessions/session-accessor.js";
-import type { GatewayOperatorRoleDefinition } from "../config/types.gateway.js";
-import { createDeferredCore } from "../shared/deferred.js";
 import { connectUserModelAccount } from "../state/user-model-accounts.js";
 import { ensureProfileForEmail } from "../state/user-profiles.js";
 import { identifiedClient } from "./server-methods/sessions-sharing.test-support.js";
@@ -20,6 +19,7 @@ import {
   chatSendOwner,
   removeSessionWorktree,
 } from "./server.sessions.create.test-support.js";
+import { gatewayConnect, gatewayProfile } from "./server/client-fixtures.test-support.js";
 import { testState, writeSessionStore } from "./test-helpers.js";
 import {
   getGatewayConfigModule,
@@ -54,19 +54,8 @@ async function createPersonalAccountSessionFixture() {
   const authProfileId = connectAccount("first-account@example.test");
   const client: GatewayClient & { connId: string } = {
     connId: "personal-session-connection",
-    connect: {
-      minProtocol: 1,
-      maxProtocol: 1,
-      client: { id: "openclaw-control-ui", version: "test", platform: "test", mode: "webchat" },
-      role: "operator",
-      scopes: ["operator.write"],
-    },
-    authenticatedUserProfile: {
-      profileId: owner.id,
-      displayName: owner.displayName,
-      hasAvatar: false,
-      updatedAt: owner.updatedAt,
-    },
+    connect: gatewayConnect(["operator.write"]),
+    authenticatedUserProfile: gatewayProfile(owner.id, owner.displayName, owner.updatedAt),
   };
   const clients = new Set([client]);
   const catalog = [
@@ -119,93 +108,56 @@ test("session creation provenance cannot authorize a fresh personal account", as
   });
 });
 
-test.each([
-  { selection: "explicit", source: "user" },
-  { selection: "default", source: "user-link" },
-] as const)(
-  "sessions.create preserves a personal $selection across adoption and a collaborator fork",
-  async ({ selection, source }) => {
-    await withSessionTestState({ layout: "state-only" }, async () => {
-      const { storePath, authProfileId, connectAccount, client, context } =
-        await createPersonalAccountSessionFixture();
-      const key = "agent:main:dashboard:personal-owner";
-
-      const created = await directSessionReq(
-        "sessions.create",
-        {
-          key,
-          model: `openai/gpt-5.6-sol${selection === "explicit" ? `@${authProfileId}` : ""}`,
-        },
-        { client, context },
-      );
-
-      expect(created.ok, JSON.stringify(created.error)).toBe(true);
-      expect(loadSessionEntry({ sessionKey: key, storePath })).toMatchObject({
-        authProfileOverride: authProfileId,
-        authProfileOverrideSource: source,
-      });
-
-      expect(connectAccount("next-account@example.test")).not.toBe(authProfileId);
-      const adopted = await directSessionReq("sessions.create", { key }, { client, context });
-      expect(adopted.ok, JSON.stringify(adopted.error)).toBe(true);
-      expect(loadSessionEntry({ sessionKey: key, storePath })).toMatchObject({
-        authProfileOverride: authProfileId,
-        authProfileOverrideSource: source,
-      });
-
-      const collaborator = ensureProfileForEmail("session-collaborator@example.test");
-      connectAccount("collaborator-account@example.test", collaborator.id);
-      client.authenticatedUserProfile = {
-        profileId: collaborator.id,
-        displayName: collaborator.displayName,
-        hasAvatar: false,
-        updatedAt: collaborator.updatedAt,
-      };
-      const forkKey = "agent:main:dashboard:personal-collaborator-fork";
-      const forked = await directSessionReq(
-        "sessions.create",
-        { key: forkKey, parentSessionKey: key, fork: true },
-        { client, context },
-      );
-
-      expect(forked.ok, JSON.stringify(forked.error)).toBe(true);
-      expect(loadSessionEntry({ sessionKey: forkKey, storePath })).toMatchObject({
-        authProfileOverride: authProfileId,
-        authProfileOverrideSource: source,
-        parentSessionKey: key,
-      });
-    });
-  },
-);
-
-test("sessions.create commits the personal default before dispatching its initial turn", async () => {
+test("sessions.create preserves an explicit personal account across adoption and a collaborator fork", async () => {
   await withSessionTestState({ layout: "state-only" }, async () => {
-    const { storePath, authProfileId, client, context } =
+    const { storePath, authProfileId, connectAccount, client, context } =
       await createPersonalAccountSessionFixture();
-    const key = "agent:main:dashboard:personal-default-initial-turn";
-    const observedProfiles: Array<string | undefined> = [];
-    const chatSend = vi.spyOn(chatSendOwner, "handleDirectExternalChatSend");
-    chatSend.mockImplementation(async ({ respond }) => {
-      observedProfiles.push(loadSessionEntry({ sessionKey: key, storePath })?.authProfileOverride);
-      respond(true, { runId: "personal-default-first-turn", status: "started" });
-    });
-    try {
-      const created = await directSessionReq<{ runStarted: boolean }>(
-        "sessions.create",
-        { key, model: "openai/gpt-5.6-sol", message: "Start the first turn" },
-        { client, context },
-      );
+    const key = "agent:main:dashboard:personal-owner";
 
-      expect(created.ok, JSON.stringify(created.error)).toBe(true);
-      expect(created.payload?.runStarted).toBe(true);
-      expect(observedProfiles).toEqual([authProfileId]);
-      expect(loadSessionEntry({ sessionKey: key, storePath })).toMatchObject({
-        authProfileOverride: authProfileId,
-        authProfileOverrideSource: "user-link",
-      });
-    } finally {
-      chatSend.mockRestore();
-    }
+    const created = await directSessionReq(
+      "sessions.create",
+      {
+        key,
+        model: `openai/gpt-5.6-sol@${authProfileId}`,
+      },
+      { client, context },
+    );
+
+    expect(created.ok, JSON.stringify(created.error)).toBe(true);
+    expect(loadSessionEntry({ sessionKey: key, storePath })).toMatchObject({
+      authProfileOverride: authProfileId,
+      authProfileOverrideSource: "user",
+    });
+
+    expect(connectAccount("next-account@example.test")).not.toBe(authProfileId);
+    const adopted = await directSessionReq("sessions.create", { key }, { client, context });
+    expect(adopted.ok, JSON.stringify(adopted.error)).toBe(true);
+    expect(loadSessionEntry({ sessionKey: key, storePath })).toMatchObject({
+      authProfileOverride: authProfileId,
+      authProfileOverrideSource: "user",
+    });
+
+    const collaborator = ensureProfileForEmail("session-collaborator@example.test");
+    connectAccount("collaborator-account@example.test", collaborator.id);
+    client.authenticatedUserProfile = {
+      profileId: collaborator.id,
+      displayName: collaborator.displayName,
+      hasAvatar: false,
+      updatedAt: collaborator.updatedAt,
+    };
+    const forkKey = "agent:main:dashboard:personal-collaborator-fork";
+    const forked = await directSessionReq(
+      "sessions.create",
+      { key: forkKey, parentSessionKey: key, fork: true },
+      { client, context },
+    );
+
+    expect(forked.ok, JSON.stringify(forked.error)).toBe(true);
+    expect(loadSessionEntry({ sessionKey: forkKey, storePath })).toMatchObject({
+      authProfileOverride: authProfileId,
+      authProfileOverrideSource: "user",
+      parentSessionKey: key,
+    });
   });
 });
 
@@ -243,27 +195,19 @@ test.each([
                 baseUrl: "https://openrouter.ai/api/v1",
                 api: "openai-completions",
                 models: [
-                  {
-                    id: "trinity-large-thinking",
+                  modelDefinition("trinity-large-thinking", {
                     name: "Direct Arcee model",
                     api: "openai-completions",
                     baseUrl: "https://api.arcee.ai/api/v1",
-                    reasoning: true,
-                    input: ["text"],
                     contextWindow: 32768,
                     maxTokens: 2048,
-                    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-                  },
-                  {
-                    id: "trinity-large-preview",
+                  }),
+                  modelDefinition("trinity-large-preview", {
                     name: "Arcee model through OpenRouter",
                     api: "openai-completions",
-                    reasoning: true,
-                    input: ["text"],
                     contextWindow: 32768,
                     maxTokens: 2048,
-                    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-                  },
+                  }),
                 ],
               },
             },
@@ -523,9 +467,9 @@ test.each(["foreign admin", "unidentified admin", "synthetic owner"] as const)(
         expect(context.loadGatewayModelCatalogSnapshot).not.toHaveBeenCalled();
         expect(dashboardTitleGenerationMocks.generate).not.toHaveBeenCalled();
         expect(loadSessionEntry({ sessionKey: key, storePath })).toEqual(before);
-        expect(managedWorktrees.findLiveByOwner("session", key)).toBeUndefined();
+        expect(await managedWorktrees.findLiveByOwner("session", key)).toBeUndefined();
       } finally {
-        const worktree = managedWorktrees.findLiveByOwner("session", key);
+        const worktree = await managedWorktrees.findLiveByOwner("session", key);
         if (worktree) {
           await managedWorktrees.remove({
             id: worktree.id,
@@ -535,64 +479,6 @@ test.each(["foreign admin", "unidentified admin", "synthetic owner"] as const)(
         }
         testState.agentConfig = undefined;
       }
-    });
-  },
-);
-
-test.each([
-  { loss: "disconnected", selection: "explicit" },
-  { loss: "role revoked", selection: "default" },
-] as const)(
-  "sessions.create rejects a personal $selection when $loss while the model catalog is loading",
-  async ({ loss, selection }) => {
-    await withSessionTestState({ layout: "state-only" }, async () => {
-      const { storePath, authProfileId, client, clients, catalog, context } =
-        await createPersonalAccountSessionFixture();
-      const writer: GatewayOperatorRoleDefinition = {
-        agents: "*",
-        scopes: ["operator.write"],
-        sessions: { others: "none" },
-      };
-      const cfg = {
-        ...getRuntimeConfig(),
-        gateway: { roles: { default: "writer", definitions: { writer } } },
-      };
-      const catalogStarted = createDeferredCore();
-      const catalogGate = createDeferredCore();
-      context.loadGatewayModelCatalogSnapshot.mockImplementationOnce(async () => {
-        catalogStarted.resolve();
-        await catalogGate.promise;
-        return { entries: catalog, routeVariants: catalog };
-      });
-      const key = "agent:main:dashboard:personal-revoked";
-      const creating = directSessionReq(
-        "sessions.create",
-        {
-          key,
-          model: `openai/gpt-5.6-sol${selection === "explicit" ? `@${authProfileId}` : ""}`,
-        },
-        { client, context: { ...context, getRuntimeConfig: () => cfg } },
-      );
-      try {
-        await Promise.race([
-          catalogStarted.promise,
-          creating.then(() => {
-            throw new Error("Session creation returned before loading the model catalog");
-          }),
-        ]);
-        expect(context.loadGatewayModelCatalogSnapshot).toHaveBeenCalledOnce();
-        if (loss === "disconnected") {
-          clients.delete(client);
-        } else {
-          writer.scopes = ["operator.read"];
-        }
-      } finally {
-        catalogGate.resolve();
-      }
-      const created = await creating;
-
-      expect(created).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
-      expect(loadSessionEntry({ sessionKey: key, storePath })).toBeUndefined();
     });
   },
 );

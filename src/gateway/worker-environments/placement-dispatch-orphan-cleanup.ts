@@ -1,3 +1,9 @@
+import {
+  getActiveGatewayRootWorkCount,
+  tryBeginGatewayRootWorkAdmission,
+} from "../../process/gateway-work-admission.js";
+import { withGitProcessOperation } from "../../process/spawn-diagnostics.js";
+import type { WorkerSessionPlacementIdentity } from "./placement-record.js";
 import type {
   PlacementRecoveryDeps,
   WorkerPlacementRecoveryAdmission,
@@ -7,51 +13,112 @@ import {
   deleteWorkerWorkspaceResultCleanupRefs,
 } from "./workspace-result-staging.js";
 
+/** One startup pass of orphan-ref cleanup: workspace roots resolved once, completed roots remembered. */
+export type PendingWorkspaceResultOrphanCleanup = {
+  placements: WorkerSessionPlacementIdentity[];
+  initialDiscoveryPending: boolean;
+  /** sessionId → workspace root, or null when the placement has no local root to clean. */
+  rootsBySession: Map<string, string | null>;
+  completedRoots: Set<string>;
+};
+
 export async function cleanupPendingWorkspaceResultOrphans(
   deps: PlacementRecoveryDeps,
   admit: WorkerPlacementRecoveryAdmission,
+  pass: PendingWorkspaceResultOrphanCleanup,
 ): Promise<boolean> {
+  if (deps.isShuttingDown?.() || getActiveGatewayRootWorkCount({ excludeCurrent: true }) > 0) {
+    return false;
+  }
   const { placements } = deps;
-  const workspaceSessions = new Map<string, string[]>();
-  for (const placement of await placements.readChangeSnapshot()) {
+  const { completedRoots, rootsBySession } = pass;
+  // Discover the startup set once, then rotate failed lookups instead of rescanning
+  // every unavailable workspace each minute. Snapshot the budget before requeueing.
+  const attempts = pass.initialDiscoveryPending
+    ? pass.placements.length
+    : Math.min(pass.placements.length, 8);
+  for (let index = 0; index < attempts; index++) {
+    if (deps.isShuttingDown?.()) {
+      return false;
+    }
+    const placement = pass.placements.shift()!;
     try {
       const workspace = await deps.resolveWorkspace(placement);
-      if (workspace.kind === "repository") {
-        continue;
-      }
-      const root = workspace.path;
-      const sessionIds = workspaceSessions.get(root) ?? [];
-      sessionIds.push(placement.sessionId);
-      workspaceSessions.set(root, sessionIds);
+      rootsBySession.set(placement.sessionId, workspace.kind === "local" ? workspace.path : null);
     } catch {
-      // Cleanup refs are independently retryable after the next restart.
+      pass.placements.push(placement);
     }
   }
-  let complete = true;
+  pass.initialDiscoveryPending = false;
+  let complete = pass.placements.length === 0;
+  const workspaceSessions = new Map<string, string[]>();
+  // Admission includes previously resolved siblings, even if only one root was found this sweep.
+  for (const [sessionId, root] of rootsBySession) {
+    if (root === null) {
+      continue;
+    }
+    const sessionIds = workspaceSessions.get(root) ?? [];
+    sessionIds.push(sessionId);
+    workspaceSessions.set(root, sessionIds);
+  }
+  // The existing minute sweep owns continuation; orphan refs carry no live authority.
+  // Keep serial session admission and bound cold-start work independently of history size.
+  let remaining = 8;
   for (const [root, sessionIds] of workspaceSessions) {
+    if (completedRoots.has(root)) {
+      continue;
+    }
+    if (
+      deps.isShuttingDown?.() ||
+      remaining === 0 ||
+      getActiveGatewayRootWorkCount({ excludeCurrent: true }) > 0
+    ) {
+      return false;
+    }
+    const idleAdmission = tryBeginGatewayRootWorkAdmission("idle-task");
+    if (!idleAdmission) {
+      return false;
+    }
     try {
-      const admitted = await admit(sessionIds, async () => {
-        await deleteWorkerWorkspaceResultCleanupRefs({
-          root,
-          retainedRefs: async () => {
-            const candidates = await placements.readRecoveryCandidates();
-            const facts = await placements.readProjection(
-              candidates.map(({ sessionId }) => sessionId),
-              { current: true },
-            );
-            return new Set(
-              [...facts.pendingResults.values()].flatMap((pending) =>
-                pending.stagedResultRef
-                  ? [cleanupWorkerWorkspaceResultRef(pending.stagedResultRef)]
-                  : [],
-              ),
-            );
-          },
-        });
-      });
-      complete = admitted && complete;
+      let deferred = false;
+      const admitted = await idleAdmission.run(() =>
+        admit(sessionIds, async () => {
+          if (
+            deps.isShuttingDown?.() ||
+            getActiveGatewayRootWorkCount({ excludeCurrent: true }) > 0
+          ) {
+            deferred = true;
+            return;
+          }
+          remaining -= 1;
+          await withGitProcessOperation("workspace.result-cleanup", () =>
+            deleteWorkerWorkspaceResultCleanupRefs({
+              root,
+              retainedRefs: async () => {
+                const candidates = await placements.readRecoveryCandidates();
+                const facts = await placements.readProjection(
+                  candidates.map(({ sessionId }) => sessionId),
+                  { current: true },
+                );
+                return new Set(
+                  [...facts.pendingResults.values()].flatMap((pending) =>
+                    pending.stagedResultRef
+                      ? [cleanupWorkerWorkspaceResultRef(pending.stagedResultRef)]
+                      : [],
+                  ),
+                );
+              },
+            }),
+          );
+          completedRoots.add(root);
+        }),
+      );
+      complete = admitted && !deferred && complete;
     } catch {
       // Cleanup refs are independently retryable after the next restart.
+      completedRoots.add(root);
+    } finally {
+      idleAdmission.release();
     }
   }
   return complete;

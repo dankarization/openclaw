@@ -41,6 +41,16 @@ function isCurrentAttemptAssistant(value: unknown): value is CurrentAttemptAssis
   );
 }
 
+function staleQuotaAssistant() {
+  return makeAssistantMessageFixture({
+    stopReason: "error",
+    errorMessage: "You exceeded your current OpenAI quota.",
+    provider: "openai",
+    model: "gpt-5.4",
+    content: [],
+  });
+}
+
 function setupDeepseekFallbackErrorMatchers() {
   // DeepSeek matchers prove failover classification uses the current candidate
   // assistant instead of stale history from the previous provider.
@@ -83,6 +93,20 @@ function makeCrossProviderFallbackConfig() {
     "deepseek/deepseek-chat",
     "google/gemini-2.5-flash",
   ]);
+}
+
+function makeDeepseekFallbackRunParams(runId: string) {
+  return {
+    ...createOverflowRunParams(state),
+    runId,
+    config: makeCrossProviderFallbackConfig(),
+    agentHarnessRuntimeOverride: "openclaw",
+    provider: "deepseek",
+    model: "deepseek-chat",
+    authProfileId: "deepseek:test",
+    authProfileIdSource: "user",
+    modelFallbacksOverride: ["deepseek/deepseek-chat"],
+  } satisfies Parameters<typeof runEmbeddedAgent>[0];
 }
 
 function useCrossProviderAuthFixture() {
@@ -163,6 +187,8 @@ describe("runEmbeddedAgent cross-provider fallback error handling", () => {
     runEmbeddedAgent = await loadSharedRunIntegrationHarness();
     const { withOpenClawTestState } = await import("../../test-utils/openclaw-test-state.js");
     await withOpenClawTestState({ label: "cross-provider-warmup" }, async (warmupState) => {
+      const { setRuntimeConfigSnapshot } = await import("../../config/runtime-snapshot.js");
+      setRuntimeConfigSnapshot(makeCrossProviderFallbackConfig());
       await warmRunOverflowCompactionHarness(runEmbeddedAgent, warmupState, {
         config: makeCrossProviderFallbackConfig(),
         agentHarnessRuntimeOverride: "openclaw",
@@ -178,6 +204,8 @@ describe("runEmbeddedAgent cross-provider fallback error handling", () => {
     resetSharedRunIntegrationHarnessMocks();
     const { createOpenClawTestState } = await import("../../test-utils/openclaw-test-state.js");
     state = await createOpenClawTestState({ label: "run.cross-provider-fallback-error-context" });
+    const { setRuntimeConfigSnapshot } = await import("../../config/runtime-snapshot.js");
+    setRuntimeConfigSnapshot(makeCrossProviderFallbackConfig());
     useCrossProviderAuthFixture();
     mockedGlobalHookRunner.hasHooks.mockImplementation(() => false);
   });
@@ -208,17 +236,9 @@ describe("runEmbeddedAgent cross-provider fallback error handling", () => {
       }),
     );
 
-    const promise = runEmbeddedAgent({
-      ...createOverflowRunParams(state),
-      runId: "run-cross-provider-fallback-error-context",
-      config: makeCrossProviderFallbackConfig(),
-      agentHarnessRuntimeOverride: "openclaw",
-      provider: "deepseek",
-      model: "deepseek-chat",
-      authProfileId: "deepseek:test",
-      authProfileIdSource: "user",
-      modelFallbacksOverride: ["deepseek/deepseek-chat"],
-    });
+    const promise = runEmbeddedAgent(
+      makeDeepseekFallbackRunParams("run-cross-provider-fallback-error-context"),
+    );
 
     await expectDeepseekFallbackError(promise);
   });
@@ -248,28 +268,14 @@ describe("runEmbeddedAgent cross-provider fallback error handling", () => {
       makeAttemptResult({
         assistantTexts: [],
         terminal: { kind: "timeout", phase: "prompt", source: "runtime" },
-        lastAssistant: makeAssistantMessageFixture({
-          stopReason: "error",
-          errorMessage: "You exceeded your current OpenAI quota.",
-          provider: "openai",
-          model: "gpt-5.4",
-          content: [],
-        }),
+        lastAssistant: staleQuotaAssistant(),
         currentAttemptAssistant: undefined,
       }),
     );
 
-    const promise = runEmbeddedAgent({
-      ...createOverflowRunParams(state),
-      runId: "run-stale-session-assistant-timeout",
-      config: makeCrossProviderFallbackConfig(),
-      agentHarnessRuntimeOverride: "openclaw",
-      provider: "deepseek",
-      model: "deepseek-chat",
-      authProfileId: "deepseek:test",
-      authProfileIdSource: "user",
-      modelFallbacksOverride: ["deepseek/deepseek-chat"],
-    });
+    const promise = runEmbeddedAgent(
+      makeDeepseekFallbackRunParams("run-stale-session-assistant-timeout"),
+    );
 
     await expect(promise).rejects.toBeInstanceOf(MockedFailoverError);
     await expect(promise).rejects.toThrow("LLM request timed out.");
@@ -286,32 +292,19 @@ describe("runEmbeddedAgent cross-provider fallback error handling", () => {
     mockedRunEmbeddedAttempt.mockResolvedValueOnce(
       makeAttemptResult({
         assistantTexts: [],
-        lastAssistant: makeAssistantMessageFixture({
-          stopReason: "error",
-          errorMessage: "You exceeded your current OpenAI quota.",
-          provider: "openai",
-          model: "gpt-5.4",
-          content: [],
-        }),
+        lastAssistant: staleQuotaAssistant(),
         currentAttemptAssistant: undefined,
       }),
     );
 
-    const result = await runEmbeddedAgent({
-      ...createOverflowRunParams(state),
-      runId: "run-stale-session-assistant-non-timeout",
-      config: makeCrossProviderFallbackConfig(),
-      agentHarnessRuntimeOverride: "openclaw",
-      provider: "deepseek",
-      model: "deepseek-chat",
-      authProfileId: "deepseek:test",
-      authProfileIdSource: "user",
-      modelFallbacksOverride: ["deepseek/deepseek-chat"],
-    });
+    const result = await runEmbeddedAgent(
+      makeDeepseekFallbackRunParams("run-stale-session-assistant-non-timeout"),
+    );
 
     expect(mockedIsFailoverAssistantError).toHaveBeenCalledWith(undefined);
     expect(getLastFormattedAssistant()).toBeUndefined();
     expect(result.meta.finalAssistantVisibleText).toBeUndefined();
+    expect(result.meta.terminalReply).toEqual({ disposition: "empty" });
     expect(result.meta.agentMeta).toMatchObject({
       provider: "deepseek",
       model: "deepseek-chat",
@@ -333,17 +326,9 @@ describe("runEmbeddedAgent cross-provider fallback error handling", () => {
       }),
     );
 
-    const promise = runEmbeddedAgent({
-      ...createOverflowRunParams(state),
-      runId: "run-successful-assistant-stale-error-timeout",
-      config: makeCrossProviderFallbackConfig(),
-      agentHarnessRuntimeOverride: "openclaw",
-      provider: "deepseek",
-      model: "deepseek-chat",
-      authProfileId: "deepseek:test",
-      authProfileIdSource: "user",
-      modelFallbacksOverride: ["deepseek/deepseek-chat"],
-    });
+    const promise = runEmbeddedAgent(
+      makeDeepseekFallbackRunParams("run-successful-assistant-stale-error-timeout"),
+    );
 
     await expect(promise).rejects.toBeInstanceOf(MockedFailoverError);
     await expect(promise).rejects.toThrow("LLM request timed out.");
@@ -352,8 +337,10 @@ describe("runEmbeddedAgent cross-provider fallback error handling", () => {
   });
 
   it("does not retry successful replies for stale unsupported-thinking errors", async () => {
-    const helpers = await import("../embedded-agent-helpers.js");
-    const thinking = await import("../embedded-agent-helpers/thinking.js");
+    const helpers = await import("../embedded-agent-helpers/thinking.js");
+    const thinking = await vi.importActual<typeof import("../embedded-agent-helpers/thinking.js")>(
+      "../embedded-agent-helpers/thinking.js",
+    );
     const thinkingMock = vi.mocked(helpers.pickFallbackThinkingLevel);
     const previousThinking = thinkingMock.getMockImplementation();
     thinkingMock.mockImplementation(thinking.pickFallbackThinkingLevel);

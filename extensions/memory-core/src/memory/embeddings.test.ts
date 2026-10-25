@@ -2,7 +2,10 @@
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
 import type { EmbeddingProviderAdapter } from "openclaw/plugin-sdk/embedding-providers";
 import { coerceErrorMessage } from "openclaw/plugin-sdk/error-runtime";
-import type { MemoryEmbeddingProviderAdapter } from "openclaw/plugin-sdk/memory-core-host-engine-embeddings";
+import type {
+  MemoryEmbeddingProvider,
+  MemoryEmbeddingProviderAdapter,
+} from "openclaw/plugin-sdk/memory-core-host-engine-embeddings";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createEmbeddingProvider,
@@ -18,8 +21,10 @@ const mockEmbeddingRegistry = vi.hoisted(() => ({
   acquireLocalService: vi.fn(async () => undefined),
 }));
 
-vi.mock("openclaw/plugin-sdk/memory-core-host-engine-embeddings", () => ({
-  DEFAULT_LOCAL_MODEL: "nomic-embed-text",
+vi.mock("openclaw/plugin-sdk/memory-core-host-engine-embeddings", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("openclaw/plugin-sdk/memory-core-host-engine-embeddings")
+  >()),
   createLocalEmbeddingProvider: async () => {
     throw new Error("local embedding provider is not used by these tests");
   },
@@ -37,8 +42,6 @@ vi.mock("openclaw/plugin-sdk/memory-core-host-engine-embeddings", () => ({
     }
     return genericAdapter;
   },
-  listMemoryEmbeddingProviders: () => [...mockEmbeddingRegistry.adapters],
-  listRegisteredMemoryEmbeddingProviderAdapters: () => [...mockEmbeddingRegistry.adapters],
 }));
 
 const missingBedrockCredentialsError = new Error(
@@ -90,6 +93,19 @@ function createMissingCredentialsAdapter(
   };
 }
 
+function createConstantEmbeddingProvider(
+  id: string,
+  model: string,
+  coordinate: number,
+): MemoryEmbeddingProvider {
+  return {
+    id,
+    model,
+    embed: async () => [coordinate],
+    embedBatch: async (texts) => texts.map(() => [coordinate]),
+  };
+}
+
 function clearTestMemoryAdapters(): void {
   mockEmbeddingRegistry.genericAdapters = [];
   mockEmbeddingRegistry.adapters = [];
@@ -125,12 +141,7 @@ describe("createEmbeddingProvider", () => {
       id: "dynamic",
       normalizeModel: ({ model }) => model.replace(/^dynamic\//, ""),
       create: async ({ model }) => ({
-        provider: {
-          id: "dynamic",
-          model,
-          embed: async () => [1],
-          embedBatch: async (texts) => texts.map(() => [1]),
-        },
+        provider: createConstantEmbeddingProvider("dynamic", model, 1),
       }),
     });
     const options = { ...createOptions("dynamic"), model: " dynamic/embed-v1 " };
@@ -153,12 +164,7 @@ describe("createEmbeddingProvider", () => {
       transport: "remote",
       autoSelectPriority: 20,
       create: async () => ({
-        provider: {
-          id: "openai",
-          model: "text-embedding-3-small",
-          embed: async () => [1],
-          embedBatch: async (texts) => texts.map(() => [1]),
-        },
+        provider: createConstantEmbeddingProvider("openai", "text-embedding-3-small", 1),
       }),
     });
 
@@ -206,18 +212,12 @@ describe("createEmbeddingProvider", () => {
       throw new Error("synthetic primary provider unavailable");
     });
     const fallbackCreate = vi.fn<MemoryEmbeddingProviderAdapter["create"]>(async () => ({
-      provider: {
-        id: fallback,
-        model: `${fallback}-embedding`,
-        embed: async () => [1],
-        embedBatch: async (texts) => texts.map(() => [1]),
-      },
+      provider: createConstantEmbeddingProvider(fallback, `${fallback}-embedding`, 1),
     }));
     registerTestMemoryAdapter({ id: "openai", create: primaryCreate });
     registerTestMemoryAdapter({ id: fallback, create: fallbackCreate });
 
     const sharedRemote = {
-      nonBatchConcurrency: 3,
       batch: {
         enabled: true,
         wait: false,
@@ -296,12 +296,7 @@ describe("createEmbeddingProvider", () => {
   ])("hands the creation fallback the model it serves: $name", async ({ fallbackDefaultModel }) => {
     const primaryModel = "text-embedding-3-small";
     const fallbackCreate = vi.fn<MemoryEmbeddingProviderAdapter["create"]>(async ({ model }) => ({
-      provider: {
-        id: "ollama",
-        model,
-        embed: async () => [1],
-        embedBatch: async (texts) => texts.map(() => [1]),
-      },
+      provider: createConstantEmbeddingProvider("ollama", model, 1),
     }));
     registerTestMemoryAdapter({
       id: "openai",
@@ -341,12 +336,7 @@ describe("createEmbeddingProvider", () => {
       transport: "remote",
       autoSelectPriority: 20,
       create: async () => ({
-        provider: {
-          id: "openai",
-          model: "text-embedding-3-small",
-          embed: async () => [1],
-          embedBatch: async (texts) => texts.map(() => [1]),
-        },
+        provider: createConstantEmbeddingProvider("openai", "text-embedding-3-small", 1),
       }),
     });
 
@@ -408,12 +398,7 @@ describe("createEmbeddingProvider", () => {
         );
         await Promise.resolve();
         return {
-          provider: {
-            id: "generic",
-            model: "generic-model",
-            embed: async () => [1],
-            embedBatch: async (inputs) => inputs.map(() => [1]),
-          },
+          provider: createConstantEmbeddingProvider("generic", "generic-model", 1),
         };
       },
     });
@@ -444,12 +429,7 @@ describe("createEmbeddingProvider", () => {
     registerTestMemoryAdapter({
       id: "openai-compatible",
       create: async () => ({
-        provider: {
-          id: "legacy",
-          model: "legacy-model",
-          embed: async () => [0],
-          embedBatch: async (texts) => texts.map(() => [0]),
-        },
+        provider: createConstantEmbeddingProvider("legacy", "legacy-model", 0),
       }),
     });
 
@@ -471,23 +451,13 @@ describe("createEmbeddingProvider", () => {
       transport: "remote",
       autoSelectPriority: 20,
       create: async () => ({
-        provider: {
-          id: "legacy",
-          model: "legacy-model",
-          embed: async () => [1],
-          embedBatch: async (texts) => texts.map(() => [1]),
-        },
+        provider: createConstantEmbeddingProvider("legacy", "legacy-model", 1),
       }),
     });
     registerGenericEmbeddingProvider({
       id: "openai-compatible",
       create: async () => ({
-        provider: {
-          id: "generic",
-          model: "generic-model",
-          embed: async () => [2],
-          embedBatch: async (inputs) => inputs.map(() => [2]),
-        },
+        provider: createConstantEmbeddingProvider("generic", "generic-model", 2),
       }),
     });
 

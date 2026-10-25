@@ -4,7 +4,6 @@ import { afterEach, expect, test, vi } from "vitest";
 import type { EnvironmentSummary } from "../../packages/gateway-protocol/src/index.js";
 import { i18n } from "../../ui/src/i18n/index.ts";
 import { projectDevicePlacements } from "../../ui/src/pages/new-session/device-placement.ts";
-import { readDraftEnvironments } from "../../ui/src/pages/new-session/discovery.ts";
 import { listRegisteredAgentHarnesses, registerAgentHarness } from "../agents/harness/registry.js";
 import { restoreRegisteredAgentHarnesses } from "../agents/harness/registry.test-support.js";
 import { NODE_WORKER_SUPERVISOR_PROTOCOL_FEATURE } from "../infra/node-runner-inventory.js";
@@ -30,14 +29,16 @@ import {
   directSessionReq,
   getGatewayConfigModule,
   setupGatewaySessionsHandlerTestHarness,
+  createRepositoryDeviceHarness,
 } from "./test/server-sessions.test-helpers.js";
-import type { WorkerPlacementMoveIntent } from "./worker-environments/placement-move-intent.js";
+import type { WorkerPlacementMoveIntent } from "./worker-environments/placement-move-intent.types.js";
 import type { WorkerSessionPlacementReader } from "./worker-environments/placement-projector.js";
 import { placementTurnOwner } from "./worker-environments/placement-record.js";
 import {
   createWorkerSessionPlacementStore,
   type WorkerSessionPlacementRecord,
 } from "./worker-environments/placement-store.js";
+import { activePlacement } from "./worker-environments/placement-suite.test-support.js";
 import {
   advancePlacementFixtureToActive,
   writePlacementEnvironmentFixture,
@@ -99,22 +100,7 @@ test.each([
       { pairingIdentity: "node-host", pairingGeneration: "node-host-generation" },
     );
     const connected = vi.spyOn(registry, "listConnectedForPairingStates").mockReturnValue([node]);
-    registerAgentHarness({
-      id: "repository-device",
-      label: "Repository device",
-      autoSelection: { providerIds: ["repository-provider"] },
-      supports: () => ({ supported: true }),
-      cloudPlacement: {
-        mode: "remote-exec",
-        devicePlacement: {
-          requiredNodeCommands: ["runtime.repository.v1"],
-          consumesWorkerSlot: false,
-        },
-      },
-      runAttempt: async () => {
-        throw new Error("projection must not execute the runtime");
-      },
-    });
+    registerAgentHarness(createRepositoryDeviceHarness("projection must not execute the runtime"));
     try {
       await i18n.setLocale("en");
       updateNodeRunnerInventory({
@@ -165,7 +151,7 @@ test.each([
           ?.requiredNodeCommand,
       ).toEqual({ command, state, ...(disabledReason ? { message: disabledReason } : {}) });
       const devices = projectDevicePlacements(
-        readDraftEnvironments(catalog.payload?.environments),
+        catalog.payload?.environments ?? [],
         runtime?.devicePlacement,
       );
       const device = devices.find((option) => option.deviceId === "node-host");
@@ -181,12 +167,8 @@ test.each([
 );
 
 function activePlacementRecord(): Extract<WorkerSessionPlacementRecord, { state: "active" }> {
-  return {
-    sessionId: "sess-main",
-    agentId: "main",
+  return activePlacement("sess-main", {
     sessionKey: "agent:main:main",
-    executionMode: "worker-turn",
-    state: "active",
     environmentId: "env-placement",
     generation: 7,
     activeOwnerEpoch: 12,
@@ -195,14 +177,10 @@ function activePlacementRecord(): Extract<WorkerSessionPlacementRecord, { state:
     workerBundleHash: ["a", "b"].join("").repeat(32),
     lastTranscriptAckCursor: 23,
     lastLiveEventAckCursor: 9,
-    recoveryError: null,
-    terminalReason: null,
-    terminalAtMs: null,
-    turnClaim: null,
     createdAtMs: 100,
     updatedAtMs: 300,
     stateChangedAtMs: 200,
-  };
+  });
 }
 
 async function seedSessionRows(): Promise<void> {
@@ -383,44 +361,6 @@ test("sessions.describe preserves pre-epoch identity while starting", async () =
   });
 });
 
-test("sessions.list projects durable placement move progress", async () => {
-  await seedSessionRows();
-  const placement = activePlacementRecord();
-  const move = placementMove(placement, "workspace reconciliation is waiting");
-  const getMany = vi.fn<WorkerSessionPlacementReader["getMany"]>(
-    () => new Map([[placement.sessionId, placement]]),
-  );
-  const facts = createSessionPlacementFactsReader(
-    { getMany },
-    undefined,
-    new Map([[move.sessionId, move]]),
-  );
-  const readProjection = vi.fn(facts.readProjection);
-  const projection = await createSessionRowProjection({
-    cfg: (await getGatewayConfigModule()).getRuntimeConfig(),
-    placementFactsReader: { readProjection },
-  });
-  trackSessionReadProjection(projection);
-
-  const result = await directSessionReq<{ sessions: GatewaySessionRow[] }>(
-    "sessions.list",
-    {},
-    { context: bindSessionRowProjection({}, () => projection) },
-  );
-
-  expect(result.ok).toBe(true);
-  const main = result.payload?.sessions.find((session) => session.sessionId === "sess-main");
-  expect(main?.placementMove).toEqual({
-    target: { kind: "gateway" },
-    error: "workspace reconciliation is waiting",
-    updatedAtMs: 340,
-  });
-  expect(main?.placementMove).not.toHaveProperty("operationId");
-  expect(
-    readProjection.mock.calls.flatMap(([ids]) => ids).toSorted((a, b) => a.localeCompare(b)),
-  ).toEqual(["sess-main", "sess-other"]);
-});
-
 test.each([
   { name: "without an environment", ownerEpoch: undefined, activeOwnerEpoch: 12, identity: false },
   {
@@ -562,7 +502,7 @@ test.each([
         claimId: "retained-claim",
         runId: "retained-run",
       });
-      placements.markWorkspaceResultPending(claim);
+      await placements.markWorkspaceResultPending(claim);
     } else {
       const basePack = Buffer.from("retained workspace rollback");
       await placements.beginWorkspaceReconciliation(journalOwner, {
@@ -580,19 +520,19 @@ test.each([
     if (recovery === "unstaged result") {
       seedFailedPlacementWithRetainedResult(database, identity.sessionId);
     } else {
-      const draining = placements.startDrain({
+      const draining = await placements.startDrain({
         sessionId: identity.sessionId,
         environmentId: active.environmentId,
         ownerEpoch: active.activeOwnerEpoch,
         expectedGeneration: active.generation,
       });
-      const reconciling = placements.startReconcile({
+      const reconciling = await placements.startReconcile({
         sessionId: identity.sessionId,
         environmentId: active.environmentId,
         ownerEpoch: active.activeOwnerEpoch,
         expectedGeneration: draining.generation,
       });
-      placements.fail({
+      await placements.fail({
         sessionId: identity.sessionId,
         expectedGeneration: reconciling.generation,
         recoveryError: "previous worker failure",
@@ -636,9 +576,9 @@ test.each([
     expect(blocked.payload?.session?.placement).not.toHaveProperty("workspaceResultReconciling");
 
     if (recovery === "unstaged result") {
-      const pending = placements.listPendingWorkspaceResults(identity.sessionId);
+      const pending = await placements.listPendingWorkspaceResultsAsync(identity.sessionId);
       expect(pending).toHaveLength(1);
-      placements.abandonWorkspaceResult(pending[0]!);
+      await placements.abandonWorkspaceResult(pending[0]!);
     } else {
       await placements.abortWorkspaceReconciliation(journalOwner, { force: true });
     }

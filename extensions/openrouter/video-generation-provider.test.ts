@@ -1,4 +1,5 @@
 import { clearLiveCatalogCacheForTests } from "openclaw/plugin-sdk/provider-catalog-shared";
+import { getProviderHttpMocks } from "openclaw/plugin-sdk/provider-http-test-mocks";
 import {
   expectExplicitVideoGenerationCapabilities,
   expectUnifiedModelCatalogEntries,
@@ -20,63 +21,32 @@ const {
   resolveApiKeyForProviderMock,
   resolveProviderHttpRequestConfigMock,
   waitProviderOperationPollIntervalMock,
-} = vi.hoisted(() => ({
-  assertOkOrThrowHttpErrorMock: vi.fn(async () => {}),
-  fetchWithTimeoutGuardedMock: vi.fn(),
-  postJsonRequestMock: vi.fn(),
-  resolveApiKeyForProviderMock: vi.fn(async () => ({ apiKey: "openrouter-key" })),
-  resolveProviderHttpRequestConfigMock: vi.fn((params: Record<string, unknown>) => {
-    const request = params.request as
-      | {
-          allowPrivateNetwork?: boolean;
-          auth?:
-            | { mode: "provider-default" }
-            | { mode: "authorization-bearer"; token: string }
-            | {
-                mode: "header";
-                headerName: string;
-                value: string;
-                prefix?: string;
-              };
-          headers?: Record<string, string>;
-        }
-      | undefined;
-    const headers = new Headers(params.defaultHeaders as HeadersInit | undefined);
-    for (const [key, value] of Object.entries(request?.headers ?? {})) {
+} = getProviderHttpMocks();
+
+resolveApiKeyForProviderMock.mockResolvedValue({ apiKey: "openrouter-key" });
+waitProviderOperationPollIntervalMock.mockResolvedValue(undefined);
+resolveProviderHttpRequestConfigMock.mockImplementation((params) => {
+  const request = params.request;
+  const headers = new Headers(omitNullRequestHeaders(params.defaultHeaders));
+  for (const [key, value] of Object.entries(request?.headers ?? {})) {
+    if (value === null) {
+      headers.delete(key);
+    } else {
       headers.set(key, value);
     }
-    if (request?.auth?.mode === "authorization-bearer") {
-      headers.set("Authorization", `Bearer ${request.auth.token}`);
-    } else if (request?.auth?.mode === "header") {
-      headers.delete("Authorization");
-      headers.set(request.auth.headerName, `${request.auth.prefix ?? ""}${request.auth.value}`);
-    }
-    return {
-      baseUrl: params.baseUrl ?? params.defaultBaseUrl ?? "https://openrouter.ai/api/v1",
-      allowPrivateNetwork: request?.allowPrivateNetwork === true,
-      headers,
-      dispatcherPolicy: undefined,
-      requestConfig: {},
-    };
-  }),
-  waitProviderOperationPollIntervalMock: vi.fn(async () => {}),
-}));
-
-vi.mock("openclaw/plugin-sdk/provider-auth-runtime", () => ({
-  resolveApiKeyForProvider: resolveApiKeyForProviderMock,
-}));
-
-vi.mock("openclaw/plugin-sdk/provider-http", async () => {
-  const actual = await vi.importActual<typeof import("openclaw/plugin-sdk/provider-http")>(
-    "openclaw/plugin-sdk/provider-http",
-  );
+  }
+  if (request?.auth?.mode === "authorization-bearer") {
+    headers.set("Authorization", `Bearer ${request.auth.token}`);
+  } else if (request?.auth?.mode === "header") {
+    headers.delete("Authorization");
+    headers.set(request.auth.headerName, `${request.auth.prefix ?? ""}${request.auth.value}`);
+  }
   return {
-    ...actual,
-    assertOkOrThrowHttpError: assertOkOrThrowHttpErrorMock,
-    fetchWithTimeoutGuarded: fetchWithTimeoutGuardedMock,
-    postJsonRequest: postJsonRequestMock,
-    resolveProviderHttpRequestConfig: resolveProviderHttpRequestConfigMock,
-    waitProviderOperationPollInterval: waitProviderOperationPollIntervalMock,
+    baseUrl: params.baseUrl ?? params.defaultBaseUrl ?? "https://openrouter.ai/api/v1",
+    allowPrivateNetwork: request?.allowPrivateNetwork === true,
+    headers,
+    dispatcherPolicy: undefined,
+    requestConfig: {},
   };
 });
 
@@ -119,6 +89,15 @@ function resetVideoMocks() {
   resolveApiKeyForProviderMock.mockClear();
   resolveProviderHttpRequestConfigMock.mockClear();
   waitProviderOperationPollIntervalMock.mockClear();
+}
+
+function completedVideoJob(url = "/api/v1/videos/job-123/content?index=0") {
+  return {
+    id: "job-123",
+    polling_url: "/api/v1/videos/job-123",
+    status: "completed",
+    unsigned_urls: [url],
+  };
 }
 
 function releasedJson(value: unknown) {
@@ -259,6 +238,13 @@ describe("openrouter video generation provider", () => {
   });
 
   afterEach(resetVideoMocks);
+
+  it("rejects a duration that rounds to zero before submission", async () => {
+    await expect(generateVideo({ prompt: "a lobster", durationSeconds: 0.4 })).rejects.toThrow(
+      "durationSeconds must be a positive duration",
+    );
+    expect(postJsonRequestMock).not.toHaveBeenCalled();
+  });
 
   it("declares explicit mode capabilities", () => {
     const provider = buildOpenRouterVideoGenerationProvider();
@@ -630,14 +616,7 @@ describe("openrouter video generation provider", () => {
   });
 
   it("clamps direct exact integer durations to static OpenRouter supported values", async () => {
-    postJsonRequestMock.mockResolvedValue(
-      releasedJson({
-        id: "job-123",
-        polling_url: "/api/v1/videos/job-123",
-        status: "completed",
-        unsigned_urls: ["/api/v1/videos/job-123/content?index=0"],
-      }),
-    );
+    postJsonRequestMock.mockResolvedValue(releasedJson(completedVideoJob()));
     fetchWithTimeoutGuardedMock.mockResolvedValueOnce(
       releasedVideo({ contentType: "video/mp4", bytes: "mp4-bytes" }),
     );
@@ -650,15 +629,11 @@ describe("openrouter video generation provider", () => {
     expect(requireRecord(requirePostJsonParams().body, "OpenRouter request body").duration).toBe(8);
   });
 
-  it("preserves runtime-normalized live catalog durations in request bodies", async () => {
-    postJsonRequestMock.mockResolvedValue(
-      releasedJson({
-        id: "job-123",
-        polling_url: "/api/v1/videos/job-123",
-        status: "completed",
-        unsigned_urls: ["/api/v1/videos/job-123/content?index=0"],
-      }),
-    );
+  it.each([
+    { hint: [5], expected: 5 },
+    { hint: [], expected: 6 },
+  ])("uses live duration hint $hint and static values when empty", async ({ hint, expected }) => {
+    postJsonRequestMock.mockResolvedValue(releasedJson(completedVideoJob()));
     fetchWithTimeoutGuardedMock.mockResolvedValueOnce(
       releasedVideo({ contentType: "video/mp4", bytes: "mp4-bytes" }),
     );
@@ -666,10 +641,12 @@ describe("openrouter video generation provider", () => {
     await generateVideo({
       prompt: "A brushed steel logo rotates against a clean white backdrop",
       durationSeconds: 5,
-      [SUPPORTED_DURATIONS_HINT]: [5],
+      [SUPPORTED_DURATIONS_HINT]: hint,
     });
 
-    expect(requireRecord(requirePostJsonParams().body, "OpenRouter request body").duration).toBe(5);
+    expect(requireRecord(requirePostJsonParams().body, "OpenRouter request body").duration).toBe(
+      expected,
+    );
   });
 
   it("submits OpenRouter video jobs, polls completion, and downloads the result", async () => {
@@ -818,12 +795,7 @@ describe("openrouter video generation provider", () => {
 
   it("returns unsigned URL-only videos when downloads exceed the configured media cap", async () => {
     postJsonRequestMock.mockResolvedValue(
-      releasedJson({
-        id: "job-123",
-        polling_url: "/api/v1/videos/job-123",
-        status: "completed",
-        unsigned_urls: ["https://cdn.openrouter.test/video.mp4"],
-      }),
+      releasedJson(completedVideoJob("  https://cdn.openrouter.test/video.mp4  ")),
     );
     fetchWithTimeoutGuardedMock.mockResolvedValueOnce(
       releasedVideo({ contentType: "video/mp4", bytes: "too-large" }),
@@ -1045,12 +1017,7 @@ describe("openrouter generated video download", () => {
     "rejects a successful $name response as a downloaded OpenRouter video",
     async ({ contentType, bytes }) => {
       postJsonRequestMock.mockResolvedValue(
-        releasedJson({
-          id: "job-123",
-          polling_url: "/api/v1/videos/job-123",
-          status: "completed",
-          unsigned_urls: ["https://cdn.openrouter.test/video.mp4"],
-        }),
+        releasedJson(completedVideoJob("https://cdn.openrouter.test/video.mp4")),
       );
       const download = releasedVideo({ contentType, bytes });
       fetchWithTimeoutGuardedMock.mockResolvedValueOnce(download);
@@ -1065,3 +1032,4 @@ describe("openrouter generated video download", () => {
     },
   );
 });
+import { omitNullRequestHeaders } from "openclaw/plugin-sdk/provider-request-headers";

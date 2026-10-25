@@ -8,11 +8,13 @@ import {
 } from "../agents/admitted-run-context.js";
 import { createAgentHarnessToolSurfaceRuntimeCore } from "../agents/harness/tool-surface-bridge.js";
 import * as internalSessions from "../agents/internal-session-effects.js";
+import { modelDefinition } from "../agents/model-auth.fixtures.test-support.js";
 import { prepareOperatorModelPolicy } from "../agents/operator-model-policy.js";
 import { refreshPreparedModelRuntimeSnapshots } from "../agents/prepared-model-runtime.js";
 import { resetPreparedModelRuntimeSnapshotsForTest } from "../agents/prepared-model-runtime.test-support.js";
 import { SessionManager } from "../agents/sessions/session-manager.js";
 import { createStubTool } from "../agents/test-helpers/agent-tool-stubs.js";
+import { setRuntimeConfigSnapshot } from "../config/runtime-snapshot.js";
 import {
   loadExactSessionEntry,
   loadTranscriptEventsSync,
@@ -54,11 +56,18 @@ describe("Side chat with a published Gateway runtime", () => {
       });
       const cfg: OpenClawConfig = {
         agents: {
-          entries: { main: { workspace: state.workspaceDir } },
+          entries: {
+            main: {
+              workspace: state.workspaceDir,
+              models: { "test-provider/utility-model": { codeMode: true } },
+              tools: { codeMode: true },
+            },
+          },
           defaults: {
             workspace: state.workspaceDir,
             model: "test-provider/test-model",
             utilityModel: "test-provider/utility-model",
+            models: { "test-provider/utility-model": { codeMode: true } },
           },
         },
         models: {
@@ -67,15 +76,9 @@ describe("Side chat with a published Gateway runtime", () => {
               api: "openai-completions",
               apiKey: "synthetic-test-key",
               baseUrl: "http://127.0.0.1:9/v1",
-              models: ["test-model", "utility-model"].map((id) => ({
-                id,
-                name: id,
-                reasoning: false,
-                input: ["text" as const],
-                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-                contextWindow: 8192,
-                maxTokens: 1024,
-              })),
+              models: ["test-model", "utility-model"].map((id) =>
+                modelDefinition(id, { reasoning: false, contextWindow: 8192, maxTokens: 1024 }),
+              ),
             },
           },
         },
@@ -91,7 +94,9 @@ describe("Side chat with a published Gateway runtime", () => {
         scheduler: createTestGatewayScheduler(),
         getConfig: () => cfg,
         contextReader: defaultSessionCompanionContextReader,
-        sessionObserver: { getCompanionSnapshot: () => ({ agentId: "main", notes: [] }) },
+        sessionObserver: {
+          getCompanionSnapshotAsync: async () => ({ agentId: "main", notes: [] }),
+        },
       });
       const observedTools: string[][] = [];
       const observedModels: Array<{
@@ -174,10 +179,12 @@ describe("Side chat with a published Gateway runtime", () => {
         await waitForSessionTranscriptProjection(selected);
         const retained = selectedManager.getPersistedEntries();
         // Admission must use committed Gateway policy, not the caller's stale config.
-        await refreshPreparedModelRuntimeSnapshots(
-          { ...cfg, messages: { responsePrefix: "committed" } },
-          { gatewayLifecycle: true, catalogMode: "static" },
-        );
+        const committedConfig = { ...cfg, messages: { responsePrefix: "committed" } };
+        setRuntimeConfigSnapshot(committedConfig);
+        await refreshPreparedModelRuntimeSnapshots(committedConfig, {
+          gatewayLifecycle: true,
+          catalogMode: "static",
+        });
         // Keep source-module preparation outside the RPC deadline and hydration barrier.
         await import("../agents/embedded-agent-runner/run.js");
         let connected = true;
