@@ -470,17 +470,33 @@ export async function maybeGenerateSessionTitle(params: SessionTitleParams): Pro
   if (entry?.sessionId !== params.sessionId) {
     return false;
   }
+  const skillParams = {
+    cfg: params.cfg,
+    agentId: params.agentId,
+    entry,
+    sessionKey,
+    assertCurrent: assertMemoryCurrent,
+  };
+  let preparedSkillCommands: SkillCommandSpec[] | undefined;
+  let refinementSource = params.userMessage;
   let refinementName: string | undefined;
   if (hasExplicitSessionName(entry)) {
     const state = entry.titleRefinement;
     if (
       !params.refineGeneratedTitle ||
+      !parseAgentSessionKey(sessionKey)?.rest.startsWith("dashboard:") ||
       !state ||
       state.remainingMessages <= 0 ||
       !matchesGeneratedSessionTitle(entry, state.generatedName)
     ) {
       return false;
     }
+    preparedSkillCommands = await prepareTitleSkillCommands(skillParams);
+    const task = resolveSessionTitleSource(params.userMessage, preparedSkillCommands);
+    if (!task) {
+      return false;
+    }
+    refinementSource = task;
     // Claim before inference so concurrent follow-ups retain their own admission.
     refinementName = await claimDashboardTitleRefinement(params);
     if (!refinementName) {
@@ -557,13 +573,7 @@ export async function maybeGenerateSessionTitle(params: SessionTitleParams): Pro
   const run = async () => {
     // Select the first usable task, not an earlier control-only turn. Carry the
     // same prepared command metadata through history selection and generation.
-    const skillCommands = await prepareTitleSkillCommands({
-      cfg: params.cfg,
-      agentId: params.agentId,
-      entry,
-      sessionKey,
-      assertCurrent: assertMemoryCurrent,
-    });
+    const skillCommands = preparedSkillCommands ?? (await prepareTitleSkillCommands(skillParams));
     const transcriptScope = {
       agentId: params.agentId,
       sessionEntry: entry,
@@ -581,7 +591,7 @@ export async function maybeGenerateSessionTitle(params: SessionTitleParams): Pro
     // A first-turn transcript may win the persistence race before title work starts.
     // When it is the current turn, retain the supplied attachment-enriched source.
     const sourceText = refinementName
-      ? await readDashboardRefinementSource(transcriptScope, params.userMessage, skillCommands)
+      ? await readDashboardRefinementSource(transcriptScope, refinementSource, skillCommands)
       : (resolveSessionTitleSource(entry.pendingWorktree?.titleSource ?? "", skillCommands) ??
         (!transcriptText || (currentText && currentText === transcriptText)
           ? resolveSessionTitleSource(params.userMessage, skillCommands)

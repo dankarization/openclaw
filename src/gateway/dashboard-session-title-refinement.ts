@@ -6,7 +6,6 @@ import {
   type SessionSourceAssertion,
 } from "../config/sessions/session-source-authority.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
-import { parseAgentSessionKey } from "../sessions/session-key-utils.js";
 import {
   resolveSessionTitleSource,
   SESSION_TITLE_SOURCE_MAX_CHARS,
@@ -26,15 +25,8 @@ export async function claimDashboardTitleRefinement(params: {
   sessionKey: string;
   storePath: string;
   sessionId: string;
-  userMessage: string;
   commitGuard?: SessionSourceAssertion;
 }): Promise<string | undefined> {
-  if (
-    !parseAgentSessionKey(params.sessionKey)?.rest.startsWith("dashboard:") ||
-    !resolveSessionTitleSource(params.userMessage, [])
-  ) {
-    return undefined;
-  }
   let claimed: string | undefined;
   await patchSessionEntryCore(
     {
