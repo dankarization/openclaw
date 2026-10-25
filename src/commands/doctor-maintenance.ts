@@ -283,6 +283,7 @@ export async function beginDoctorMaintenance(params: DoctorMaintenanceParams) {
         const { recordDoctorGatewayRestorationRefusal } =
           await import("./doctor-maintenance-restoration.js");
         await recordDoctorGatewayRestorationRefusal({
+          serviceEnv: before.serviceEnv,
           error,
           before,
           warnings,

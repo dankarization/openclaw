@@ -343,12 +343,14 @@ export async function restoreDoctorGatewayService(params: {
 }
 
 export async function recordDoctorGatewayRestorationRefusal({
+  serviceEnv,
   error,
   before,
   warnings,
   failureFacts,
   runtime,
 }: {
+  serviceEnv: NodeJS.ProcessEnv;
   error: GatewayServiceAuthorityError;
   before: PreManagedServiceStop;
   warnings: string[];
@@ -356,7 +358,6 @@ export async function recordDoctorGatewayRestorationRefusal({
   runtime: RuntimeEnv;
 }) {
   const { formatDaemonServiceInstallCommand } = await import("../cli/daemon-cli/shared.js");
-  const serviceEnv = before.serviceEnv;
   const outcome = error.outcome ?? "recovery-pending";
   const recovery =
     outcome === "unchanged"
