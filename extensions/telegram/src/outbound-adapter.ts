@@ -25,6 +25,7 @@ import {
   resolveTelegramPromptContextSource,
 } from "./prompt-context-projection.js";
 import { registerTelegramQuestionDelivery } from "./question-finalization.js";
+import { buildTelegramQuestionRichMessage } from "./question-rich-message.js";
 import { resolveTelegramRichMessages } from "./rich-messages-config.js";
 import type { TelegramSendOpts } from "./send-message-types.js";
 import { loadTelegramSendModule, type TelegramSendModule } from "./send-runtime.js";
@@ -205,6 +206,13 @@ export async function sendTelegramPayloadMessages(params: {
     presentation: payload.presentation,
     interactive: payload.interactive,
   });
+  const richQuestionMessage = resolveTelegramRichMessages({
+    cfg: params.baseOpts.cfg,
+    accountId: params.baseOpts.accountId,
+    htmlTextMode: params.baseOpts.textMode === "html",
+  })
+    ? buildTelegramQuestionRichMessage({ payload: params.payload, buttons })
+    : undefined;
   const replyToMessageId = parseStrictPositiveInteger(
     telegramData?.reaction?.replyToId ?? params.baseOpts.replyToMessageId,
   );
@@ -283,6 +291,7 @@ export async function sendTelegramPayloadMessages(params: {
         ? { mediaUrls }
         : {}),
     buttons,
+    ...(richQuestionMessage ? { richMessage: richQuestionMessage } : {}),
   });
 }
 
@@ -427,6 +436,9 @@ export function createTelegramOutboundAdapter(
         text,
         textLimit: isCaptionDelivery ? TELEGRAM_MAX_CAPTION_LENGTH : TELEGRAM_TEXT_CHUNK_LIMIT,
         clearButtons: async () => {
+          if (result.meta?.telegramHasRichQuestionButtons === true) {
+            return;
+          }
           const { editMessageReplyMarkupTelegram } = await loadSendModule();
           await editMessageReplyMarkupTelegram(chatId, messageId, [], {
             cfg,
