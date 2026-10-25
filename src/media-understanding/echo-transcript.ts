@@ -20,26 +20,21 @@ const TELEGRAM_TRANSCRIPT_ECHO_COMPLETION_RETENTION = {
   maxEntries: 2_000,
 } as const;
 
-function canonicalizeTelegramChatId(to: string): string | undefined {
-  const withoutChannelPrefix = to.trim().replace(/^telegram:/iu, "");
-  const withoutTargetKind = withoutChannelPrefix.replace(/^(?:group|user):/iu, "");
-  const withoutTopic = withoutTargetKind.replace(/:(?:direct-)?topic:[^:]+$/iu, "");
-  const chatId = withoutTopic.trim();
-  if (!chatId || /\s/u.test(chatId)) {
-    return undefined;
-  }
-  return chatId.toLowerCase();
-}
-
 function buildTelegramTranscriptEchoIntentId(params: {
   accountId?: string;
   to: string;
   messageSid?: string;
 }): string | undefined {
   const accountId = params.accountId?.trim();
-  const chatId = canonicalizeTelegramChatId(params.to);
+  const chatId = params.to
+    .trim()
+    .replace(/^telegram:/iu, "")
+    .replace(/^(?:group|user):/iu, "")
+    .replace(/:(?:direct-)?topic:[^:]+$/iu, "")
+    .trim()
+    .toLowerCase();
   const messageSid = params.messageSid?.trim();
-  if (!accountId || !chatId || !messageSid) {
+  if (!accountId || !chatId || /\s/u.test(chatId) || !messageSid) {
     return undefined;
   }
 
@@ -48,13 +43,7 @@ function buildTelegramTranscriptEchoIntentId(params: {
   return `${TELEGRAM_TRANSCRIPT_ECHO_INTENT_PREFIX}${digest}`;
 }
 
-function formatEchoTranscript(transcript: string, format: string): string {
-  // Function replacer keeps `$` sequences in the transcript literal instead of
-  // being parsed as String.prototype.replace substitution patterns.
-  return format.replace("{transcript}", () => transcript);
-}
-
-/** Sends a best-effort transcript echo back to the originating deliverable chat. */
+/** Sends a transcript echo back to the originating deliverable chat. */
 export async function sendTranscriptEcho(params: {
   ctx: MsgContext;
   cfg: OpenClawConfig;
@@ -84,7 +73,12 @@ export async function sendTranscriptEcho(params: {
     return;
   }
 
-  const text = formatEchoTranscript(transcript, params.format ?? DEFAULT_ECHO_TRANSCRIPT_FORMAT);
+  // Function replacer keeps `$` sequences in the transcript literal instead of
+  // being parsed as String.prototype.replace substitution patterns.
+  const text = (params.format ?? DEFAULT_ECHO_TRANSCRIPT_FORMAT).replace(
+    "{transcript}",
+    () => transcript,
+  );
   const deliveryIntentId =
     normalizedChannel === "telegram"
       ? buildTelegramTranscriptEchoIntentId({

@@ -1,5 +1,5 @@
 // Transcript echo tests cover destination resolution, custom formatting,
-// channel filtering, required durability, and failure swallowing.
+// channel filtering, metadata forwarding, and failure swallowing.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MsgContext } from "../auto-reply/templating.js";
 import type { OpenClawConfig } from "../config/types.js";
