@@ -204,7 +204,6 @@ it.each(["explicit worktree", "pending", "incognito", "retry", "stale"] as const
       expect(context.sessions.createResult).toHaveBeenCalledWith(
         expect.objectContaining({
           displayName: "Repair naming",
-          displayNameSource: "generated",
           worktreeName: "my-explicit-branch",
         }),
         backgroundCreateOptions,

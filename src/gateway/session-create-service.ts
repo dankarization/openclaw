@@ -60,7 +60,6 @@ import {
   runSessionMutation,
 } from "../sessions/session-controller.lifecycle.js";
 import { recordSessionCreated } from "../sessions/session-created.js";
-import { initializeTitleRefinementState } from "../sessions/session-title-refinement-state.js";
 import { normalizeSessionDeliveryState } from "../utils/delivery-context.shared.js";
 import { authorizeGatewaySessionCreation, resolveCreatorSandbox } from "./operator-role-policy.js";
 import { ADMIN_SCOPE } from "./operator-scopes.js";
@@ -809,14 +808,18 @@ async function createGatewaySessionInScope(
         const initializedEntry: InternalSessionEntry = {
           ...patched.entry,
           ...inheritedWorkspace,
-          ...(createdNewEntry && displayName ? { displayName } : {}),
-          ...(createdNewEntry && displayName && params.displayNameSource === "generated"
+          ...(createdNewEntry && displayName
             ? {
-                titleRefinement: initializeTitleRefinementState(
-                  patched.entry.sessionId,
-                  displayName,
-                  { skipNextMessage: true },
-                ),
+                displayName,
+                ...(params.displayNameGenerated
+                  ? {
+                      titleRefinement: {
+                        sessionId: patched.entry.sessionId,
+                        generatedName: displayName,
+                        remainingMessages: 7,
+                      },
+                    }
+                  : {}),
               }
             : {}),
           ...projectSessionCreateSpawnModelSelection({

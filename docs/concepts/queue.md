@@ -105,6 +105,8 @@ Per-session `/queue` options apply to queued delivery. The `debounce` option als
 - `drop: "old"`: drop the oldest queued entries as needed, without preserving summaries.
 - `drop: "new"`: reject the newest message when the queue is already full.
 
+Gateway followup and collect debounce windows measure elapsed time, so wall-clock corrections do not shorten or extend them.
+
 The queue uses a built-in 500ms debounce. `cap` defaults to `20`, and `drop` defaults to `summarize`.
 
 ## Steer and streaming
@@ -196,6 +198,11 @@ access cancels the collected turn and blocks further effects.
 - Removing a specific queued message in Control UI also hides that pending
   prompt and its attachments. The cancellation record prevents replay after
   reconnect. Stop and timeout cancellations keep their recovery messages.
+
+After a successful session reset, an unsent follow-up reply retained for retry
+still belongs to the original session generation. Recovery does not replay it
+into the reset session. Recovery without a reset and replies to new turns
+continue normally.
 
 Gateway-backed clients (including `openclaw tui`) forward mid-run prompts and
 let the Gateway apply the queue mode. Esc/`/stop` uses a session-scoped abort

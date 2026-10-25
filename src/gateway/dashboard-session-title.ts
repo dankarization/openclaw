@@ -17,11 +17,10 @@ import {
   composeSessionSourceAssertion,
   type SessionSourceAssertion,
 } from "../config/sessions/session-source-authority.js";
-import type { SessionEntry } from "../config/sessions/types.js";
+import type { InternalSessionEntry as SessionEntry } from "../config/sessions/types.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { withTimeout } from "../infra/fs-safe.js";
 import { parseAgentSessionKey } from "../sessions/session-key-utils.js";
-import { initializeTitleRefinementState } from "../sessions/session-title-refinement-state.js";
 import {
   SESSION_TITLE_SOURCE_MAX_CHARS,
   resolveSessionTitleSource,
@@ -30,9 +29,14 @@ import { runWithAsyncWorkResources } from "../shared/async-work-resources.js";
 import { getAsyncWorkSignal, trackAsyncWork } from "../shared/async-work-scope.js";
 import type { SkillCommandSpec } from "../skills/types.js";
 import type { ChatAttachment } from "./chat-attachments.js";
+import {
+  claimDashboardTitleRefinement,
+  readDashboardRefinementSource,
+} from "./dashboard-session-title-refinement.js";
 import { resolveStoredSessionKeyForAgentStore } from "./session-store-key.js";
 import {
   hasExplicitSessionName,
+  matchesGeneratedSessionTitle,
   resolveExplicitSessionName,
   sessionTitleRequests,
 } from "./session-title-state.js";
@@ -106,7 +110,7 @@ export function buildDashboardSessionTitleSource(params: {
   return truncateUtf16Safe(source.trim(), SESSION_TITLE_SOURCE_MAX_CHARS);
 }
 
-export type SessionTitleParams = {
+type SessionTitleParams = {
   cfg: OpenClawConfig;
   agentId: string;
   entry?: SessionEntry;
@@ -115,13 +119,12 @@ export type SessionTitleParams = {
   storePath: string;
   currentUserMessage?: string;
   userMessage: string;
-  /** A title prepared before its opening chat turn skips that turn when refining. */
-  skipNextRefinementMessage?: boolean;
-  /** Reports whether this caller joined an in-flight title request instead of creating it. */
-  markJoined?: (joined: boolean) => void;
   commitGuard?: SessionSourceAssertion;
   withSource?: WorktreeSourceStage;
   retryFailedJoin?: boolean;
+  /** Creation/worktree naming runs before the opening user message. */
+  initialMessagePending?: boolean;
+  refineGeneratedTitle?: boolean;
   operatorAuthority?: AdmittedRunOperatorAuthority;
   /** Settles with the turn this title overlapped; a failed label retries once after it. */
   retryAfter?: Promise<void>;
@@ -265,7 +268,7 @@ function normalizeDashboardSessionTitle(raw: string): string | null {
   return /[^\s"'`„“”«»‘’]/u.test(normalized) ? normalized : null;
 }
 
-export async function prepareTitleSkillCommands(params: {
+async function prepareTitleSkillCommands(params: {
   cfg: OpenClawConfig;
   agentId: string;
   entry?: SessionEntry;
@@ -285,19 +288,18 @@ export async function prepareTitleSkillCommands(params: {
   );
 }
 
-export async function generateDashboardSessionTitle(params: {
+async function generateDashboardSessionTitle(params: {
   cfg: OpenClawConfig;
   agentId: string;
   entry?: DashboardSessionTitleModelEntry;
   sourceText: string;
-  /** Optional naming never persists a random slug; speculation also excludes primary. */
-  mode?: "speculative" | "refinement";
+  utilityOnly?: boolean;
+  keepExistingTitle?: boolean;
   abortSignal?: AbortSignal;
   assertCurrent?: () => void;
   operatorAuthority?: AdmittedRunOperatorAuthority;
   retryAfter?: Promise<void>;
   onFallback?: () => void;
-  promptOverride?: string;
 }): Promise<string | null> {
   const sourceText = params.sourceText;
   const regularModel = resolveSessionModelRef(params.cfg, params.entry, params.agentId);
@@ -329,7 +331,7 @@ export async function generateDashboardSessionTitle(params: {
       params.abortSignal?.throwIfAborted();
       return await generateConversationLabelWithFallback({
         userMessage: sourceText,
-        prompt: params.promptOverride ?? DASHBOARD_SESSION_TITLE_PROMPT,
+        prompt: DASHBOARD_SESSION_TITLE_PROMPT,
         cfg: params.cfg,
         agentId: params.agentId,
         ...(agentHarnessRuntimeOverride ? { agentHarnessRuntimeOverride } : {}),
@@ -341,7 +343,7 @@ export async function generateDashboardSessionTitle(params: {
         abortSignal: params.abortSignal,
         assertCurrent: params.assertCurrent,
         operatorAuthority: params.operatorAuthority,
-        ...(params.mode ? { mode: params.mode } : {}),
+        ...(params.utilityOnly ? { utilityOnly: true } : {}),
       });
     } catch {
       params.assertCurrent?.();
@@ -361,8 +363,9 @@ export async function generateDashboardSessionTitle(params: {
   if (title) {
     return title;
   }
-  // Optional naming keeps the current title when inference fails.
-  if (params.mode) {
+  // Speculative utility-only naming must not persist a provisional title that
+  // would skip the healthy primary-model pass after send.
+  if (params.utilityOnly || params.keepExistingTitle) {
     return null;
   }
   // Saved titles also name Git branches; never persist raw prompt text as a fallback.
@@ -388,7 +391,7 @@ export async function prepareDashboardSessionTitle(params: {
     });
     const sourceText = resolveSessionTitleSource(params.userMessage, skillCommands);
     return sourceText
-      ? await generateDashboardSessionTitle({ ...params, sourceText, mode: "speculative" })
+      ? await generateDashboardSessionTitle({ ...params, sourceText, utilityOnly: true })
       : null;
   } catch {
     params.assertCurrent?.();
@@ -409,7 +412,7 @@ export async function generateWorktreeSessionTitle(
     sessionKey: resolveStoredSessionKeyForAgentStore(params),
     storePath: params.storePath,
   };
-  const request = maybeGenerateSessionTitle({ ...params, skipNextRefinementMessage: true });
+  const request = maybeGenerateSessionTitle({ ...params, initialMessagePending: true });
   try {
     await withTimeout(request, WORKTREE_SESSION_TITLE_WAIT_MS, "worktree title generation");
   } catch (error) {
@@ -435,10 +438,14 @@ export async function generateWorktreeSessionTitle(
 export async function maybeGenerateDashboardSessionTitle(
   params: SessionTitleParams,
 ): Promise<boolean> {
-  return (
-    isDashboardSessionTitleCandidate(params) &&
-    (await maybeGenerateSessionTitle({ ...params, retryFailedJoin: true }))
-  );
+  if (!isDashboardSessionTitleCandidate(params)) {
+    return false;
+  }
+  return await maybeGenerateSessionTitle({
+    ...params,
+    retryFailedJoin: true,
+    refineGeneratedTitle: !params.initialMessagePending,
+  });
 }
 
 /** Joins existing work; only the caller that persists a title returns true. */
@@ -459,6 +466,28 @@ export async function maybeGenerateSessionTitle(params: SessionTitleParams): Pro
     memory?.binding?.actor.assertReadable();
     memory?.authority.assertCurrent();
   };
+  const entry = await readSessionEntryReadOnlyInWorker(scope, assertMemoryCurrent);
+  if (entry?.sessionId !== params.sessionId) {
+    return false;
+  }
+  let refinementName: string | undefined;
+  if (hasExplicitSessionName(entry)) {
+    const state = entry.titleRefinement;
+    if (
+      !params.refineGeneratedTitle ||
+      !state ||
+      state.remainingMessages <= 0 ||
+      !matchesGeneratedSessionTitle(entry, state.generatedName)
+    ) {
+      return false;
+    }
+    // Claim before inference so concurrent follow-ups retain their own admission.
+    refinementName = await claimDashboardTitleRefinement(params);
+    if (!refinementName) {
+      return false;
+    }
+  }
+
   const requestTarget = {
     ...scope,
     sessionId: params.sessionId,
@@ -491,19 +520,26 @@ export async function maybeGenerateSessionTitle(params: SessionTitleParams): Pro
       await patchSessionEntryCore(
         scope,
         (current) => {
-          if (current.sessionId !== params.sessionId || hasExplicitSessionName(current)) {
+          if (
+            current.sessionId !== params.sessionId ||
+            (refinementName
+              ? !matchesGeneratedSessionTitle(current, refinementName)
+              : hasExplicitSessionName(current))
+          ) {
             return null;
           }
           persisted = true;
-          // Record automatic-title provenance: refinement only runs for names
-          // this writer produced, never for pre-existing display names. The
-          // chat-send scheduler already skips refinement for this title-producing
-          // turn; only titles prepared before their opening turn need a skip marker.
           return {
             displayName,
-            titleRefinement: initializeTitleRefinementState(params.sessionId, displayName, {
-              skipNextMessage: params.skipNextRefinementMessage,
-            }),
+            ...(parseAgentSessionKey(sessionKey)?.rest.startsWith("dashboard:")
+              ? {
+                  titleRefinement: {
+                    sessionId: params.sessionId,
+                    generatedName: displayName,
+                    remainingMessages: refinementName ? 0 : params.initialMessagePending ? 7 : 6,
+                  },
+                }
+              : {}),
           };
         },
         {
@@ -519,11 +555,6 @@ export async function maybeGenerateSessionTitle(params: SessionTitleParams): Pro
   };
 
   const run = async () => {
-    const entry = await readSessionEntryReadOnlyInWorker(scope, assertMemoryCurrent);
-    if (hasExplicitSessionName(entry) || entry?.sessionId !== params.sessionId) {
-      return false;
-    }
-
     // Select the first usable task, not an earlier control-only turn. Carry the
     // same prepared command metadata through history selection and generation.
     const skillCommands = await prepareTitleSkillCommands({
@@ -540,19 +571,21 @@ export async function maybeGenerateSessionTitle(params: SessionTitleParams): Pro
       sessionKey,
       storePath: params.storePath,
     };
-    const transcriptSource = (
-      await readSessionTitleFieldsFromTranscriptAsync(transcriptScope, { skillCommands })
-    ).firstUserMessage;
+    const transcriptSource = refinementName
+      ? null
+      : (await readSessionTitleFieldsFromTranscriptAsync(transcriptScope, { skillCommands }))
+          .firstUserMessage;
     assertMemoryCurrent();
     const transcriptText = transcriptSource ?? "";
     const currentText = resolveSessionTitleSource(params.currentUserMessage ?? "", skillCommands);
     // A first-turn transcript may win the persistence race before title work starts.
     // When it is the current turn, retain the supplied attachment-enriched source.
-    const sourceText =
-      resolveSessionTitleSource(entry.pendingWorktree?.titleSource ?? "", skillCommands) ??
-      (!transcriptText || (currentText && currentText === transcriptText)
-        ? resolveSessionTitleSource(params.userMessage, skillCommands)
-        : transcriptText);
+    const sourceText = refinementName
+      ? await readDashboardRefinementSource(transcriptScope, params.userMessage, skillCommands)
+      : (resolveSessionTitleSource(entry.pendingWorktree?.titleSource ?? "", skillCommands) ??
+        (!transcriptText || (currentText && currentText === transcriptText)
+          ? resolveSessionTitleSource(params.userMessage, skillCommands)
+          : transcriptText));
     if (!sourceText) {
       return false;
     }
@@ -563,6 +596,7 @@ export async function maybeGenerateSessionTitle(params: SessionTitleParams): Pro
         agentId: params.agentId,
         entry: params.entry ?? entry,
         sourceText,
+        ...(refinementName ? { keepExistingTitle: true } : {}),
         operatorAuthority: params.operatorAuthority,
         ...(abortSignal ? { abortSignal } : {}),
         ...(params.retryAfter ? { retryAfter: params.retryAfter } : {}),
@@ -592,10 +626,5 @@ export async function maybeGenerateSessionTitle(params: SessionTitleParams): Pro
       { cancelOnError: true },
     );
   };
-  return await sessionTitleRequests.run(
-    requestTarget,
-    run,
-    params.onTitleStateChanged,
-    params.markJoined,
-  );
+  return await sessionTitleRequests.run(requestTarget, run, params.onTitleStateChanged);
 }

@@ -156,10 +156,6 @@ export type AutoTopicLabelConfig =
       enabled?: boolean;
       /** Custom prompt for LLM-based topic naming. */
       prompt?: string;
-      /** Opt-in one-time refinement of the auto label after N task messages. */
-      refine?: boolean;
-      /** Task messages after the first turn before the one-time refinement runs (1-100). */
-      refineAfterMessages?: number;
     };
 
 export type TelegramDirectConfig = Omit<CommonChannelGroupConfig, "requireMention"> & {

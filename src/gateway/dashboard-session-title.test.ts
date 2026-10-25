@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   generate: vi.fn(),
   utility: vi.fn(),
   readTranscript: vi.fn(),
+  readTail: vi.fn(),
   patch: vi.fn(),
   load: vi.fn(),
 }));
@@ -34,15 +35,18 @@ vi.mock("../skills/discovery/chat-commands.js", () => ({
 vi.mock("./session-transcript-title-reader.js", () => ({
   readSessionTitleFieldsFromTranscriptAsync: mocks.readTranscript,
 }));
+// mock-isolation: Supply the recent conversation without starting history workers.
+vi.mock("./session-transcript-readers.js", () => ({
+  readSessionTranscriptBoundedMessageTailPageAsync: mocks.readTail,
+}));
 
 import type { WorktreeSourceStage } from "../agents/worktrees/types.js";
-import type { InternalSessionEntry, SessionEntry } from "../config/sessions/types.js";
+import type { SessionEntry } from "../config/sessions/types.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { runWithAsyncWorkResources } from "../shared/async-work-resources.js";
 import { AsyncWorkScope } from "../shared/async-work-scope.js";
 import { createDeferredCore } from "../shared/deferred.js";
 import type { ChatAttachment } from "./chat-attachments.js";
-import { maybeRefineDashboardSessionTitle } from "./dashboard-session-title-refinement.js";
 import {
   buildDashboardSessionTitleSource,
   generateWorktreeSessionTitle,
@@ -123,6 +127,7 @@ describe("maybeGenerateDashboardSessionTitle", () => {
       firstUserMessage: null,
       lastMessagePreview: null,
     });
+    mocks.readTail.mockReset().mockResolvedValue({ events: [] });
     mockSessionUpdate(baseEntry);
   });
 
@@ -196,76 +201,72 @@ describe("maybeGenerateDashboardSessionTitle", () => {
     );
   });
 
-  it("counts the first later chat task after an ordinary generated title", async () => {
-    const refineCfg = {
-      ...cfg,
-      session: { autoTitle: { refine: true, refineAfterMessages: 1 } },
-    } as OpenClawConfig;
-    let current: InternalSessionEntry = { ...baseEntry };
-    mocks.patch.mockImplementation(async (_scope, update) => {
-      const patch = await update({ ...current });
-      current = patch ? { ...current, ...patch } : current;
-      mocks.load.mockReturnValue(current);
-      return current;
-    });
-    mocks.generate.mockResolvedValueOnce("Release Planning").mockResolvedValueOnce("Better Title");
-
-    await expect(
-      maybeGenerateDashboardSessionTitle({ ...titleParams(current), cfg: refineCfg }),
-    ).resolves.toBe(true);
-    await maybeRefineDashboardSessionTitle({
-      ...titleParams(current),
-      cfg: refineCfg,
-      currentUserMessage: "Investigate the follow-up bug",
-      userMessage: "Investigate the follow-up bug",
-    });
-
-    expect(mocks.generate).toHaveBeenCalledTimes(2);
-    expect(current.displayName).toBe("Better Title");
-    expect(current.titleRefinement).toMatchObject({
-      taskMessagesSinceTitle: 1,
-      refinementDone: true,
-      generatedName: "Better Title",
-    });
-  });
-
-  it("skips the opening task only when a worktree title was prepared first", async () => {
-    await expect(
-      generateWorktreeSessionTitle({ ...titleParams(), onError: vi.fn() }),
-    ).resolves.toBe("Release Planning");
-
-    expect(mocks.load().titleRefinement).toMatchObject({
-      taskMessagesSinceTitle: 0,
-      skipNextMessage: true,
-    });
-  });
-
-  it.each([
-    ["Reply with ok’", "Reply with ok"],
-    ["'Users' can't edit permissions'", "Users' can't edit permissions"],
-    [`${"a".repeat(52)} "long quoted span"`, `${"a".repeat(52)} long q`],
-  ])("normalizes generated title wrappers", async (generated, expected) => {
-    mocks.generate.mockImplementation(async ({ normalizeLabel }) => normalizeLabel(generated));
-
-    await expect(maybeGenerateDashboardSessionTitle(titleParams())).resolves.toBe(true);
-
-    const update = mocks.patch.mock.calls[0]?.[1];
-    expect(await update?.({ ...baseEntry })).toEqual({
-      displayName: expected,
-      titleRefinement: expect.objectContaining({
-        generatedName: expected,
-        refinementDone: false,
-        taskMessagesSinceTitle: 0,
-      }),
-    });
-  });
-
   it("skips a persisted display name even when supplied an older entry", async () => {
     const params = titleParams({ ...baseEntry, displayName: "My release" });
     await expect(maybeGenerateDashboardSessionTitle({ ...params, entry: baseEntry })).resolves.toBe(
       false,
     );
     expectCalls(0, mocks.generate, mocks.patch);
+  });
+
+  it("refines a generated Dashboard title once after six follow-up messages", async () => {
+    let current: SessionEntry = { ...baseEntry };
+    mocks.load.mockImplementation(() => current);
+    mocks.patch.mockImplementation(async (_scope, update) => {
+      const patch = await update(current);
+      if (patch) {
+        current = { ...current, ...patch };
+      }
+      return current;
+    });
+    const params = { ...titleDefaults };
+    await maybeGenerateDashboardSessionTitle(params);
+    mocks.generate.mockResolvedValue("Fix release signing");
+    mocks.readTail.mockResolvedValue({
+      events: [
+        {
+          event: {
+            type: "message",
+            message: { role: "user", content: "The release fails during signing" },
+          },
+        },
+      ],
+    });
+    for (let index = 0; index < 5; index++) {
+      await maybeGenerateDashboardSessionTitle({ ...params, userMessage: "Investigate signing" });
+    }
+    expect(current.displayName).toBe("Release Planning");
+    await maybeGenerateDashboardSessionTitle({ ...params, userMessage: "Fix the certificate" });
+    expect(current.displayName).toBe("Fix release signing");
+    expect(mocks.generate.mock.calls.at(-1)?.[0].userMessage).toContain("Fix the certificate");
+    expect(mocks.generate.mock.calls.at(-1)?.[0].userMessage).toContain("fails during signing");
+    for (let index = 0; index < 8; index++) {
+      await maybeGenerateDashboardSessionTitle(params);
+    }
+    expect(mocks.generate).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not overwrite a manual rename while the one-time refinement is in flight", async () => {
+    let current: SessionEntry = { ...baseEntry };
+    mocks.load.mockImplementation(() => current);
+    mocks.patch.mockImplementation(async (_scope, update) => {
+      const patch = await update(current);
+      if (patch) {
+        current = { ...current, ...patch };
+      }
+      return current;
+    });
+    await maybeGenerateDashboardSessionTitle(titleDefaults);
+    for (let index = 0; index < 5; index++) {
+      await maybeGenerateDashboardSessionTitle(titleDefaults);
+    }
+    const pending = pendingLabel();
+    const refinement = maybeGenerateDashboardSessionTitle(titleDefaults);
+    await pending.started;
+    current = { ...current, displayName: "My release" };
+    pending.resolve("Fix release signing");
+    await expect(refinement).resolves.toBe(false);
+    expect(current.displayName).toBe("My release");
   });
 
   it("titles over an Android platform auto-label without treating it as a rename", async () => {
@@ -280,14 +281,7 @@ describe("maybeGenerateDashboardSessionTitle", () => {
     ).resolves.toBe(true);
 
     const update = mocks.patch.mock.calls[0]?.[1];
-    expect(await update?.({ ...entry })).toEqual({
-      displayName: "Release Planning",
-      titleRefinement: expect.objectContaining({
-        generatedName: "Release Planning",
-        refinementDone: false,
-        taskMessagesSinceTitle: 0,
-      }),
-    });
+    expect(await update?.({ ...entry })).toEqual({ displayName: "Release Planning" });
   });
 
   it("retries a historical session from the transcript's first user message", async () => {
@@ -324,7 +318,7 @@ describe("maybeGenerateDashboardSessionTitle", () => {
         userMessage: "Help me plan the release",
       }),
     ).resolves.toBeNull();
-    expect(mocks.generate).toHaveBeenCalledWith(expect.objectContaining({ mode: "speculative" }));
+    expect(mocks.generate).toHaveBeenCalledWith(expect.objectContaining({ utilityOnly: true }));
     expect(mocks.patch).not.toHaveBeenCalled();
   });
 
@@ -475,7 +469,9 @@ describe("maybeGenerateDashboardSessionTitle", () => {
     await expect(first).resolves.toBe(true);
     await expect(duplicate).resolves.toBe(false);
 
-    expectCalls(1, mocks.generate, mocks.patch, mocks.load, mocks.readTranscript);
+    expectCalls(1, mocks.generate, mocks.patch, mocks.readTranscript);
+    // Each admitted turn reads current title state before counting toward refinement.
+    expect(mocks.load).toHaveBeenCalledTimes(2);
   });
 });
 

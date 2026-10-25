@@ -501,7 +501,8 @@ export class DraftSubmissionFlow {
         this.buildDraftSessionCreateParams({
           message: input.message,
           mentions: input.mentions,
-          preparedTitle,
+          displayName: preparedTitle,
+          ...(preparedTitle ? { displayNameGenerated: true } : {}),
           visibility:
             this.visibilityValue === "draft" &&
             !this.capabilities.canStartAsDraft(this.read().context)

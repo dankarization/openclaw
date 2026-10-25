@@ -48,6 +48,29 @@ afterEach(async () => {
 const readEntry = (storePath: string, sessionKey: string) =>
   loadSessionEntry({ agentId: "main", sessionKey, storePath });
 const adminClient = { client: { connect: { scopes: ["operator.admin"] } } as never };
+
+test("preserves generated-title provenance at session creation without treating manual names as generated", async () => {
+  const { storePath } = await createSessionStoreDir();
+  for (const generated of [true, false]) {
+    const result = await request<{ key: string }>(
+      "sessions.create",
+      { agentId: "main", displayName: "Release planning", displayNameGenerated: generated },
+      controlUiClient,
+    );
+    const entry = readEntry(storePath, result.key);
+    expect(entry?.displayName).toBe("Release planning");
+    if (generated) {
+      expect(entry?.titleRefinement).toMatchObject({
+        sessionId: entry?.sessionId,
+        generatedName: "Release planning",
+        remainingMessages: 7,
+      });
+    } else {
+      expect(entry?.titleRefinement).toBeUndefined();
+    }
+  }
+});
+
 async function workspaceFixture(prefix: string) {
   const workspace = await initializeRepository(tempDirs.make(prefix), "workspace");
   testState.agentConfig = { workspace };
@@ -145,37 +168,6 @@ test.each(["adopted", "incognito"] as const)(
     expect(readEntry(storePath, result.key)?.displayName).toBeUndefined();
   },
 );
-
-test("sessions.create records prepared title provenance only for a new generated display name", async () => {
-  const { storePath } = await createSessionStoreDir();
-  const client = { client: { connect: { scopes: ["operator.admin"] } } as never };
-  const generated = await directSessionReq<{ key: string }>(
-    "sessions.create",
-    { agentId: "main", displayName: "Prepared title", displayNameSource: "generated" },
-    client,
-  );
-  expect(generated.ok, JSON.stringify(generated.error)).toBe(true);
-  expect(
-    loadSessionEntry({ agentId: "main", sessionKey: generated.payload!.key, storePath })
-      ?.titleRefinement,
-  ).toMatchObject({
-    sessionId: expect.any(String),
-    generatedName: "Prepared title",
-    taskMessagesSinceTitle: 0,
-    skipNextMessage: true,
-  });
-
-  const explicit = await directSessionReq<{ key: string }>(
-    "sessions.create",
-    { agentId: "main", displayName: "Operator title" },
-    client,
-  );
-  expect(explicit.ok, JSON.stringify(explicit.error)).toBe(true);
-  expect(
-    loadSessionEntry({ agentId: "main", sessionKey: explicit.payload!.key, storePath })
-      ?.titleRefinement,
-  ).toBeUndefined();
-});
 
 test("successful naming survives setup failure and is shared with discussion open and retry", async () => {
   const naming = createDeferredCore<string>();

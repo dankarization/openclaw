@@ -24,9 +24,9 @@ export const SESSION_ENTRY_PRIVATE_CLEAR_PATCH = {
   pendingProjectGitUrl: undefined,
   pendingWorktree: undefined,
   priorWorkspace: undefined,
+  titleRefinement: undefined,
   sessionDiffBaselineCapture: undefined,
   transcriptByteCompactionLatch: undefined,
-  titleRefinement: undefined,
 } satisfies Partial<InternalSessionEntry>;
 
 const PRIVATE_SESSION_ENTRY_KEYS = [
@@ -44,9 +44,9 @@ const PRIVATE_SESSION_ENTRY_KEYS = [
   "pendingProjectGitUrl",
   "pendingWorktree",
   "priorWorkspace",
+  "titleRefinement",
   "sessionDiffBaselineCapture",
   "transcriptByteCompactionLatch",
-  "titleRefinement",
 ] as const satisfies readonly (keyof InternalSessionEntry)[];
 
 function stripPrivateSessionEntryFields(
