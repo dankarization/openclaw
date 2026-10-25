@@ -24,6 +24,7 @@ import {
   withAgentDatabaseStartupAdmission,
 } from "../state/agent-database-startup.js";
 import * as deletionJournal from "../state/agent-deletion-journal.read.js";
+import { gatewayRequest } from "./request-frame.test-support.js";
 import { createRequestGatewayMethodRegistry, handleGatewayRequest } from "./server-methods.js";
 import { authorizeGatewayRequestPreDispatch } from "./server-methods/request-authorization.js";
 import { sessionByKeyReadHandlers } from "./server-methods/sessions-read-by-key.js";
@@ -81,6 +82,7 @@ async function withPendingStartupInspection(
   run: (
     fixture: ReturnType<typeof describeFixture> & {
       complete: () => void;
+      fail: (error: Error) => void;
       databasePath: string;
       admission: Parameters<Parameters<typeof withAgentDatabaseStartupAdmission>[0]>[0];
     },
@@ -121,7 +123,13 @@ async function withPendingStartupInspection(
     try {
       await runInDetachedAsyncContext(() => {
         expect(getAgentDatabaseStartupAdmission()).toBeUndefined();
-        return run({ ...fixture, complete, admission, databasePath: pathname });
+        return run({
+          ...fixture,
+          complete,
+          fail: inspection.reject,
+          admission,
+          databasePath: pathname,
+        });
       });
     } finally {
       complete();
@@ -132,6 +140,129 @@ async function withPendingStartupInspection(
     }
   });
 }
+
+function useSharedStore(context: ReturnType<typeof requestContext>, databasePath: string) {
+  const sharedConfig: OpenClawConfig = {
+    agents: {
+      ownership: "explicit",
+      entries: { main: {}, ops: {} },
+      defaults: { sessionStore: { agentId: "ops" } },
+    },
+    session: { scope: "global", store: databasePath },
+  };
+  context.getRuntimeConfig = () => sharedConfig;
+  // Native routing and host-SQL isolation are covered by session-sqlite-target.worker.test.ts.
+  vi.spyOn(sqliteTarget, "prepareSqliteTargetFromSessionStorePath").mockResolvedValue({
+    agentId: "main",
+    path: databasePath,
+    shared: true,
+  });
+}
+
+it("refuses a new session's initial message without retaining a startup write", async () => {
+  await withPendingStartupInspection(async ({ context, client, complete, admission }) => {
+    const handler = vi.fn<GatewayRequestHandler>(({ respond }) => {
+      assertAgentDatabaseAdmitted("main");
+      respond(true, { message: "accepted" });
+    });
+    const respond = vi.fn();
+    const request = handleGatewayRequest({
+      req: gatewayRequest("startup-write", "sessions.create", {
+        agentId: "main",
+        message: "hello",
+      }),
+      context,
+      client,
+      respond,
+      isWebchatConnect: () => false,
+      extraHandlers: { "sessions.create": handler },
+    });
+    await request;
+    expect(handler).not.toHaveBeenCalled();
+    expect(respond).toHaveBeenCalledExactlyOnceWith(
+      false,
+      undefined,
+      expect.objectContaining({
+        code: "UNAVAILABLE",
+        retryable: true,
+        details: { reason: "startup-sidecars", method: "sessions.create" },
+      }),
+    );
+    complete();
+    await admission.pendingPreparation;
+    expect(handler).not.toHaveBeenCalled();
+    expect(respond).toHaveBeenCalledOnce();
+  });
+});
+
+it.each(["before", "after refusal"] as const)(
+  "preserves terminal inspection failure %s write authorization",
+  async (when) => {
+    await withPendingStartupInspection(async ({ request, fail, admission }) => {
+      const authorize = () =>
+        authorizeGatewayRequestPreDispatch({
+          ...request,
+          method: "sessions.send",
+          requestParams: { key: "agent:main:startup", message: "hello" },
+        });
+      if (when === "after refusal") {
+        await expect(authorize()).resolves.toMatchObject({
+          error: { code: "UNAVAILABLE", retryable: true },
+        });
+      }
+      fail(new Error("synthetic failed inspection"));
+      await admission.pendingPreparation;
+      await expect(authorize()).resolves.toMatchObject({
+        error: {
+          code: "UNAVAILABLE",
+          message: expect.stringContaining("synthetic failed inspection"),
+          retryable: false,
+        },
+      });
+    });
+  },
+);
+
+it("admits an unrelated agent's write while startup preparation continues", async () => {
+  await withPendingStartupInspection(async ({ request, context }) => {
+    context.getRuntimeConfig = () => ({ agents: { entries: { main: {}, ready: {} } } });
+    await expect(
+      authorizeGatewayRequestPreDispatch({
+        ...request,
+        method: "sessions.create",
+        requestParams: { agentId: "ready", message: "hello" },
+      }),
+    ).resolves.toMatchObject({ error: null });
+    expect(readAgentDatabaseAdmissionRefusal("main")?.code).toBe(
+      "agent-database-inspection-pending",
+    );
+  });
+});
+
+it("refuses a write while its logical agent's physical shared-store owner is pending", async () => {
+  await withPendingStartupInspection(
+    async ({ request, context, databasePath, complete, admission }) => {
+      useSharedStore(context, databasePath);
+      const authorize = () =>
+        authorizeGatewayRequestPreDispatch({
+          ...request,
+          method: "sessions.create",
+          requestParams: { agentId: "ops", message: "hello" },
+        });
+      await expect(authorize()).resolves.toMatchObject({
+        error: {
+          code: "UNAVAILABLE",
+          retryable: true,
+          details: { reason: "startup-sidecars", method: "sessions.create" },
+        },
+      });
+      expect(() => assertAgentDatabaseAdmitted("ops")).not.toThrow();
+      complete();
+      await admission.pendingPreparation;
+      await expect(authorize()).resolves.toMatchObject({ error: null });
+    },
+  );
+});
 
 it.each([
   ["sessions.list", { agentId: "main" }],
@@ -185,21 +316,7 @@ it("dispatches broad lists while an agent remains in startup preparation", async
 
 it("holds a logical agent's read for the physical shared-store owner", async () => {
   await withPendingStartupInspection(async ({ request, context, databasePath, complete }) => {
-    const sharedConfig: OpenClawConfig = {
-      agents: {
-        ownership: "explicit",
-        entries: { main: {}, ops: {} },
-        defaults: { sessionStore: { agentId: "ops" } },
-      },
-      session: { scope: "global", store: databasePath },
-    };
-    context.getRuntimeConfig = () => sharedConfig;
-    // Native shared-store routing and host-SQL isolation belong to session-sqlite-target.worker.test.ts.
-    vi.spyOn(sqliteTarget, "prepareSqliteTargetFromSessionStorePath").mockResolvedValue({
-      agentId: "main",
-      path: databasePath,
-      shared: true,
-    });
+    useSharedStore(context, databasePath);
     let settled = false;
     const reading = authorizeGatewayRequestPreDispatch({
       ...request,
@@ -398,12 +515,7 @@ it.each(["dispatch scopes", "private access"] as const)(
     if (boundary === "dispatch scopes") {
       const respond = vi.fn();
       await dispatch(
-        {
-          type: "req",
-          id: "revoked-description",
-          method: "sessions.describe",
-          params: { key: query.key },
-        },
+        gatewayRequest("revoked-description", "sessions.describe", { key: query.key }),
         respond,
       );
       expect(respond).toHaveBeenCalledExactlyOnceWith(
@@ -448,12 +560,9 @@ it.each(["operator.admin", "operator.read"])(
     const respond = vi.fn();
     try {
       await dispatch(
-        {
-          type: "req",
-          id: "cancelled-description",
-          method: "sessions.describe",
-          params: { key: "agent:main:cancelled-read" },
-        },
+        gatewayRequest("cancelled-description", "sessions.describe", {
+          key: "agent:main:cancelled-read",
+        }),
         respond,
       );
       expect(prepare).toHaveBeenCalledOnce();

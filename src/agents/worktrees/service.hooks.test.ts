@@ -19,8 +19,9 @@ import {
 import { withTimeout } from "../../infra/fs-safe.js";
 import * as commandRunner from "../../process/exec.js";
 import type { SpawnResult } from "../../process/exec.js";
-import { SESSION_WORK_ADMISSION_DRAIN_TIMEOUT_MS } from "../../sessions/session-lifecycle-admission.js";
+import { SESSION_CONTROLLER_DRAIN_TIMEOUT_MS } from "../../sessions/session-controller.lifecycle.js";
 import { createDeferredCore } from "../../shared/deferred.js";
+import { createCommandResult } from "../../test-utils/npm-spec-install-test-helpers.js";
 import { killPidIfAlive } from "../../test-utils/process-tree.js";
 import { useStateDatabaseTempDirs } from "../../test-utils/state-database-temp-dirs.js";
 import { updateRegistryWorktree } from "./registry.js";
@@ -194,14 +195,7 @@ describe("ManagedWorktreeService repository code isolation", () => {
     "releases setup source before process settlement (%s)",
     async (mode) => {
       const script = await writeSetup("#!/bin/sh\nexit 0\n");
-      const success: SpawnResult = {
-        stdout: "",
-        stderr: "",
-        code: 0,
-        signal: null,
-        killed: false,
-        termination: "exit",
-      };
+      const success: SpawnResult = createCommandResult();
       type SourceScope = { active: boolean; checks: number };
       const callerContext = new AsyncLocalStorage<string>();
       const sourceContext = new AsyncLocalStorage<SourceScope>();
@@ -294,11 +288,7 @@ describe("ManagedWorktreeService repository code isolation", () => {
         throw new Error("Worktree creation completed before setup readiness");
       });
       const waitForSetupSignal = (ready: Promise<void>, label: string) =>
-        withTimeout(
-          Promise.race([ready, premature]),
-          SESSION_WORK_ADMISSION_DRAIN_TIMEOUT_MS,
-          label,
-        );
+        withTimeout(Promise.race([ready, premature]), SESSION_CONTROLLER_DRAIN_TIMEOUT_MS, label);
       try {
         await waitForSetupSignal(dispatched.promise, "setup dispatch");
         await waitForSetupSignal(released.promise, "setup source release");

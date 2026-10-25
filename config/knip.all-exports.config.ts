@@ -58,6 +58,8 @@ const ROOT_TEST_ENTRY_GLOBS = [
   "test/scripts/fixtures/gateway-bench-profile-startup.mjs!",
   // SHA-pinned dispatch tests load this admission transport by a generated file URL.
   "test/scripts/full-release-validation-at-sha.admission-fixture.mjs!",
+  // The locale finalizer harness preloads this provider through NODE_OPTIONS.
+  "test/scripts/control-ui-locale-provider.fixture.mjs!",
   // The state-reader build test launches this native dependency fixture by path.
   "test/scripts/state-read-worker-dependency.test-support.mts!",
   // tsgo:test:root checks these compile-only contracts without runtime imports.
@@ -107,6 +109,8 @@ const ROOT_TEST_ENTRY_GLOBS = [
   "src/infra/database-engine/physical-facts-worker.test-support.ts!",
   // The PostgreSQL namespace isolation test resolves this worker through resolveRuntimeWorkerUrl.
   "src/infra/database-engine/multi-namespace.worker.test-support.ts!",
+  // The state-read admission test launches this Worker from computed source and dist paths.
+  "src/infra/database-engine/state-read-admission.worker.test-support.ts!",
   // The proxy owner test spawns this capture child through resolveRuntimeWorkerUrl.
   "src/proxy-capture/child-transport.process.test-support.ts!",
   // The PostgreSQL state owner test resolves this worker through resolveRuntimeWorkerUrl.
@@ -180,12 +184,30 @@ const workspaces = Object.fromEntries(
           ? [
               ".agents/skills/**/scripts/**/*.{js,mjs,cjs,ts,tsx,mts,cts}!",
               ...ROOT_TEST_ENTRY_GLOBS,
+              // Tests spawn these fixtures through computed source and emitted paths.
+              "src/infra/database-engine/state-read-admission-publication.worker.test-support.ts!",
+              "test/scripts/state-read-worker-stream.test-support.ts!",
             ]
           : [
               TEST_ENTRY_GLOB,
+              // Realtime codec tests spawn these fixtures by basename.
+              ...(workspace === "extensions/openai"
+                ? [
+                    "test-support/realtime-dtls-codecs.mjs!",
+                    "test-support/realtime-numeric-codecs.mjs!",
+                  ]
+                : []),
               // The plugin README documents this standalone fixture benchmark command.
               ...(workspace === "extensions/team-reports"
-                ? ["src/report-run.benchmark.test-support.ts!"]
+                ? [
+                    "src/report-run.benchmark.test-support.ts!",
+                    // Collection tests load this transport fixture through a module specifier.
+                    "src/run-worker.collection-fixtures.test-support.ts!",
+                  ]
+                : []),
+              // extensions/diagnostics-prometheus/benchmarks/README.md invokes this Node benchmark by path.
+              ...(workspace === "extensions/diagnostics-prometheus"
+                ? ["src/metric-store.benchmark.test-support.ts!"]
                 : []),
               // The PostgreSQL fixture resolves this backend through openEngineWorkerStore.
               ...(workspace === "extensions/workboard"

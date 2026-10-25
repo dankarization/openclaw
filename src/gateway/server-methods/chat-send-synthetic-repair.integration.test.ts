@@ -12,7 +12,9 @@ import {
   LEGACY_MISSING_TOOL_RESULT_TEXT,
   makeMissingToolResult,
 } from "../../../packages/agent-core/src/harness/session/tool-result-pairing.js";
+import { createDeferred } from "../../../test/helpers/promise.js";
 import { makeUserMessage } from "../../../test/helpers/user-message.js";
+import { modelDefinition } from "../../agents/model-auth.fixtures.test-support.js";
 import { SessionManager } from "../../agents/sessions/session-manager.js";
 import { makeAssistantMessageFixture } from "../../agents/test-helpers/assistant-message-fixtures.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
@@ -54,11 +56,13 @@ it("chat.send replays synthetic repairs through session history and the register
   const modelRef = `${provider}/${model}`;
   const requests: MessageCreateParamsStreaming[] = [];
   const providerWork: Promise<void>[] = [];
+  let nextRequestReceived: ReturnType<typeof createDeferred<void>> | undefined;
   const endpoint = createServer((request, response) => {
     const work = (async () => {
       expect(request.method).toBe("POST");
       expect(request.url).toBe("/v1/messages");
       requests.push(JSON.parse(await readText(request)));
+      nextRequestReceived?.resolve();
       const events = [
         {
           type: "message_start",
@@ -118,7 +122,6 @@ it("chat.send replays synthetic repairs through session history and the register
           skipBootstrap: true,
           model: { primary: modelRef, fallbacks: [] },
           models: { [modelRef]: { agentRuntime: { id: "openclaw" } } },
-          heartbeat: { every: "0m" },
         },
       },
       models: {
@@ -130,15 +133,12 @@ it("chat.send replays synthetic repairs through session history and the register
             baseUrl: `http://127.0.0.1:${address.port}`,
             apiKey: "synthetic-replay-provider-key",
             models: [
-              {
-                id: model,
+              modelDefinition(model, {
                 name: "Replay proof",
                 reasoning: false,
-                input: ["text"],
-                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
                 contextWindow: 64000,
                 maxTokens: 256,
-              },
+              }),
             ],
           },
         },
@@ -234,6 +234,8 @@ it("chat.send replays synthetic repairs through session history and the register
           manager.flushPendingPersistence();
           const original = readStoredRows(target.storePath, sessionId);
           const requestCount = requests.length;
+          const requestReceived = createDeferred();
+          nextRequestReceived = requestReceived;
           const started = await client.request<{ runId: string; status: string }>("chat.send", {
             sessionKey,
             message: "Summarize the health check.",
@@ -241,6 +243,7 @@ it("chat.send replays synthetic repairs through session history and the register
             deliver: false,
           });
           expect(started.status).toBe("started");
+          await requestReceived.promise;
           await expect(
             client.request("agent.wait", { runId: started.runId, timeoutMs: 30000 }),
           ).resolves.toMatchObject({ status: "ok" });

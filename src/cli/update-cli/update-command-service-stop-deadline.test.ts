@@ -10,7 +10,7 @@ import * as systemdExec from "../../daemon/systemd-exec.js";
 import { startSystemdService, stopSystemdService } from "../../daemon/systemd-lifecycle.js";
 import * as systemdScope from "../../daemon/systemd-scope.js";
 import * as systemdTransport from "../../daemon/systemd-user-transport.js";
-import { resolveRemainingDoctorServiceInspectionTimeoutMs } from "../../infra/update-doctor-deadline.js";
+import { createDoctorServiceInspectionBudget } from "../../infra/update-doctor-deadline.js";
 import * as processExec from "../../process/exec.js";
 import { mockProcessPlatform } from "../../test-utils/vitest-spies.js";
 import { maybeStopManagedServiceBeforeMutableUpdate } from "./update-command-service-maintenance.js";
@@ -22,6 +22,8 @@ const deadlineAtMs = 1_500;
 async function nativeStopFixture(home: string, expireDuring: "transport" | "settlement") {
   mockProcessPlatform("linux");
   let wallNow = 1_000;
+  let elapsedMs = 0;
+  vi.spyOn(performance, "now").mockImplementation(() => elapsedMs);
   vi.spyOn(Date, "now").mockImplementation(() => wallNow);
   vi.spyOn(systemdScope, "findInstalledSystemdGatewayScope").mockResolvedValue(null);
   vi.spyOn(systemdExec, "assertSystemdAvailable").mockResolvedValue(undefined);
@@ -30,12 +32,14 @@ async function nativeStopFixture(home: string, expireDuring: "transport" | "sett
   );
   vi.spyOn(systemdTransport, "resolveSystemdUserTransport").mockImplementation(async () => {
     if (expireDuring === "transport") {
-      wallNow = deadlineAtMs + 1;
+      wallNow -= 90_000;
+      elapsedMs = 501;
     }
     return undefined;
   });
   const dispatch = vi.spyOn(processExec, "runCommandWithTimeout").mockImplementation(async () => {
-    wallNow = deadlineAtMs + 1;
+    wallNow -= 90_000;
+    elapsedMs = 501;
     return { stdout: "", stderr: "", code: 0, termination: "exit", signal: null, killed: false };
   });
   const service = createMockGatewayService({
@@ -59,7 +63,8 @@ async function nativeStopFixture(home: string, expireDuring: "transport" | "sett
     jsonMode: true,
     phase: "inspect",
   });
-  return { service, dispatch, expectedService };
+  const remaining = createDoctorServiceInspectionBudget(deadlineAtMs);
+  return { service, dispatch, expectedService, remaining };
 }
 
 it("refuses the Doctor native stop when transport preparation consumes the deadline", () =>
@@ -80,7 +85,7 @@ it("refuses the Doctor native stop when transport preparation consumes the deadl
 
 it("retains the stop receipt and native restoration after an admitted stop crosses expiry", () =>
   withServiceHome(async (home) => {
-    const { dispatch, expectedService } = await nativeStopFixture(home, "settlement");
+    const { dispatch, expectedService, remaining } = await nativeStopFixture(home, "settlement");
     const onStopped = vi.fn();
     const stopped = await maybeStopManagedServiceBeforeMutableUpdate({
       root: process.cwd(),
@@ -89,7 +94,7 @@ it("retains the stop receipt and native restoration after an admitted stop cross
       jsonMode: true,
       expectedService,
       onStopped,
-      assertDeadline: () => resolveRemainingDoctorServiceInspectionTimeoutMs(deadlineAtMs),
+      assertDeadline: remaining,
     });
     expect(dispatch).toHaveBeenCalledOnce();
     expect(dispatch.mock.calls[0]?.[0]).toEqual([

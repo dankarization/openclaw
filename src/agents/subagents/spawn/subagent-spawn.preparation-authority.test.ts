@@ -10,7 +10,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import "./subagent-spawn-model.mocks.shared.js";
-import { createDeferred } from "../../../../test/helpers/promise.js";
+import { awaitGateBeforeSettlement, createDeferred } from "../../../../test/helpers/promise.js";
 import { forkSessionEntryFromParent } from "../../../auto-reply/reply/session-fork.js";
 import { captureRuntimeConfigAsyncReader } from "../../../config/config.js";
 import {
@@ -37,12 +37,14 @@ import { sessionDeleteHandlers } from "../../../gateway/server-methods/sessions-
 import type { GatewayRequestContext } from "../../../gateway/server-methods/types.js";
 import type { DispatchGatewayMethodInProcessOptions } from "../../../gateway/server-plugin-in-process-dispatch.types.js";
 import { withPluginRuntimeGatewayRequestScope } from "../../../plugins/runtime/gateway-request-scope.js";
+import { captureSessionTarget } from "../../../sessions/session-controller.lifecycle.js";
 import { AsyncWorkScope } from "../../../shared/async-work-scope.js";
 import { getAdmittedRunDelegatedAuthority } from "../../admitted-run-context.js";
 import { finalizeAgentToolAvailability } from "../../agent-tool-availability.js";
 import { copyAgentToolMetadata } from "../../agent-tool-metadata.js";
 import { finalizeAgentTools } from "../../agent-tools.finalize.js";
 import type { AnyAgentTool } from "../../agent-tools.types.js";
+import { createEnteredGate } from "../../entered-gate.test-support.js";
 import { createAgentHarnessHostCapabilities } from "../../harness/host-capability.js";
 import { createAgentsWaitTool } from "../../tools/agents-wait-tool.js";
 import {
@@ -161,8 +163,7 @@ describe("pending spawn preparation authority", () => {
           },
         ],
       );
-      const writerEntered = createDeferred();
-      const releaseWriter = createDeferred();
+      const writerGate = createEnteredGate();
       const forkQueued = createDeferred<{ childSessionKey: string; initialSessionId: string }>();
       const forkSettled = createDeferred<
         Awaited<ReturnType<typeof forkSessionEntryFromParent>> | Error
@@ -177,13 +178,10 @@ describe("pending spawn preparation authority", () => {
           // Hold a genuine preceding database writer, then enqueue the real fork owner.
           blocker = runExclusiveSqliteSessionWrite(
             resolveSqliteStoreScope(storePath),
-            async () => {
-              writerEntered.resolve();
-              await releaseWriter.promise;
-            },
+            writerGate.wait,
             "session.transcript.batch",
           );
-          await writerEntered.promise;
+          await writerGate.entered;
           const initial = loadSessionEntry({ storePath, sessionKey: params.sessionKey })!;
           const pending = forkSessionEntryFromParent(params);
           forkQueued.resolve({
@@ -283,7 +281,7 @@ describe("pending spawn preparation authority", () => {
           expect(parent.controller.signal.aborted).toBe(false);
           expect(getAdmittedRunDelegatedAuthority(admitted)).toBeUndefined();
         }
-        releaseWriter.resolve();
+        writerGate.release();
         const result = await forkSettled.promise;
         const entry = loadSessionEntry({ storePath, sessionKey: childSessionKey })!;
         const transcript = await loadTranscriptEvents({
@@ -338,7 +336,7 @@ describe("pending spawn preparation authority", () => {
           ).toBe("synthetic attachment");
         }
       } finally {
-        releaseWriter.resolve();
+        writerGate.release();
         inspected.resolve();
         await blocker;
         await pending;
@@ -452,7 +450,12 @@ describe("pending spawn preparation authority", () => {
             const childSessionKey = params.sessionKey as string;
             const child = loadSessionEntry({ storePath, sessionKey: childSessionKey })!;
             childController = registerChatAbortController({
-              chatAbortControllers: context.chatAbortControllers,
+              target: captureSessionTarget({
+                storeScope: storePath,
+                sessionKey: childSessionKey,
+                incarnation: child.sessionId,
+                agentId: "main",
+              }),
               runId: params.idempotencyKey as string,
               sessionKey: childSessionKey,
               sessionId: child.sessionId,
@@ -560,12 +563,11 @@ describe("pending spawn preparation authority", () => {
     );
     try {
       // A rejected spawn never enters preparation; report it instead of waiting for the test timeout.
-      const childSessionKey = await Promise.race([
+      const childSessionKey = await awaitGateBeforeSettlement(
         entered.promise,
-        wrapped.then(() => {
-          throw new Error("Spawn settled before entering context preparation");
-        }),
-      ]);
+        wrapped,
+        "Spawn settled before entering context preparation",
+      );
       expect(subagentRuns.size, "no ownership transfer before preparation resolves").toBe(0);
       expect(loadSessionEntry({ storePath, sessionKey: childSessionKey })).toBeDefined();
       if (closure === "native acceptance") {

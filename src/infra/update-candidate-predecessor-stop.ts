@@ -1,6 +1,5 @@
 import { collectNestedErrorCandidates } from "@openclaw/normalization-core/error-coercion";
 import { registerSignalExitGate } from "../cli/signal-exit-barrier.js";
-import { needsCandidateManagedServiceStop } from "../cli/update-cli/update-command-legacy-service-stop.js";
 import { UpdateCommandRecoveryPendingError } from "../cli/update-cli/update-command-recovery-error.js";
 import type { PreManagedServiceStop } from "../cli/update-cli/update-command-service-context-types.js";
 import { maybeStopManagedServiceBeforeMutableUpdate } from "../cli/update-cli/update-command-service-maintenance.js";
@@ -16,7 +15,6 @@ import { captureOpenClawStateWorkerContext } from "../state/openclaw-state-worke
 import { readGatewayOwnerLease } from "./gateway-owner-lease.js";
 import { GATEWAY_SERVICE_STOP_TIMEOUT_MS } from "./gateway-shutdown-budget.js";
 import { createSqliteLifecycleAggregateError } from "./sqlite-lifecycle-errors.js";
-import { resolveRemainingDoctorServiceInspectionTimeoutMs } from "./update-doctor-deadline.js";
 import type { UpdateRunLedgerOptions } from "./update-run-codec.js";
 import { getUpdateRunAsync } from "./update-run-reader.js";
 import { recordUpdateRunStepAsync } from "./update-run-write.async.js";
@@ -109,7 +107,7 @@ export async function stopSupervisedPredecessorGateway(
   params: {
     root: string;
     assertCurrent: () => void;
-    serviceInspectionDeadlineAtMs?: number;
+    serviceInspectionBudget?: () => number | undefined;
     warn: (message: string) => void;
   },
 ): Promise<boolean> {
@@ -172,9 +170,7 @@ export async function stopSupervisedPredecessorGateway(
   try {
     // The native stop reports its mutation before later checks can still throw;
     // the ledger keeps that fact for finalization and recovery either way.
-    const doctorRemainingMs = resolveRemainingDoctorServiceInspectionTimeoutMs(
-      params.serviceInspectionDeadlineAtMs,
-    );
+    const doctorRemainingMs = params.serviceInspectionBudget?.();
     params.assertCurrent();
     const state = await maybeStopManagedServiceBeforeMutableUpdate({
       updateInstallKind: "package",
@@ -188,8 +184,7 @@ export async function stopSupervisedPredecessorGateway(
         doctorRemainingMs === undefined
           ? GATEWAY_SERVICE_STOP_TIMEOUT_MS
           : Math.min(GATEWAY_SERVICE_STOP_TIMEOUT_MS, doctorRemainingMs),
-      assertDeadline: () =>
-        resolveRemainingDoctorServiceInspectionTimeoutMs(params.serviceInspectionDeadlineAtMs),
+      assertDeadline: params.serviceInspectionBudget,
       onStopped: record,
       assertCurrent: params.assertCurrent,
       warn: params.warn,
@@ -334,7 +329,12 @@ export async function adoptCandidateManagedServiceStop(params: {
   }
   if (
     params.status !== "ok" ||
-    !needsCandidateManagedServiceStop({ ...params, preManagedServiceStop: params.transferred })
+    !params.shouldRestart ||
+    params.mode === "unknown" ||
+    params.transferred?.serviceUpdateVerdict?.kind !== "unavailable" ||
+    params.transferred.stopped ||
+    params.transferred.inspected ||
+    params.windowsTaskAutoStartSuspended === true
   ) {
     return unchanged;
   }

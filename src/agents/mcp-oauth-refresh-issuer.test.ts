@@ -1,5 +1,4 @@
-import { auth } from "@modelcontextprotocol/sdk/client/auth.js";
-import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js";
+import { auth, type FetchLike } from "@modelcontextprotocol/client";
 import { describe, expect, it } from "vitest";
 import {
   closeOpenClawStateDatabaseAsync,
@@ -8,7 +7,7 @@ import {
 import { withMcpOAuthBearer } from "./mcp-oauth-fetch.js";
 import { operatorMcpOAuthIdentity } from "./mcp-oauth-identity.js";
 import { readMcpOAuthStore } from "./mcp-oauth-store.js";
-import { withTempHome as withBaseTempHome } from "./mcp-oauth.test-harness.js";
+import { withMcpOAuthTempHome as withTempHome } from "./mcp-oauth.test-harness.js";
 import { withMcpOAuthProviderForTest } from "./mcp-oauth.test-support.js";
 
 const SERVER_URL = "https://mcp.example.com/mcp";
@@ -137,14 +136,6 @@ function request({ fetchFn }: ReturnType<typeof createOAuthNetwork>) {
 
 function readStore() {
   return readMcpOAuthStore(IDENTITY.storeKey);
-}
-
-function withTempHome<T>(run: (home: string) => T | Promise<T>, prefix: string) {
-  return withBaseTempHome(run, {
-    prefix,
-    skipSessionCleanup: true,
-    env: { OPENCLAW_CONFIG_PATH: undefined, OPENCLAW_STATE_DIR: undefined },
-  });
 }
 
 describe("MCP OAuth refresh issuer binding", () => {

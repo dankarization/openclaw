@@ -2,6 +2,7 @@ import { copyFileSync, readFileSync, renameSync } from "node:fs";
 import { symlink } from "node:fs/promises";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
+import { isDeepStrictEqual } from "node:util";
 import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { makeAgentAssistantMessage } from "../../agents/test-helpers/agent-message-fixtures.js";
 import { openNodeSqliteDatabase } from "../../infra/node-sqlite.js";
@@ -31,8 +32,10 @@ import {
   loadTranscriptEvents,
   upsertSessionEntryCore,
 } from "./session-accessor.js";
+import { retainPreparedSessionEntryPredicate } from "./session-accessor.sqlite-entry-cache-publication-state.js";
 import { appendAbortedSessionTranscriptPartial } from "./session-accessor.sqlite-transcript-reports.js";
 import { replaceTranscriptEvents } from "./session-accessor.sqlite-transcript-write.test-support.js";
+import { messageEvent } from "./transcript-message.test-support.js";
 import {
   createTranscriptEventInserter,
   createTranscriptPayloadUpdater,
@@ -58,12 +61,7 @@ const assistant = {
 };
 const selected = { customType: "status", content: body, details: { selected: true } };
 const header = { type: "session", id: scope.sessionId, version: CURRENT_SESSION_VERSION };
-const messageEvent = (id: string, parentId: string | null, message: unknown) => ({
-  type: "message",
-  id,
-  parentId,
-  message,
-});
+
 const statusReport = (content: string) => ({ customType: "status", content, display: true });
 const agentDatabase = () => openOpenClawAgentDatabase({ agentId: scope.agentId });
 const nativeDatabase = () => requireNativeSqliteDatabase(agentDatabase().db);
@@ -260,6 +258,52 @@ describe("SQLite report payload selection", () => {
       expect(
         await Promise.all([requested, other].map((target) => loadTranscriptEvents(target))),
       ).toEqual(before);
+    }),
+  );
+
+  it(
+    "preserves retained workspace snapshots through fallback publication",
+    withReportState(async () => {
+      await seedEvents([]);
+      await upsertSessionEntryCore(scope, {
+        lifecycleRevision: "current-lifecycle",
+        skillsSnapshot: {
+          prompt: "",
+          skills: [],
+          librarySelections: [
+            {
+              skillId: "11111111-1111-4111-8111-111111111111",
+              revision: "a".repeat(64),
+              name: "notes",
+              ownerProfileId: "snapshot-owner",
+            },
+          ],
+        },
+      });
+      const retained = retainPreparedSessionEntryPredicate({
+        databaseIdentity: readDatabasePathIdentitySync(agentDatabase().path).key,
+        sessionKey: scope.sessionKey,
+        entry: loadSessionEntry(scope),
+        projection: ["skillsSnapshot"],
+        matches: (before, after) =>
+          before?.sessionId === after?.sessionId &&
+          before?.lifecycleRevision === after?.lifecycleRevision &&
+          isDeepStrictEqual(
+            before?.skillsSnapshot?.librarySelections,
+            after?.skillsSnapshot?.librarySelections,
+          ),
+      });
+      onTestFinished(() => retained.release());
+      expect(retained.isCurrent()).toBe(true);
+      await expect(abortPartial("retained-workspace")).resolves.toMatchObject({
+        ok: true,
+        value: { skipped: false, append: { appended: true } },
+      });
+      expect(retained.isCurrent()).toBe(true);
+      await upsertSessionEntryCore(scope, {
+        skillsSnapshot: { prompt: "", skills: [], librarySelections: [] },
+      });
+      expect(retained.isCurrent()).toBe(false);
     }),
   );
 

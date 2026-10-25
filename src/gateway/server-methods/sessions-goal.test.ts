@@ -11,6 +11,7 @@ import type { SessionEntry, SessionGoal } from "../../config/sessions/types.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { ensureProfileForEmail } from "../../state/user-profiles.js";
 import { withOpenClawTestState } from "../../test-utils/openclaw-test-state.js";
+import { gatewayRequest } from "../request-frame.test-support.js";
 import { handleGatewayRequest } from "../server-methods.js";
 import * as sessionAuthorization from "../session-sharing-authorization-async.js";
 import { SessionMutationAuthorizationChangedError } from "../session-sharing.js";
@@ -117,16 +118,10 @@ async function invoke(
     getRuntimeConfig: () => cfg,
     getSessionEventSubscriberConnIds: () => new Set<string>(),
     broadcastToConnIds: vi.fn(),
-    chatAbortControllers: new Map(),
     logGateway: { warn: vi.fn() },
   } as unknown as GatewayRequestContext;
   const handlerOptions: GatewayRequestHandlerOptions = {
-    req: {
-      type: "req",
-      id: "goal-rpc",
-      method: options.method ?? "sessions.goal.update",
-      params: request,
-    },
+    req: gatewayRequest("goal-rpc", options.method ?? "sessions.goal.update", request),
     respond,
     context,
     client: options.client ?? client(),
@@ -175,6 +170,8 @@ it.each([
       expectGoal(respond, { status: "complete" });
     } else {
       expectFailure(respond, { code: "INVALID_REQUEST" });
+      expect(readGoal()).toEqual(initialGoal());
+      expect(resumeChat).not.toHaveBeenCalled();
     }
     expect(resolved).toHaveBeenCalledOnce();
     expect(release).toHaveBeenCalledOnce();

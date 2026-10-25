@@ -1,17 +1,15 @@
-/** Resolve the portion of a parent Doctor deadline available to one nested service call. */
-export function resolveRemainingDoctorServiceInspectionTimeoutMs(
-  deadlineAtMs: number | undefined,
-  now = Date.now(),
-): number | undefined {
-  if (deadlineAtMs === undefined) {
-    return undefined;
-  }
-  if (!Number.isSafeInteger(deadlineAtMs)) {
-    throw new Error("Doctor service-inspection deadline is invalid.");
-  }
-  const remainingMs = deadlineAtMs - now;
-  if (remainingMs <= 0) {
-    throw new Error("Doctor service-inspection deadline has expired.");
-  }
-  return remainingMs;
+/** Translate a handoff timestamp once; wall-clock corrections cannot replenish Doctor work. */
+export function createDoctorServiceInspectionBudget(deadlineAtMs: number | undefined) {
+  const deadline =
+    deadlineAtMs === undefined ? undefined : performance.now() + deadlineAtMs - Date.now();
+  return (): number | undefined => {
+    if (deadline === undefined) {
+      return undefined;
+    }
+    const remainingMs = Math.ceil(deadline - performance.now());
+    if (remainingMs <= 0) {
+      throw new Error("Doctor service-inspection deadline has expired.");
+    }
+    return remainingMs;
+  };
 }

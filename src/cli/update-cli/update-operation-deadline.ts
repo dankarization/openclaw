@@ -19,7 +19,7 @@ export function createUpdateOperationDeadline<E extends Error = Error>(
   let failure: E | undefined;
   const expired = createDeferredCore<{ error: E }>();
   const inspectDeadline = () => {
-    if (!closed && !failure && admission && Date.now() >= admission.deadlineAtMs) {
+    if (!closed && !failure && admission && performance.now() >= admission.deadlineAtMs) {
       failure = admission.error;
       try {
         onExpired?.(failure);
@@ -53,18 +53,22 @@ export function createUpdateOperationDeadline<E extends Error = Error>(
       if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
         throw new Error("Update operation requires a finite positive budget.");
       }
-      if (absoluteDeadlineAtMs !== undefined && !Number.isSafeInteger(absoluteDeadlineAtMs)) {
-        throw new Error("Update operation deadline must be a safe integer.");
+      if (absoluteDeadlineAtMs !== undefined && !Number.isFinite(absoluteDeadlineAtMs)) {
+        throw new Error("Update operation requires a finite deadline.");
       }
       if (admission) {
         return;
       }
-      const deadlineAtMs = absoluteDeadlineAtMs ?? Date.now() + timeoutMs;
-      admission = { error, timeoutMs, deadlineAtMs };
-      if (Date.now() >= deadlineAtMs) {
-        inspectDeadline();
-      } else {
-        cancelDeadline = scheduleAbsoluteDeadline(deadlineAtMs, inspectDeadline);
+      admission = {
+        error,
+        timeoutMs,
+        deadlineAtMs: absoluteDeadlineAtMs ?? performance.now() + timeoutMs,
+      };
+      inspectDeadline();
+      if (!failure) {
+        cancelDeadline = scheduleAbsoluteDeadline(admission.deadlineAtMs, inspectDeadline, () =>
+          performance.now(),
+        );
       }
     },
     async run<T>(
@@ -77,8 +81,12 @@ export function createUpdateOperationDeadline<E extends Error = Error>(
           .then(() =>
             withSqliteDatabaseAdmissionWait(
               {
+                // The relay compares this value against Date.now(), so translate
+                // the monotonic deadline's remaining budget into an epoch timestamp.
                 get deadlineAtMs() {
-                  return admission?.deadlineAtMs;
+                  return admission
+                    ? Date.now() + Math.max(0, admission.deadlineAtMs - performance.now())
+                    : undefined;
                 },
                 assertActive: assertCurrent,
               },
@@ -97,6 +105,7 @@ export function createUpdateOperationDeadline<E extends Error = Error>(
             const joined = await awaitWithinDeadline(
               () => work,
               admission!.deadlineAtMs + admission!.timeoutMs,
+              () => performance.now(),
             );
             timeout.message +=
               joined === ABSOLUTE_DEADLINE_EXPIRED
