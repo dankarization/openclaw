@@ -76,7 +76,7 @@ export async function readDashboardRefinementSource(
     offset: 0,
   });
   const messages = page.events.flatMap(({ event }) => {
-    const message = asOptionalRecord(event.message);
+    const message = asOptionalRecord(asOptionalRecord(event)?.message);
     const text = message?.role === "user" ? extractFirstTextBlock(message) : undefined;
     const source = text ? resolveSessionTitleSource(text, skillCommands) : undefined;
     return source ? [source] : [];
