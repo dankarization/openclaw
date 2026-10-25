@@ -1,3 +1,24 @@
+// --stress-worktree-fanout instead uses prepared fixture worktrees and retains reconnect/filter churn.
+// Worker-churn load (isolated built Gateway; run baseline/candidate on fresh identical fixtures):
+// node --import ./scripts/tsx.mjs scripts/perf/team-shape-fixture.ts --state-dir .local/worker-base \
+//   --sessions 10000 --runs 6000 --settled-runs --projects 36 --transcript-mib 16 --port 41723
+// node --import ./scripts/tsx.mjs scripts/perf/transcript-broadcast-measure.ts \
+//   --state-dir .local/worker-base --entry dist/entry.js --port 41723 --mock-port 41724 \
+//   --scenario memory-soak --runs 36 --clients 64 --plugins 40 --duration-ms 600000 \
+//   --warmup-ms 10000 --round-interval-ms 15000 --list-interval-ms 5000 --poll-seed worker-churn --mixed-rpc \
+//   --row-mode sidebar --stress-tools --stress-worktree-fanout --list-filter-churn \
+//   --diagnostics --retained-profile-ms 0 --reset-every-rounds 0
+// Keep timing/GC acceptance untraced. Repeat separately with --allocations or
+// --workload-cpu-profile for allocation rate or Worker-constructor CPU attribution.
+// --worker-creation-counts writes operation-labeled constructor timing in a separate count pass.
+// For cold restores, prepare with worker-cold-fixture.ts and add --cold-history.
+// Each cold session is read once before cycling back to already-restored transcripts.
+// Fixed-work comparison: omit --poll-seed and use --soak-rounds 16,
+// --round-interval-ms 37500 and --list-interval-ms 600000 (256 requests per RPC method).
+// Setup can restore cold histories; report setup-inclusive worker/CPU totals too.
+
+// Stream custom syntax with --answer-chunk $'```json\n{"ok":true}\n```\nprose\n'.
+// Add --final-answer-phase to exercise the visible projection during each delta.
 // Add --list-filter-churn to --scenario memory-soak --mixed-rpc to rotate sidebar/search filters.
 // --gateway-preload <file> imports benchmark instrumentation after tsx for source or dist entries;
 // result.json records its resolved path and SHA-256. Use the same instrumentation on both arms.
@@ -19,8 +40,12 @@
 // Usage polling adds usage.cost and sessions.usage overview reads to the
 // mixed rotation; each round reports response cache statuses, including partials.
 // Use separate matching --allocations passes; their traced GC timing is diagnostic.
+// --worker-heap-done-file/--worker-heap-peer-done-file also gate paired timing soaks
+// before post-window collection or teardown; give each arm fresh, distinct paths.
+// --node-policy-churn adds a paired synthetic node and node list/describe/invoke traffic;
+// use memory-soak --mixed-rpc --plugins 40 --list-interval-ms 500 for policy load.
 import { spawn, type ChildProcess } from "node:child_process";
-import { createCipheriv, createHash, randomUUID } from "node:crypto";
+import { createCipheriv, createHash, generateKeyPairSync, randomUUID } from "node:crypto";
 import { once } from "node:events";
 import {
   appendFileSync,
@@ -42,6 +67,7 @@ import { NodeStreamableHTTPServerTransport } from "@modelcontextprotocol/node";
 import { McpServer } from "@modelcontextprotocol/server";
 import { Value } from "typebox/value";
 import { z } from "zod";
+import { buildDeviceAuthPayloadV3 } from "../../packages/gateway-client/src/device-auth.ts";
 import { rawDataToString } from "../../packages/gateway-client/src/websocket-data.ts";
 import { HelloOkSchema } from "../../packages/gateway-protocol/src/schema/frames.ts";
 import type { SessionsPatchParams } from "../../packages/gateway-protocol/src/schema/sessions-patch.ts";
@@ -49,6 +75,10 @@ import { PROTOCOL_VERSION } from "../../packages/gateway-protocol/src/version.ts
 import { isRecord } from "../../packages/normalization-core/src/record-coerce.ts";
 import { stripInboundMetadata } from "../../src/auto-reply/reply/strip-inbound-meta.js";
 import { prepareSessionEventMetrics } from "../../src/gateway/session-event-metrics.js";
+import {
+  publicKeyRawBase64UrlFromEd25519Pem,
+  signEd25519Payload,
+} from "../../src/infra/ed25519-signature.js";
 import { encodePngRgba } from "../../src/media/png-encode.js";
 import { GatewaySessionRowEvents } from "../../ui/src/api/gateway-session-row-events.ts";
 import { applyMockOpenAiModelConfig } from "../e2e/lib/fixtures/mock-openai-config.mjs";
@@ -82,6 +112,10 @@ import { parseStrictIntegerOption } from "../lib/strict-integer-option.ts";
 
 const { values } = parseArgs({
   options: {
+    // Cold-history worker-churn instrumentation and fixture workload.
+    "cold-history": { type: "boolean", default: false },
+    "worker-creation-counts": { type: "boolean", default: false },
+    "stress-worktree-fanout": { type: "boolean", default: false },
     "state-dir": { type: "string" },
     allocations: { type: "boolean", default: false },
     "worker-allocations": { type: "boolean", default: false },
@@ -127,6 +161,7 @@ const { values } = parseArgs({
     "mixed-rpc": { type: "boolean", default: false },
     "poll-between-rounds": { type: "boolean", default: false },
     "usage-rpc": { type: "boolean", default: false },
+    "node-policy-churn": { type: "boolean", default: false },
     "dashboard-rpc": { type: "boolean", default: false },
     "github-options-connected": { type: "boolean", default: false },
     "github-options-observe": { type: "boolean", default: false },
@@ -178,6 +213,8 @@ const { values } = parseArgs({
     "retained-profile-ms": { type: "string", default: "600000" },
     "reset-every-rounds": { type: "string", default: "20" },
     chunks: { type: "string", default: "100" },
+    "answer-chunk": { type: "string", default: "Synthetic streamed answer. " },
+    "final-answer-phase": { type: "boolean", default: false },
     "chunk-interval-ms": { type: "string", default: "10" },
     "prompt-kib": { type: "string", default: "128" },
     "chat-attachment-kib": { type: "string", default: "0" },
@@ -198,6 +235,8 @@ const { values } = parseArgs({
     "poll-seed": { type: "string" },
   },
 });
+// Fixture fanout keeps the same continuous polling as the explicit pacing option.
+const pollBetweenRounds = values["poll-between-rounds"] || values["stress-worktree-fanout"];
 if (!values["state-dir"]) {
   throw new Error("--state-dir is required (existing team-shape fixture)");
 }
@@ -305,6 +344,9 @@ if (
 }
 const idleScenario = scenario === "session-idle-retention";
 const soakScenario = scenario === "memory-soak";
+if (values["node-policy-churn"] && (!soakScenario || !values["mixed-rpc"] || !pluginCount)) {
+  throw new Error("--node-policy-churn requires memory-soak --mixed-rpc --plugins > 0");
+}
 const historyTurns = integer(values["history-turns"], "--history-turns", 0);
 const historyLastTurns = integer(values["history-last-turns"], "--history-last-turns", 0);
 const historyPayloadBytes =
@@ -585,6 +627,17 @@ if (stressShellWords > 10_000 || (stressShellWords > 0 && !values["stress-tools"
   throw new Error("--stress-shell-words must be 0–10000 and requires --stress-tools when positive");
 }
 const stressShellCommand = stressShellWords ? `: ${"word ".repeat(stressShellWords)}; pwd` : "pwd";
+if (
+  values["stress-worktree-fanout"] &&
+  (!soakScenario || !values["stress-tools"] || historyTurns)
+) {
+  throw new Error(
+    "--stress-worktree-fanout requires memory-soak --stress-tools without seeded history",
+  );
+}
+if (values["stress-worktree-fanout"] && values["worktree-tool-churn"]) {
+  throw new Error("Choose fixture worktree fanout or managed worktree tool churn, not both");
+}
 if (values["stress-session-store"] && !values["stress-tools"]) {
   throw new Error("--stress-session-store requires --stress-tools");
 }
@@ -883,14 +936,12 @@ const workerHeapPeerDoneFile = values["worker-heap-peer-done-file"];
 if (
   Boolean(workerHeapDoneFile) !== Boolean(workerHeapPeerDoneFile) ||
   (workerHeapDoneFile &&
-    (!values["worker-retained-heap"] ||
-      scenario !== "memory-soak" ||
-      values["mixed-rpc"] ||
+    (scenario !== "memory-soak" ||
       values["fingerprint-retention"] ||
       !workerHeapEvidence.acceptanceTiming))
 ) {
   throw new Error(
-    "Worker heap pair markers require both paths and an unprofiled memory soak without mixed RPCs or fingerprint retention",
+    "Measurement pair markers require both paths and a timing-compatible memory soak without fingerprint retention",
   );
 }
 if (
@@ -1016,6 +1067,13 @@ const patchSequences = patchKeys.map(() => 0);
 if (values["mixed-rpc"] && fixtureSessionCount < 1) {
   throw new Error("--mixed-rpc requires retained fixture sessions for chat.history");
 }
+const coldHistoryKeys: string[] = values["cold-history"]
+  ? JSON.parse(readFileSync(path.join(root, "worker-cold-summary.json"), "utf8")).sessionKeys
+  : [];
+if (values["cold-history"] && (!values["mixed-rpc"] || !coldHistoryKeys.length)) {
+  throw new Error("--cold-history requires --mixed-rpc and a prepared worker-cold fixture");
+}
+let coldHistorySequence = 0;
 let stressWorktree: string | undefined;
 const worktreeToolRoots = new Map<number, string>();
 const worktreeToolSearches = new Map<string, number>();
@@ -1033,6 +1091,28 @@ if (values["stress-tools"] || values["mixed-rpc"] || values["attempt-setup-image
   }
   if (values["mixed-rpc"]) {
     diffControlOriginal = readFileSync(path.join(stressWorktree, "README.md"), "utf8");
+  }
+}
+if (values["stress-worktree-fanout"]) {
+  const projects: unknown[] = Array.isArray(fixture.projectWorktrees)
+    ? fixture.projectWorktrees
+    : [];
+  if (projects.length < sessionCount) {
+    throw new Error("--stress-worktree-fanout requires one fixture project per active session");
+  }
+  for (const entry of projects.slice(0, sessionCount)) {
+    if (!isRecord(entry) || typeof entry.path !== "string") {
+      throw new Error("Invalid synthetic worktree fixture");
+    }
+    const worktree = realpathSync(entry.path);
+    if (
+      !worktree.startsWith(`${realpathSync(root)}${path.sep}`) ||
+      !readFileSync(path.join(worktree, ".git"), "utf8").startsWith("gitdir: ") ||
+      [...worktreeToolRoots.values()].includes(worktree)
+    ) {
+      throw new Error("Stress sessions require distinct linked worktrees inside the fixture");
+    }
+    worktreeToolRoots.set(worktreeToolRoots.size + 1, worktree);
   }
 }
 const viewerOrigin = "https://broadcast-measure.example.invalid";
@@ -1262,6 +1342,7 @@ if (scenario === "plugins.reload" || scenario === "plugin.scope" || pluginCount 
   const plugin = writePluginFixtures(output, {
     count: Math.max(1, pluginCount),
     activationOnStartup: true,
+    nodePolicy: values["node-policy-churn"],
   });
   if (scenario === "plugins.reload") {
     reloadPluginId = plugin.pluginIds[0];
@@ -1588,7 +1669,7 @@ const configPath = values["default-state-dir"]
   ? path.join(root, `${path.basename(output)}.json`)
   : path.join(output, "openclaw.json");
 writeFileSync(configPath, JSON.stringify(cfg));
-const chunk = "Synthetic streamed answer. ";
+const chunk = values["answer-chunk"];
 function responseEvents(chunks: string[]) {
   const text = chunks.join("");
   const item = {
@@ -1596,6 +1677,7 @@ function responseEvents(chunks: string[]) {
     id: "msg_broadcast",
     role: "assistant",
     status: "completed",
+    ...(values["final-answer-phase"] ? { phase: "final_answer" } : {}),
     content: [{ type: "output_text", text, annotations: [] }],
   };
   return [
@@ -2094,7 +2176,9 @@ const mock = createServer((req, res) => {
           (toolResult) =>
             typeof toolResult.output !== "string" ||
             !toolResult.output.includes(
-              values["attempt-setup-image"] || values["worktree-tool-churn"]
+              values["attempt-setup-image"] ||
+                values["worktree-tool-churn"] ||
+                values["stress-worktree-fanout"]
                 ? "# Synthetic project "
                 : "Synthetic allocation benchmark tool result.",
             ) ||
@@ -2200,10 +2284,11 @@ const mock = createServer((req, res) => {
       let reasoningReplayKey = toolOutput?.call_id;
       if (primary && toolScenario && cohort) {
         const currentCohort = cohort;
-        const toolWorktree = values["worktree-tool-churn"]
-          ? worktreeToolRoots.get(index)
-          : stressWorktree;
-        if (values["worktree-tool-churn"] && !toolWorktree) {
+        const toolWorktree =
+          values["worktree-tool-churn"] || values["stress-worktree-fanout"]
+            ? worktreeToolRoots.get(index)
+            : stressWorktree;
+        if ((values["worktree-tool-churn"] || values["stress-worktree-fanout"]) && !toolWorktree) {
           throw new Error("Synthetic foreground turn has no owned worktree");
         }
         const items = toolPaths.map((toolPath, toolIndex) => {
@@ -2233,10 +2318,10 @@ const mock = createServer((req, res) => {
                       (values["stress-tool-search"]
                         ? 'if (!(await catalog.search("read file content", { limit: 5 })).some(tool => tool.name === "read")) throw new Error("Synthetic tool search omitted read");\n'
                         : "") +
-                      `json(await read({ path: ${JSON.stringify(values["worktree-tool-churn"] && toolWorktree ? path.join(toolWorktree, "README.md") : toolPath)} }));\n` +
+                      `json(await read({ path: ${JSON.stringify((values["worktree-tool-churn"] || values["stress-worktree-fanout"]) && toolWorktree ? path.join(toolWorktree, "README.md") : toolPath)} }));\n` +
                       `const shell = await exec({ command: ${JSON.stringify(stressShellCommand)}, workdir: ${JSON.stringify(toolWorktree)} });\n` +
                       `if (shell.exitCode !== 0 || shell.aggregated.trim() !== ${JSON.stringify(toolWorktree)}) throw new Error("Synthetic exec worktree mismatch");\n` +
-                      (values["worktree-tool-churn"]
+                      (values["worktree-tool-churn"] || values["stress-worktree-fanout"]
                         ? `const match = await exec({ command: "grep -n 'Synthetic project' README.md", workdir: ${JSON.stringify(toolWorktree)} });\n` +
                           'if (match.exitCode !== 0 || !match.aggregated.includes("Synthetic project")) throw new Error("Synthetic worktree grep failed");\n'
                         : "") +
@@ -2367,6 +2452,12 @@ const mock = createServer((req, res) => {
 });
 const children: ChildProcess[] = [];
 const clients: ReturnType<typeof createGatewayWsClient>[] = [];
+let policyNode: ReturnType<typeof createGatewayWsClient> | undefined;
+let policyNodeId: string | undefined;
+const policyNodeCommands = Array.from(
+  { length: values["node-policy-churn"] ? pluginCount : 0 },
+  (_, index) => `bench-plugin-${String(index + 1).padStart(2, "0")}.echo`,
+);
 const githubOptionsClients: ReturnType<typeof createGatewayWsClient>[] = [];
 const chatDeltaDeliveryMs: number[] = [];
 const expectedClosures = new WeakSet<ReturnType<typeof createGatewayWsClient>>();
@@ -2413,6 +2504,7 @@ const coldSetupRpc: Array<{
   sessionKey?: string;
 }> = [];
 let lastSubscriberEventAt = performance.now();
+let lastSubscriberEventName: string | undefined;
 let closing = false;
 let subscriberFailure: Error | undefined;
 let recapRequests = 0;
@@ -2775,6 +2867,7 @@ const mixedRpcMethods = [
   "chat.history",
   "sessions.diff",
   ...(values["worktree-tool-churn"] ? [] : ["connect"]),
+  ...(values["node-policy-churn"] ? ["node.list", "node.describe", "node.invoke"] : []),
   ...dashboardRpcShapes.map(({ method }) => method),
   ...(values["usage-rpc"] ? ["usage.cost", "sessions.usage"] : []),
 ];
@@ -3741,7 +3834,8 @@ async function runRound(
           }
         })()
       : undefined;
-  const providerTimeoutMs = values["attempt-setup-image"] ? 170_000 : 45_000;
+  const providerTimeoutMs =
+    values["attempt-setup-image"] || values["stress-worktree-fanout"] ? 170_000 : 45_000;
   const timeout = setTimeout(
     () =>
       current.reject(
@@ -3990,14 +4084,17 @@ async function runRound(
 }
 async function drainEvents() {
   const started = performance.now();
-  while (performance.now() - started < 15_000) {
+  const timeoutMs = values["stress-worktree-fanout"] ? 60_000 : 15_000;
+  while (performance.now() - started < timeoutMs) {
     assertGatewayAlive();
     if (activeStreams === 0 && performance.now() - lastSubscriberEventAt >= 1000) {
       return;
     }
     await delay(50);
   }
-  throw new Error("model streams and subscriber events did not drain within 15s");
+  throw new Error(
+    `model streams and subscriber events did not drain within ${timeoutMs}ms: activeStreams=${activeStreams}, subscriberQuietMs=${Math.round(performance.now() - lastSubscriberEventAt)}, lastEvent=${lastSubscriberEventName}`,
+  );
 }
 async function ensureRecaps(client: ReturnType<typeof createGatewayWsClient>) {
   const states: unknown[] = [];
@@ -4205,6 +4302,7 @@ async function connectClient(index: number) {
       : {}),
     onEvent: (event) => {
       lastSubscriberEventAt = performance.now();
+      lastSubscriberEventName = event.event;
       if (
         measuringWholeSoakAllocation &&
         (event.event === "session.message" || event.event === "sessions.changed")
@@ -4398,6 +4496,7 @@ function cleanup() {
     for (const client of [...clients, ...githubOptionsClients]) {
       client.close();
     }
+    policyNode?.close();
     await Promise.all(
       children.map((child) => stopChild(child, { teardownGraceMs: 10_000, killGraceMs: 2000 })),
     );
@@ -4448,6 +4547,9 @@ try {
       ...(values["sqlite-reply-census"]
         ? ["--import", "./scripts/perf/sqlite-reply-census-preload.mjs"]
         : []),
+      ...(values["worker-creation-counts"]
+        ? ["--import", "./scripts/perf/worker-creation-preload.mjs"]
+        : []),
       "--import",
       "./scripts/lib/gateway-bench-profile-preload.ts",
       ...(values["transport-counts"]
@@ -4473,9 +4575,14 @@ try {
   gateway = launch(
     gatewayArgs,
     "gateway",
-    values["transport-counts"]
-      ? { OPENCLAW_BENCH_TRANSPORT_COUNTS_PATH: path.join(output, "transport-counts.json") }
-      : {},
+    {
+      ...(values["transport-counts"]
+        ? { OPENCLAW_BENCH_TRANSPORT_COUNTS_PATH: path.join(output, "transport-counts.json") }
+        : {}),
+      ...(values["worker-creation-counts"]
+        ? { OPENCLAW_BENCH_WORKER_CREATION_FILE: path.join(output, "worker-creations.jsonl") }
+        : {}),
+    },
     true,
   );
   await ready(port, "/readyz", gateway);
@@ -4525,7 +4632,13 @@ try {
         }
         const created = await rpc(client, "sessions.create", {
           key,
-          ...(stressWorktree ? { cwd: stressWorktree } : {}),
+          ...(stressWorktree
+            ? {
+                cwd: values["stress-worktree-fanout"]
+                  ? worktreeToolRoots.get(keyIndex + 1)
+                  : stressWorktree,
+              }
+            : {}),
           ...(values["activity-summaries"] ||
           values["cron-operator-turn"] ||
           sessionEventAncestors === 0
@@ -4556,6 +4669,106 @@ try {
   const sender = clients[0];
   if (!sender) {
     throw new Error("no sender client");
+  }
+  if (values["node-policy-churn"]) {
+    const nodeKeys = generateKeyPairSync("ed25519");
+    const publicKey = publicKeyRawBase64UrlFromEd25519Pem(
+      nodeKeys.publicKey.export({ type: "spki", format: "pem" }),
+    );
+    policyNodeId = createHash("sha256").update(Buffer.from(publicKey, "base64url")).digest("hex");
+    const challenge = Promise.withResolvers<{ nonce: string; ts: number }>();
+    policyNode = createGatewayWsClient({
+      ...clientConnection,
+      onEvent: (event) => {
+        if (event.event === "connect.challenge" && isRecord(event.payload)) {
+          const { nonce, ts } = event.payload;
+          if (typeof nonce === "string" && typeof ts === "number") {
+            challenge.resolve({ nonce, ts });
+          }
+        }
+        if (event.event === "node.invoke.request" && isRecord(event.payload)) {
+          const { id, nodeId, command } = event.payload;
+          void rpc(policyNode!, "node.invoke.result", {
+            id,
+            nodeId,
+            ok: true,
+            payloadJSON: JSON.stringify({ synthetic: true, command }),
+          }).catch((error: unknown) => {
+            subscriberFailure ??= error instanceof Error ? error : new Error(String(error));
+          });
+        }
+      },
+    });
+    trackClientFrames(policyNode);
+    policyNode.ws.on("error", (error) => {
+      subscriberFailure ??= error;
+    });
+    policyNode.ws.on("close", (code) => {
+      if (!closing) {
+        subscriberFailure ??= new Error(`synthetic node unexpectedly closed (${code})`);
+      }
+    });
+    await policyNode.waitOpen();
+    const { nonce, ts } = await Promise.race([
+      challenge.promise,
+      delay(12_000, undefined, { ref: false }).then(() => {
+        throw new Error("Synthetic node challenge timed out");
+      }),
+    ]);
+    const nodeClient = {
+      id: "node-host",
+      version: "1.0.0",
+      platform: "linux",
+      deviceFamily: "linux",
+      mode: "node",
+      displayName: "Synthetic policy node",
+    };
+    const hello = await rpc(policyNode, "connect", {
+      minProtocol: PROTOCOL_VERSION,
+      maxProtocol: PROTOCOL_VERSION,
+      client: nodeClient,
+      role: "node",
+      scopes: [],
+      caps: [],
+      commands: policyNodeCommands,
+      device: {
+        id: policyNodeId,
+        publicKey,
+        signedAt: ts,
+        nonce,
+        signature: signEd25519Payload(
+          nodeKeys.privateKey.export({ type: "pkcs8", format: "pem" }),
+          buildDeviceAuthPayloadV3({
+            deviceId: policyNodeId,
+            clientId: nodeClient.id,
+            clientMode: nodeClient.mode,
+            platform: nodeClient.platform,
+            deviceFamily: nodeClient.deviceFamily,
+            role: "node",
+            scopes: [],
+            signedAtMs: ts,
+            nonce,
+          }),
+        ),
+      },
+    });
+    if (!Value.Check(HelloOkSchema, hello) || hello.auth.role !== "node") {
+      throw new Error("Synthetic node did not complete its real Gateway handshake");
+    }
+    let node = await rpc(sender, "node.describe", { nodeId: policyNodeId });
+    if (isRecord(node) && typeof node.pendingRequestId === "string") {
+      await rpc(sender, "node.pair.approve", { requestId: node.pendingRequestId });
+      node = await rpc(sender, "node.describe", { nodeId: policyNodeId });
+    }
+    const admittedCommands = isRecord(node) && Array.isArray(node.commands) ? node.commands : [];
+    if (
+      !isRecord(node) ||
+      !node.connected ||
+      !node.paired ||
+      policyNodeCommands.some((command) => !admittedCommands.includes(command))
+    ) {
+      throw new Error("Synthetic node policy commands were not paired and admitted");
+    }
   }
   const sessionEventLineage: Array<{ key: string; parentSessionKey?: string }> = [];
   const verifySessionEventLineage = async (key: string) => {
@@ -5199,7 +5412,11 @@ try {
       startedHeapWorkers.push(worker);
     }
   }
+  const wholeSoakResourcesBefore = soakScenario
+    ? await readGatewayResources(gateway, { includeWorkers: true })
+    : undefined;
   const measurementStartedAt = Date.now();
+  const wholeSoakCpuBefore = soakScenario ? await readGatewayCpuUsage(gateway) : undefined;
   const measuredGateway = gateway;
   const wholeChatDiagnosticsEnabled =
     scenario === "chat.send" &&
@@ -5527,6 +5744,51 @@ try {
                     } finally {
                       peer.close();
                     }
+                  } else if (method === "node.list" || method === "node.describe") {
+                    const payload = await rpc(
+                      client,
+                      method,
+                      method === "node.list" ? {} : { nodeId: policyNodeId },
+                      onResponse,
+                    );
+                    const node =
+                      method === "node.list" && isRecord(payload) && Array.isArray(payload.nodes)
+                        ? payload.nodes.find(
+                            (entry: unknown) => isRecord(entry) && entry.nodeId === policyNodeId,
+                          )
+                        : payload;
+                    const admittedCommands =
+                      isRecord(node) && Array.isArray(node.commands) ? node.commands : [];
+                    if (
+                      !isRecord(node) ||
+                      !node.connected ||
+                      !node.paired ||
+                      policyNodeCommands.some((command) => !admittedCommands.includes(command))
+                    ) {
+                      throw new Error(`${method} lost the synthetic node's admitted commands`);
+                    }
+                  } else if (method === "node.invoke") {
+                    const command =
+                      policyNodeCommands[(round + clientIndex) % policyNodeCommands.length]!;
+                    const result = await rpc(
+                      client,
+                      method,
+                      {
+                        nodeId: policyNodeId,
+                        command,
+                        params: {},
+                        idempotencyKey: randomUUID(),
+                      },
+                      onResponse,
+                    );
+                    if (
+                      !isRecord(result) ||
+                      !isRecord(result.payload) ||
+                      result.payload.synthetic !== true ||
+                      result.payload.command !== command
+                    ) {
+                      throw new Error("node.invoke did not return the synthetic node's echo");
+                    }
                   } else if (method === "chat.history") {
                     const history = await rpc(
                       client,
@@ -5534,7 +5796,9 @@ try {
                       {
                         sessionKey: historyTurns
                           ? keys[clientIndex % keys.length]
-                          : `agent:main:team-shape-session-${clientIndex % fixtureSessionCount}`,
+                          : coldHistoryKeys.length
+                            ? coldHistoryKeys[coldHistorySequence++ % coldHistoryKeys.length]
+                            : `agent:main:team-shape-session-${clientIndex % fixtureSessionCount}`,
                         limit: 50,
                       },
                       onResponse,
@@ -5658,10 +5922,7 @@ try {
         : undefined;
       try {
         streamStart = await runScenario(round);
-        if (!values["dashboard-rpc"]) {
-          await drainEvents();
-        }
-        if (values["dashboard-rpc"] || values["poll-between-rounds"]) {
+        if (values["dashboard-rpc"] || pollBetweenRounds) {
           // Keep polling between bursts of agent work.
           const pacedUntil = Math.min(
             roundStartedAt + roundIntervalMs,
@@ -5692,9 +5953,9 @@ try {
         }
         measuring = true;
         await workload();
-        // Polling RPCs can publish after workload's first drain. Freeze counters
-        // at a quiet boundary, rather than midway through their recipient fanout.
-        if (turnScenario) {
+        // Polling has stopped and in-flight RPCs have completed; drain their
+        // remaining events before freezing measured counters.
+        if (turnScenario || !values["dashboard-rpc"]) {
           const beforeDrain = perClientCounters.map((counts) => Object.fromEntries(counts));
           const drainStarted = performance.now();
           await drainEvents();
@@ -6187,14 +6448,20 @@ try {
     // Keep equal work counts without shortening the continuous GC/allocation window.
     await delay(Math.max(0, durationMs - (Date.now() - measurementStartedAt)));
   }
+  const wholeSoakResourcesAfter = soakScenario
+    ? await readGatewayResources(gateway, { includeWorkers: true })
+    : undefined;
   const wholeWorkloadDiagnostics = await finishWholeWorkloadDiagnostics?.();
+  const wholeSoakCpu = wholeSoakCpuBefore
+    ? measureGatewayCpuUsage(wholeSoakCpuBefore, await readGatewayCpuUsage(gateway))
+    : undefined;
   if (workerHeapDoneFile && workerHeapPeerDoneFile) {
     writeFileSync(workerHeapDoneFile, String(Date.now()));
     // Long captures need room for a slower peer before either side forces GC.
     const deadline = Date.now() + Math.max(120_000, Date.now() - measurementStartedAt);
     while (!existsSync(workerHeapPeerDoneFile)) {
       if (Date.now() >= deadline) {
-        throw new Error("Worker heap peer did not finish its timing window");
+        throw new Error("Measurement peer did not finish its timing window");
       }
       await delay(100);
     }
@@ -6458,7 +6725,7 @@ try {
     presenceDeltas: values["presence-deltas"],
     sessionEnvelopeRefs: values["session-envelope-refs"],
     listIntervalMs,
-    pollBetweenRounds: values["poll-between-rounds"],
+    pollBetweenRounds,
     mixedRpc: values["mixed-rpc"],
     usageRpc: values["usage-rpc"],
     ...(values["dashboard-rpc"]
@@ -6534,6 +6801,15 @@ try {
         }
       : {}),
     stressShellWords,
+    stressWorktreeFanout: values["stress-worktree-fanout"],
+    stressWorktrees: values["stress-worktree-fanout"] ? [...worktreeToolRoots.values()] : [],
+    workerCreationCounts: values["worker-creation-counts"],
+    coldHistorySessions: coldHistoryKeys.length,
+    coldHistoryRequests: coldHistorySequence,
+    nodePolicyChurn: values["node-policy-churn"],
+    ...(values["node-policy-churn"]
+      ? { policyNodeId, policyNodeCommandCount: policyNodeCommands.length }
+      : {}),
     stressSessionStore: values["stress-session-store"],
     stressToolSearch: values["stress-tool-search"],
     transcriptHydrationCounts: values["transcript-hydration-counts"],
@@ -6647,6 +6923,8 @@ try {
       : {}),
     ...(scenario === "sessions.cleanup" ? { sessionMaintenanceMode: "warn" } : {}),
     chunks: chunkCount,
+    answerChunk: chunk,
+    finalAnswerPhase: values["final-answer-phase"],
     chunkIntervalMs,
     peakStreams,
     streamRequests,
@@ -6698,9 +6976,22 @@ try {
           initialRetainedResources,
           initialMemoryCollected,
           memorySamples,
+          ...(wholeSoakResourcesBefore && wholeSoakResourcesAfter
+            ? {
+                wholeSoakResources: {
+                  before: wholeSoakResourcesBefore,
+                  after: wholeSoakResourcesAfter,
+                  cpuUsage: measureGatewayCpuUsage(
+                    wholeSoakResourcesBefore,
+                    wholeSoakResourcesAfter,
+                  ),
+                },
+              }
+            : {}),
           retainedProfile,
           wholeSoakAllocation,
           wholeSoakDiagnostics: wholeWorkloadDiagnostics,
+          wholeSoakCpu,
           wholeSoakGc,
         }
       : {}),
