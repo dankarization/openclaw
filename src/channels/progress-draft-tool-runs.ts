@@ -9,11 +9,21 @@ import { resolveChannelStreamingPreviewCommandText } from "./streaming.js";
 type Member = { line: ChannelProgressDraftLine; hidden?: boolean };
 type Run = { members: Member[] };
 
+/** Only complete skill identifiers, never shortened displays or authored descriptions. */
+function isSkillReadProgressDetail(
+  toolName: string | undefined,
+  detail: string | undefined,
+): boolean {
+  return (
+    toolName === "skills_read" && Boolean(detail && /^[a-zA-Z0-9][a-zA-Z0-9._/-]*$/.test(detail))
+  );
+}
+
 function isCompactTool(line: ChannelProgressDraftLine): boolean {
   return (
     (line.kind === "tool" || line.kind === "item") &&
     Boolean(line.toolName) &&
-    !line.detail &&
+    (!line.detail || isSkillReadProgressDetail(line.toolName, line.detail)) &&
     (!line.status || line.status === "running" || line.status === "completed") &&
     // Authored/truncated titles are not tool identities or interchangeable details.
     line.label === resolveToolDisplay({ name: line.toolName }).label
@@ -52,7 +62,9 @@ export function createProgressDraftToolRuns(
           ? first
           : {
               ...first,
-              label: `${first.label} ×${batch.length}`,
+              ...(first.detail
+                ? { detail: `${first.detail} ×${batch.length}` }
+                : { label: `${first.label} ×${batch.length}` }),
               status: batch.some((member) => member.line.status === "running")
                 ? "running"
                 : "completed",
@@ -72,7 +84,9 @@ export function createProgressDraftToolRuns(
       if (isCompactTool(line)) {
         if (
           batch[0] &&
-          (batch[0].line.toolName !== line.toolName || batch[0].line.icon !== line.icon)
+          (batch[0].line.toolName !== line.toolName ||
+            batch[0].line.icon !== line.icon ||
+            batch[0].line.detail !== line.detail)
         ) {
           flush();
         }
@@ -113,7 +127,19 @@ export function createProgressDraftToolRuns(
   };
 
   return {
-    merge(lines: Line[], line: Line): Line[] {
+    merge(lines: Line[], incoming: Line): Line[] {
+      let line = incoming;
+      if (typeof line === "object" && line.toolName === "skills_read" && !line.detail) {
+        const label = resolveToolDisplay({ name: line.toolName }).label;
+        const skill = line.label.startsWith(`${label} `)
+          ? line.label.slice(label.length + 1)
+          : undefined;
+        // Prepared activities put the skill in the title. Normalize only inside this
+        // opt-in log; raw/partial modes and unrelated authored labels stay untouched.
+        if (isSkillReadProgressDetail(line.toolName, skill)) {
+          line = { ...line, label, detail: skill };
+        }
+      }
       if (
         typeof line !== "object" ||
         !line.id ||
@@ -148,7 +174,8 @@ export function createProgressDraftToolRuns(
         previous &&
         isCompactTool(previous) &&
         previous.toolName === line.toolName &&
-        previous.icon === line.icon;
+        previous.icon === line.icon &&
+        previous.detail === line.detail;
       const run = continues && current ? current : { members: [] };
       const member = { line };
       run.members.push(member);

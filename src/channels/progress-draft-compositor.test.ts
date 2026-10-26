@@ -275,6 +275,39 @@ describe("consecutive tool runs", () => {
     expect(labels()).toEqual(["Bash", "Bash"]);
   });
 
+  it("compacts repeated reads of the same skill without losing its name or grouping different skills", async () => {
+    const { progress } = setup();
+    const skill = (id: string, name: string, isError = false) =>
+      progress.pushItemEvent(
+        projectAgentToolActivity({
+          toolCallId: id,
+          name: "skills_read",
+          args: { name },
+          phase: "result",
+          isError,
+        }),
+      );
+    await skill("github-1", "github");
+    await skill("github-2", "github");
+    expect(progress.getSnapshot().lines[0]).toMatchObject({
+      label: "Skill Read",
+      detail: "github ×2",
+      text: "Skill Read: github ×2",
+    });
+    await skill("other", "notion");
+    await skill("github-3", "github");
+    expect(progress.getSnapshot().lines).toHaveLength(3);
+    await skill("github-error", "github", true);
+    expect(progress.getSnapshot().lines.at(-1)).toMatchObject({ status: "failed" });
+    // Identical shortened displays must not turn distinct full names into one run.
+    const prefix = "a".repeat(90);
+    const suffix = "z".repeat(90);
+    await skill("long-1", `${prefix}one${suffix}`);
+    await skill("long-2", `${prefix}two${suffix}`);
+    expect(progress.getSnapshot().lines).toHaveLength(3);
+    expect(JSON.stringify(progress.getSnapshot().lines.slice(-2))).not.toContain("×2");
+  });
+
   it("keeps different activity visible by compacting unnamed Automations, not descriptions or errors", async () => {
     const { progress, tool, labels } = setup();
     for (let index = 1; index <= 4; index++) {
