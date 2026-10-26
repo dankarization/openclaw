@@ -610,7 +610,7 @@ describe("gateway harness questions", () => {
 
   it("routes a keyed custom reply to its question without replacing another answer", async () => {
     const sessionKey = "agent:main:keyed-custom-qa";
-    const questionId = "ask_55555555555555555555555555555555";
+    const keyedQuestionId = "ask_55555555555555555555555555555555";
     const questionSet = [
       {
         id: "target",
@@ -629,7 +629,7 @@ describe("gateway harness questions", () => {
       },
     ];
     const record = {
-      id: questionId,
+      id: keyedQuestionId,
       sessionKey,
       status: "pending",
       draftRevision: 0,
@@ -644,7 +644,7 @@ describe("gateway harness questions", () => {
     let conflictOnce = true;
     const gatewayCall: AgentHarnessQuestionGatewayCall = async (method, _options, params) => {
       if (method === "question.request") {
-        return { id: questionId };
+        return { id: keyedQuestionId };
       }
       if (method === "question.waitAnswer") {
         return await answer.promise;
@@ -689,7 +689,7 @@ describe("gateway harness questions", () => {
       timeoutMs: 60_000,
       gatewayCall,
       delivery: { onBlockReply },
-      questionId,
+      questionId: keyedQuestionId,
     });
     await vi.waitFor(() => expect(onBlockReply).toHaveBeenCalledTimes(2));
     await expect(
