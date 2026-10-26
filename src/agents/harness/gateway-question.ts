@@ -36,7 +36,6 @@ import {
   type AgentQuestionDispatcher,
 } from "./gateway-question-dispatch.js";
 import { resolveAgentQuestionTextProgress } from "./gateway-question-progress.js";
-import type { AgentHarnessHostCapabilities } from "./host-capability-types.js";
 import {
   captureAgentQuestionAnswerAuthority,
   prepareQuestionCallerAuthority,

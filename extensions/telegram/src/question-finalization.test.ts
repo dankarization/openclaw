@@ -148,7 +148,8 @@ describe("Telegram question finalization", () => {
       ],
     });
 
-    await hoisted.registration?.finalize("Expired.");
+    expect(hoisted.register).toHaveBeenCalledOnce();
+    await hoisted.register.mock.calls[0]?.[0]?.finalize("Expired.");
     expect(hoisted.editMarkup).not.toHaveBeenCalled();
     const rich = hoisted.edit.mock.calls[0]?.[3]?.richMessage;
     expect(rich?.blocks.at(-1)).toEqual({ type: "footer", text: "Expired." });
