@@ -195,6 +195,7 @@ describeTelegramDispatch("DM topic naming for captionless media", () => {
   });
 
   it("retains a later refinement after foreground dispatch settles", async () => {
+    naming.prepare.mockResolvedValueOnce("refine");
     const scope = new AsyncWorkScope();
     const release = Promise.withResolvers<void>();
     naming.refine.mockImplementationOnce(async () => {
@@ -212,7 +213,7 @@ describeTelegramDispatch("DM topic naming for captionless media", () => {
           telegramCfg: { autoTopicLabel: { refine: true, refineAfterMessages: 2 } },
         }),
       );
-      expect(naming.refine).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => expect(naming.refine).toHaveBeenCalledTimes(1));
       let drained = false;
       const settled = AsyncWorkScope.runWhenAllIdle(
         () => [scope],
