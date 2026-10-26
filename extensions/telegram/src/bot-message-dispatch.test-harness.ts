@@ -128,7 +128,7 @@ const getSessionEntry = getSessionEntryHoisted;
 export const loadSessionStore = loadSessionStoreHoisted;
 export const readLatestAssistantTextByIdentity = readLatestAssistantTextByIdentityHoisted;
 const resolveStorePath = resolveStorePathHoisted;
-const generateTopicLabel = generateTopicLabelHoisted;
+export const generateTopicLabel = generateTopicLabelHoisted;
 const describeStickerImage = describeStickerImageHoisted;
 const resolveAgentDir = resolveAgentDirHoisted;
 const resolveHumanDelayConfig = resolveHumanDelayConfigHoisted;
@@ -381,6 +381,7 @@ vi.mock("openclaw/plugin-sdk/models-provider-runtime", async (importOriginal) =>
 
 vi.mock("openclaw/plugin-sdk/skill-commands-runtime", async (importOriginal) => ({
   ...(await importOriginal<typeof import("openclaw/plugin-sdk/skill-commands-runtime")>()),
+  prepareSkillCommandsForWorkspace: async () => [],
   prepareSkillCommandsForAgents: (
     ...args: Parameters<TelegramBotFixtureMocks["prepareSkillCommandsForAgents"]>
   ) => telegramDepsForTest.prepareSkillCommandsForAgents(...args),
@@ -396,6 +397,10 @@ vi.mock("openclaw/plugin-sdk/session-store-runtime", async (importOriginal) => (
   ...(await importOriginal<typeof import("openclaw/plugin-sdk/session-store-runtime")>()),
   resolveStorePath: (...args: Parameters<TelegramBotFixtureMocks["resolveStorePath"]>) =>
     telegramDepsForTest.resolveStorePath(...args),
+  getSessionTitleLifecycleAsync: async () => ({
+    sessionId: "s1",
+    lifecycleRevision: "title-generation-1",
+  }),
   getSessionEntryAsync: (...args: Parameters<TelegramBotFixtureMocks["getSessionEntryAsync"]>) =>
     telegramDepsForTest.getSessionEntryAsync(...args),
   readSessionUpdatedAtAsync: (

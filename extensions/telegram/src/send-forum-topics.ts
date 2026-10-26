@@ -5,7 +5,10 @@ import { withTelegramApiContext, type TelegramApiContext } from "./send-context.
 import type { TelegramApiCallOpts, TelegramMessageActionOpts } from "./send-message-types.js";
 import { prepareTelegramOutbound, withTelegramMessageAction } from "./send-outbound.js";
 import { resolveTelegramBotUserIdFromToken } from "./token-fingerprint.js";
-import { recordTopicCreation } from "./topic-name-cache.js";
+import {
+  resolveTelegramDirectTopicNameCacheScope,
+  recordTopicCreation,
+} from "./topic-name-cache.js";
 
 type TelegramCreateForumTopicParams = NonNullable<
   Parameters<TelegramApiContext["api"]["createForumTopic"]>[2]
@@ -147,7 +150,10 @@ export async function createForumTopicTelegram(
           iconColor: result.icon_color ?? opts.iconColor,
           iconCustomEmojiId: result.icon_custom_emoji_id ?? opts.iconCustomEmojiId,
         },
-        resolveStorePath(cfg.session?.store, { agentId: ownerAgentId }),
+        resolveTelegramDirectTopicNameCacheScope(
+          resolveStorePath(cfg.session?.store, { agentId: ownerAgentId }),
+          account.accountId,
+        ),
       ).catch((err: unknown) => {
         logVerbose(`telegram: topic metadata persistence failed after creation: ${String(err)}`);
       });

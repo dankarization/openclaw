@@ -499,6 +499,7 @@ export const sessionCreateHandlers: GatewayRequestHandlers = {
       agentId: sessionAgentId,
       label: p.label,
       displayName: preparedDisplayName,
+      displayNameSource: p.displayNameSource,
       category: p.category,
       ...(catalogTarget
         ? { catalogTarget: catalogTarget.target }

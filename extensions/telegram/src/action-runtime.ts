@@ -22,14 +22,8 @@ import {
 } from "openclaw/plugin-sdk/interactive-runtime";
 import type { MessagePresentation } from "openclaw/plugin-sdk/interactive-runtime";
 import type { ReplyPayload } from "openclaw/plugin-sdk/reply-runtime";
-import { resolveStorePath } from "openclaw/plugin-sdk/session-store-runtime";
 import { asOptionalRecord } from "openclaw/plugin-sdk/string-coerce-runtime";
-import { resolveTelegramAccountOwnerAgentId } from "./account-owner.js";
-import {
-  createTelegramActionGate,
-  resolveDefaultTelegramAccountId,
-  resolveTelegramPollActionGateState,
-} from "./accounts.js";
+import { createTelegramActionGate, resolveTelegramPollActionGateState } from "./accounts.js";
 import { TELEGRAM_MESSAGE_ACTION_MAP } from "./action-names.js";
 import {
   readTelegramChatId,
@@ -39,6 +33,7 @@ import {
   readTelegramSendMediaUrls,
   readTelegramThreadId,
 } from "./action-params.js";
+import { resolveActionTopicNameCacheScope } from "./action-topic-name-scope.js";
 import {
   appendTelegramDroppedControlFallback,
   buildTelegramControlDegradation,
@@ -107,13 +102,6 @@ function normalizeTelegramActionName(action: string): TelegramActionName {
     throw new Error(`Unsupported Telegram action: ${action}`);
   }
   return normalized;
-}
-
-function resolveActionTopicNameCacheScope(cfg: OpenClawConfig, accountId?: string | null): string {
-  const resolvedAccountId = accountId ?? resolveDefaultTelegramAccountId(cfg);
-  return resolveStorePath(cfg.session?.store, {
-    agentId: resolveTelegramAccountOwnerAgentId({ cfg, accountId: resolvedAccountId }),
-  });
 }
 
 function formatTelegramDeliveryTarget(to: string, messageThreadId?: number | null): string {

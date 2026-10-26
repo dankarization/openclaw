@@ -72,3 +72,15 @@ export function projectPluginSessionEntry(entry: InternalSessionEntry): SessionE
 }
 
 export { projectPublicSessionEntryPatch as projectPluginSessionEntryPatch } from "../config/sessions/session-entry-projection.js";
+
+/** Read-only lifecycle intent for channel-owned title writers; no private counter exposure. */
+export async function getSessionTitleLifecycleAsync(params: SessionStoreReadParams) {
+  const entry = await readSessionEntryReadOnlyInWorker(toSessionAccessScope(params));
+  return entry
+    ? {
+        sessionId: entry.sessionId,
+        lifecycleRevision: entry.lifecycleRevision,
+        resetMode: entry.titleRefinement?.resetMode,
+      }
+    : undefined;
+}

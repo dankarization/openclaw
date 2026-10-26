@@ -60,6 +60,7 @@ import {
   runSessionMutation,
 } from "../sessions/session-controller.lifecycle.js";
 import { recordSessionCreated } from "../sessions/session-created.js";
+import { resolveCreatedSessionTitle } from "../sessions/session-title-refinement-state.js";
 import { normalizeSessionDeliveryState } from "../utils/delivery-context.shared.js";
 import { authorizeGatewaySessionCreation, resolveCreatorSandbox } from "./operator-role-policy.js";
 import { ADMIN_SCOPE } from "./operator-scopes.js";
@@ -92,6 +93,7 @@ import {
   prepareSessionCreateDefaultAccount,
   prepareSessionCreateModelSelection,
   projectSessionCreateSpawnModelSelection,
+  projectSessionCreateCatalogSelection,
   resolveSessionCreateModelInputError,
   resolveSessionForkMaxTokens,
 } from "./session-create-model-selection.js";
@@ -792,9 +794,7 @@ async function createGatewaySessionInScope(
           : undefined;
         // Initializers compare their callback snapshot with the stored row during finalization.
         // Normalize before both so persistence cannot make this creation look like external drift.
-        const initialColor = params.initialEntry?.color
-          ? normalizeSessionColorValue(params.initialEntry.color)
-          : null;
+        const initialColor = normalizeSessionColorValue(params.initialEntry?.color ?? "");
         if (params.initialEntry && !initialAgentHarnessId && !authorizedPluginCreation) {
           return invalidSessionRequest(
             params.initialEntry?.agentHarnessId !== undefined
@@ -808,7 +808,12 @@ async function createGatewaySessionInScope(
         const initializedEntry: InternalSessionEntry = {
           ...patched.entry,
           ...inheritedWorkspace,
-          ...(createdNewEntry && displayName ? { displayName } : {}),
+          ...resolveCreatedSessionTitle(
+            createdNewEntry,
+            displayName,
+            params.displayNameSource,
+            patched.entry.sessionId,
+          ),
           ...projectSessionCreateSpawnModelSelection({
             entry: patched.entry,
             creation: params.creation,
@@ -835,17 +840,11 @@ async function createGatewaySessionInScope(
             spawnedCwd,
             preparedLifecycle,
           }),
-          ...(catalogResolvedModel && catalogAgentRuntime
-            ? {
-                providerOverride: catalogResolvedModel.provider,
-                modelOverride: catalogResolvedModel.model,
-                modelOverrideSource: "user" as const,
-                modelOverrideRouteResolution: "resolved" as const,
-                agentRuntimeOverride: catalogAgentRuntime,
-                modelSelectionLocked: true,
-                pluginOwnerId: catalogPluginOwnerId,
-              }
-            : {}),
+          ...projectSessionCreateCatalogSelection(
+            catalogResolvedModel,
+            catalogAgentRuntime,
+            catalogPluginOwnerId,
+          ),
           ...(params.deviceFolder ? { deviceFolder: { ...params.deviceFolder } } : {}),
           ...(execNode ? { execHost: "node", execNode, ...(execCwd ? { execCwd } : {}) } : {}),
           ...(createdNewEntry &&

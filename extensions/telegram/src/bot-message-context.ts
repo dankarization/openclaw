@@ -149,16 +149,23 @@ export const buildTelegramMessageContext = async ({
   const dmThreadId = threadSpec.scope === "dm" ? threadSpec.id : undefined;
   let topicName: string | undefined;
   let isBotOwnedThread = false;
-  if (isForum && resolvedThreadId != null) {
+  // Metadata ingestion also covers DM-scope topics: without it the topic-name
+  // cache never sees DM renames and the refinement's manual-rename guard
+  // cannot observe them (Codex 4302875124).
+  const ingestThreadId = resolvedThreadId ?? dmThreadId;
+  if ((isForum || threadSpec.scope === "dm") && ingestThreadId != null) {
     const topicRuntime = await loadTelegramMessageContextSessionRuntime(sessionRuntime);
-    const topicNameCacheScope = topicRuntime.resolveStorePath(cfg.session?.store, {
-      agentId:
-        ownerAgentId?.trim() ||
-        resolveTelegramAccountOwnerAgentId({ cfg, accountId: account.accountId }),
-    });
+    const topicNameCacheScope = resolveTelegramDirectTopicNameCacheScope(
+      topicRuntime.resolveStorePath(cfg.session?.store, {
+        agentId:
+          ownerAgentId?.trim() ||
+          resolveTelegramAccountOwnerAgentId({ cfg, accountId: account.accountId }),
+      }),
+      account.accountId,
+    );
     const topic = await resolveTelegramForumTopicMetadata({
       msg,
-      threadId: resolvedThreadId,
+      threadId: ingestThreadId,
       scope: topicNameCacheScope,
     });
     topicName = topic.topicName;
@@ -296,28 +303,6 @@ export const buildTelegramMessageContext = async ({
     }))
   ) {
     return null;
-  }
-
-  // Private bot forums use message_thread_id/is_topic_message. They are direct
-  // conversations, not group forums or channel Direct Messages topics.
-  if (
-    !isGroup &&
-    threadSpec.scope === "dm" &&
-    dmThreadId != null &&
-    (msg.is_topic_message === true || isTelegramForumTopicTitleUpdate(msg))
-  ) {
-    const topicRuntime = await loadTelegramMessageContextSessionRuntime(sessionRuntime);
-    const topicNameCacheScope = topicRuntime.resolveStorePath(cfg.session?.store, {
-      agentId:
-        ownerAgentId?.trim() ||
-        resolveTelegramAccountOwnerAgentId({ cfg, accountId: account.accountId }),
-    });
-    const topic = await resolveTelegramForumTopicMetadata({
-      msg,
-      threadId: dmThreadId,
-      scope: resolveTelegramDirectTopicNameCacheScope(topicNameCacheScope, account.accountId),
-    });
-    topicName = topic.topicName;
   }
 
   route = applyTelegramTargetSession({
