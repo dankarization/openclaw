@@ -42,6 +42,7 @@ export function buildTelegramQuestionCallbackData(callback: {
     return `tgq1:${callback.questionId}:${callback.optionIndex}`;
   }
   if (
+    callback.questionIndex === undefined ||
     !Number.isInteger(callback.questionIndex) ||
     callback.questionIndex < 0 ||
     callback.questionIndex > 2

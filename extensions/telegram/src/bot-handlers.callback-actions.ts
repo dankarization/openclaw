@@ -180,7 +180,7 @@ export async function handleTelegramQuestionCallback(params: {
   resolveQuestion?: typeof questionGatewayRuntime.resolveOption;
 }): Promise<void> {
   try {
-    const result = await (params.resolveQuestion ?? questionGatewayRuntime.resolveOption)({
+    const result = (await (params.resolveQuestion ?? questionGatewayRuntime.resolveOption)({
       cfg: params.cfg,
       questionId: params.callback.questionId,
       ...(params.callback.intent === "custom-input"
@@ -195,7 +195,7 @@ export async function handleTelegramQuestionCallback(params: {
       senderId: params.senderId,
       expectedSessionKey: params.expectedSessionKey,
       clientDisplayName: "Telegram question",
-    });
+    })) as Awaited<ReturnType<typeof questionGatewayRuntime.resolveOption>> | { status: "denied" };
     if (result.status === "denied") {
       return;
     }

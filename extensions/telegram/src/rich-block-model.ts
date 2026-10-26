@@ -56,14 +56,18 @@ export type RichBlockTableCell = {
   valign: "top" | "middle" | "bottom";
 };
 
-export type RichMessageButton = {
+type RichMessageButtonBase = {
   text: RichText;
   style?: "danger" | "success" | "primary" | "link";
-  callback_data?: string;
-  url?: string;
-  web_app?: { url: string };
-  disabled?: Record<string, never>;
 };
+
+export type RichMessageButton = RichMessageButtonBase &
+  (
+    | { callback_data: string; url?: never; web_app?: never; disabled?: never }
+    | { url: string; callback_data?: never; web_app?: never; disabled?: never }
+    | { web_app: { url: string }; callback_data?: never; url?: never; disabled?: never }
+    | { disabled: Record<string, never>; callback_data?: never; url?: never; web_app?: never }
+  );
 
 export type InputRichBlockButtons = {
   type: "buttons";

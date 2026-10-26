@@ -46,12 +46,14 @@ export type ResolveQuestionOverGatewayParams = {
       optionValue: string;
       optionIndex?: never;
       customInput?: never;
+      done?: never;
     }
   | {
       /** Compact callback index; mapped to the canonical label via question.get. */
       optionIndex: number;
       optionValue?: never;
       customInput?: never;
+      done?: never;
     }
   | {
       done: true;
@@ -64,6 +66,7 @@ export type ResolveQuestionOverGatewayParams = {
       customInput: true;
       optionIndex?: never;
       optionValue?: never;
+      done?: never;
     }
 );
 
@@ -193,9 +196,7 @@ export async function resolveQuestionOverGateway(
             ? selected.filter((item) => item !== value)
             : [...new Set([...selected, value!])]
           : [value!];
-    let result:
-      | QuestionResolveResult
-      | Extract<ResolveQuestionOverGatewayResult, { status: "already-terminal" }>;
+    let result: QuestionResolveResult;
     try {
       result = await request<QuestionResolveResult>({
         ...gatewayOptions,
@@ -218,8 +219,8 @@ export async function resolveQuestionOverGateway(
       }
       return terminalResolution(error);
     }
-    if (result.status === "already-terminal") {
-      return result;
+    if (result.status === "cancelled") {
+      return { status: "already-terminal", reason: "already-terminal" };
     }
     return result.status === "answered"
       ? {

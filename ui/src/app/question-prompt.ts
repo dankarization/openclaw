@@ -107,21 +107,6 @@ function questionAnswersEqual(
   );
 }
 
-function parseQuestionRecord(payload: QuestionRecord): QuestionRecord | null {
-  const questions = payload.questions.map(parseQuestion);
-  if (!questions.every((question) => question !== null)) {
-    return null;
-  }
-  return {
-    ...payload,
-    id: payload.id.trim(),
-    questions,
-    ...(payload.agentId ? { agentId: payload.agentId.trim() } : {}),
-    ...(payload.sessionKey ? { sessionKey: payload.sessionKey.trim() } : {}),
-    ...(payload.runId ? { runId: payload.runId.trim() } : {}),
-  };
-}
-
 export function createQuestionPromptState(onChange: () => void = () => {}): QuestionPromptState {
   const listeners = createChangeListeners();
   let snapshot: QuestionPrompt[] = [];

@@ -150,7 +150,6 @@ function reserveQuestionInput(state: PendingAgentQuestion, authority?: QuestionI
         if (!consumed) {
           state.cancelRequested = false;
         }
-        state.resolution = undefined;
       }
     },
   };

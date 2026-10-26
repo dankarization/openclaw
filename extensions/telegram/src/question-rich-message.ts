@@ -2,6 +2,7 @@ import { normalizeMessagePresentation } from "openclaw/plugin-sdk/interactive-ru
 import type { ReplyPayload } from "openclaw/plugin-sdk/reply-payload";
 import type { TelegramInlineButtons } from "./button-types.js";
 import { parseTelegramQuestionCallbackData } from "./question-callback-data.js";
+import type { RichMessageButton } from "./rich-block-model.js";
 import type { TelegramInputRichMessage } from "./rich-message.js";
 
 /** Move a question's existing, authorized callbacks into the rich message body. */
@@ -21,13 +22,22 @@ export function buildTelegramQuestionRichMessage(params: {
   const rows = params.buttons
     .map((row) => ({
       type: "buttons" as const,
-      buttons: row.map((button) => ({
-        text: button.text,
-        ...(button.callback_data ? { callback_data: button.callback_data } : {}),
-        ...(button.url ? { url: button.url } : {}),
-        ...(button.web_app ? { web_app: button.web_app } : {}),
-        ...(button.style ? { style: button.style } : {}),
-      })),
+      buttons: row.flatMap((button): RichMessageButton[] => {
+        const base = {
+          text: button.text,
+          ...(button.style ? { style: button.style } : {}),
+        };
+        if (button.callback_data) {
+          return [{ ...base, callback_data: button.callback_data }];
+        }
+        if (button.url) {
+          return [{ ...base, url: button.url }];
+        }
+        if (button.web_app) {
+          return [{ ...base, web_app: button.web_app }];
+        }
+        return [];
+      }),
     }))
     .filter((row) => row.buttons.length > 0 && row.buttons.length <= 8);
   if (!rows.length) {
@@ -66,7 +76,7 @@ export function updateTelegramQuestionRichMessage(params: {
     if (block.type !== "buttons" || !Array.isArray(block.buttons)) {
       continue;
     }
-    const buttons = block.buttons.flatMap((raw) => {
+    const buttons = block.buttons.flatMap((raw): RichMessageButton[] => {
       if (!raw || typeof raw !== "object") {
         return [];
       }
