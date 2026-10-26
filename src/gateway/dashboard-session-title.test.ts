@@ -475,7 +475,8 @@ describe("maybeGenerateDashboardSessionTitle", () => {
     await expect(first).resolves.toBe(true);
     await expect(duplicate).resolves.toBe(false);
 
-    expectCalls(1, mocks.generate, mocks.patch, mocks.load, mocks.readTranscript);
+    // Per-caller lifecycle reads are not duplicate inference or persistence.
+    expectCalls(1, mocks.generate, mocks.patch, mocks.readTranscript);
   });
 });
 
