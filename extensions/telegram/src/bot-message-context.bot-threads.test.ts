@@ -23,10 +23,7 @@ import { telegramBotInfoForTest } from "./bot.create-telegram-bot.test-support.j
 import { TelegramConfigSchema } from "./config-schema.js";
 import { resetTelegramTopicNameCacheForTest } from "./runtime.test-support.js";
 import { createForumTopicTelegram } from "./send-forum-topics.js";
-import {
-  resolveTelegramDirectTopicNameCacheScope,
-  getTopicCreatorUserId,
-} from "./topic-name-cache.js";
+import { getTopicCreatorUserId } from "./topic-name-cache.js";
 
 let updateId = 12_000;
 let storePath: string;
@@ -85,10 +82,7 @@ async function createTopic(cfg: OpenClawConfig, creatorToken?: string) {
     getTopicCreatorUserId(
       groupChat.id,
       99,
-      resolveTelegramDirectTopicNameCacheScope(
-        resolveStorePath(cfg.session?.store, { agentId: "main" }),
-        "default",
-      ),
+      resolveStorePath(cfg.session?.store, { agentId: "main" }),
     ),
   ).resolves.toBe(creatorToken ? 123456789 : telegramBotInfoForTest.id);
 }

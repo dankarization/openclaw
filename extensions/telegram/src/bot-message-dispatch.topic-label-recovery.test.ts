@@ -14,7 +14,6 @@ import {
   loadSessionStore,
 } from "./bot-message-dispatch.test-harness.js";
 import { getTelegramRuntime } from "./runtime.js";
-import { armTopicLabelRefinement } from "./topic-label-refinement.js";
 
 describeTelegramDispatch("initial topic-label recovery", () => {
   it("resumes refinement after the initial edit lands but its final state write fails", async () => {
@@ -57,13 +56,6 @@ describeTelegramDispatch("initial topic-label recovery", () => {
     }
     // Reopen the real persisted store; no synthetic refinement state is seeded.
     resetPluginStateStoreForTests();
-    await armTopicLabelRefinement({
-      botId: undefined,
-      accountId: "default",
-      chatId: 123,
-      threadId: 777,
-      label: "",
-    });
     loadSessionStore.mockReturnValue({ [context.ctxPayload.SessionKey!]: { systemSent: true } });
     context.ctxPayload.RawBody = "Include the rollout checklist";
     generateTopicLabel.mockResolvedValue("Release checklist");
