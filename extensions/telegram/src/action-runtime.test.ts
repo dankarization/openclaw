@@ -96,7 +96,11 @@ describe("Telegram registered action authority and input contracts", () => {
       const bareScope = resolveStorePath(cfg.session?.store, { agentId: "main" });
       const directScope = resolveTelegramDirectTopicNameCacheScope(bareScope, "default");
       expect(await getTopicName(chatId, 77, direct ? directScope : bareScope)).toBe("Chosen topic");
-      expect(await getTopicName(chatId, 77, direct ? bareScope : directScope)).toBeUndefined();
+      if (direct) {
+        // A direct lookup imports legacy bare-path entries, so also prove the
+        // action did not write there. Forum reads never import account scope.
+        expect(await getTopicName(chatId, 77, bareScope)).toBeUndefined();
+      }
     },
   );
 
