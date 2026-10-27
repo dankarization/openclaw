@@ -1,6 +1,6 @@
 import type { RouteLocation } from "@openclaw/uirouter";
 import { createComponent, createEffect, createSignal } from "solid-js";
-import { vi } from "vitest";
+import { expect, vi } from "vitest";
 import type { GatewayBrowserClient, GatewayHelloOk } from "../../api/gateway.ts";
 import type { GatewaySessionRow, SessionsListResult } from "../../api/types.ts";
 import type { ApplicationContext } from "../../app/context.ts";
@@ -9,7 +9,7 @@ import { loadSettings } from "../../app/settings.ts";
 import { ApplicationProvider } from "../../lib/reactive/context.ts";
 import { createApplicationGateway } from "../../test-helpers/application-context-fixtures.ts";
 import { mountSolid } from "../../test-helpers/mount-solid.ts";
-import { flush } from "../../test-helpers/solid-settle.ts";
+import { flush, waitForSolid } from "../../test-helpers/solid-settle.ts";
 import { createActivityPageState } from "./activity-page-state.ts";
 import { ActivityPageView } from "./activity-page-view.tsx";
 
@@ -99,6 +99,14 @@ export function createActivityPage(context: ApplicationContext, initial?: RouteL
       flush();
     },
   };
+}
+
+export async function expectActivitySummary(page: TestActivityPage, summary: string) {
+  await waitForSolid(() =>
+    expect(page.container.querySelector(".activity-entry__text")?.textContent?.trim()).toBe(
+      summary,
+    ),
+  );
 }
 
 export async function settleActivity() {

@@ -32,6 +32,7 @@ import {
   createActivityPage,
   createActivityContext,
   expandFirst,
+  expectActivitySummary,
   previews,
   toolEvent,
   type TestActivityPage,
@@ -258,10 +259,7 @@ describe("ActivityPage gateway lifecycle", () => {
         ["de", "0 Argumente ausgeblendet"],
       ] as const) {
         await i18n.setLocale(locale);
-        await previews(page);
-        await waitForSolid(() =>
-          expect(container.querySelector(".activity-entry__text")?.textContent?.trim()).toBe(summary),
-        );
+        await expectActivitySummary(page, summary);
         expect(container.querySelector(".activity-entry__meta")?.textContent).toContain("2m");
         expect(
           Array.from(
