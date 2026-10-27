@@ -1,3 +1,4 @@
+import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import { truncateUtf16Safe } from "@openclaw/normalization-core/utf16-slice";
 /** Private persisted naming state; reset can retain sessionId, so writers fence lifecycleRevision. */
 export type SessionTitleRefinementState = {
@@ -10,6 +11,45 @@ export type SessionTitleRefinementState = {
   skipNextMessage?: boolean;
   recentMessages?: string[];
 };
+
+/** Admit the current lifecycle shape without reviving the retired remainingMessages state. */
+export function normalizeSessionTitleRefinementState(
+  value: unknown,
+): SessionTitleRefinementState | undefined {
+  if (
+    !isRecord(value) ||
+    typeof value.sessionId !== "string" ||
+    !value.sessionId ||
+    typeof value.generatedName !== "string" ||
+    typeof value.refinementDone !== "boolean" ||
+    typeof value.taskMessagesSinceTitle !== "number" ||
+    !Number.isSafeInteger(value.taskMessagesSinceTitle) ||
+    value.taskMessagesSinceTitle < 0
+  ) {
+    return undefined;
+  }
+  return {
+    sessionId: value.sessionId,
+    generatedName: value.generatedName,
+    refinementDone: value.refinementDone,
+    taskMessagesSinceTitle: value.taskMessagesSinceTitle,
+    ...(typeof value.lifecycleRevision === "string"
+      ? { lifecycleRevision: value.lifecycleRevision }
+      : {}),
+    ...(value.resetMode === "reset" || value.resetMode === "new"
+      ? { resetMode: value.resetMode }
+      : {}),
+    ...(value.skipNextMessage === true ? { skipNextMessage: true } : {}),
+    ...(Array.isArray(value.recentMessages)
+      ? {
+          recentMessages: value.recentMessages
+            .filter((message): message is string => typeof message === "string")
+            .slice(-8)
+            .map((message) => truncateUtf16Safe(message, 500)),
+        }
+      : {}),
+  };
+}
 
 /** Default task messages after the first title before the single refinement runs. */
 const SESSION_TITLE_REFINE_AFTER_MESSAGES_DEFAULT = 6;
