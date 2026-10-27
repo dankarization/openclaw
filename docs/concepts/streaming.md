@@ -479,6 +479,17 @@ Supported surfaces:
   Microsoft Teams, Mattermost, Slack session cards, and Telegram. To disable
   preview edits entirely, set `streaming.mode` to `off`.
 
+In Telegram's status-only `progress` tool log, consecutive invocations of the
+same tool share one row: `Bash`, then `Bash ×2`, then `Bash ×3`. A different tool,
+authored progress item, preamble, or plan starts a new run. Failures, approvals,
+and detailed tool rows remain visible separately, except repeated reads of the
+same fully named skill: `Skill Read: github ×2` retains the skill name. A
+different skill starts a new run; shortened skill names are not grouped. Identical
+Sessions limits also retain their detail (`Sessions: 30 ×2`); a different limit
+starts a new run. Raw command mode and other
+streaming modes keep their existing rows. This only changes the temporary
+preview; execution and session history are unchanged.
+
 ## Progress draft rendering
 
 [Progress cards](/tools/progress-card) replace the complete plan state in
