@@ -9,13 +9,16 @@ import { resolveChannelStreamingPreviewCommandText } from "./streaming.js";
 type Member = { line: ChannelProgressDraftLine; hidden?: boolean };
 type Run = { members: Member[] };
 
-/** Only complete skill identifiers, never shortened displays or authored descriptions. */
-function isSkillReadProgressDetail(
+/** Only complete skill identifiers or numeric session limits, never authored descriptions. */
+function isCompactProgressDetail(
   toolName: string | undefined,
   detail: string | undefined,
 ): boolean {
-  return (
-    toolName === "skills_read" && Boolean(detail && /^[a-zA-Z0-9][a-zA-Z0-9._/-]*$/.test(detail))
+  return Boolean(
+    detail &&
+    (toolName === "skills_read"
+      ? /^[a-zA-Z0-9][a-zA-Z0-9._/-]*$/.test(detail)
+      : toolName === "sessions_list" && /^\d+$/.test(detail)),
   );
 }
 
@@ -23,7 +26,7 @@ function isCompactTool(line: ChannelProgressDraftLine): boolean {
   return (
     (line.kind === "tool" || line.kind === "item") &&
     Boolean(line.toolName) &&
-    (!line.detail || isSkillReadProgressDetail(line.toolName, line.detail)) &&
+    (!line.detail || isCompactProgressDetail(line.toolName, line.detail)) &&
     (!line.status || line.status === "running" || line.status === "completed") &&
     // Authored/truncated titles are not tool identities or interchangeable details.
     line.label === resolveToolDisplay({ name: line.toolName }).label
@@ -129,15 +132,15 @@ export function createProgressDraftToolRuns(
   return {
     merge(lines: Line[], incoming: Line): Line[] {
       let line = incoming;
-      if (typeof line === "object" && line.toolName === "skills_read" && !line.detail) {
+      if (typeof line === "object" && !line.detail) {
         const label = resolveToolDisplay({ name: line.toolName }).label;
-        const skill = line.label.startsWith(`${label} `)
+        const detail = line.label.startsWith(`${label} `)
           ? line.label.slice(label.length + 1)
           : undefined;
-        // Prepared activities put the skill in the title. Normalize only inside this
+        // Prepared activities put these details in the title. Normalize only inside this
         // opt-in log; raw/partial modes and unrelated authored labels stay untouched.
-        if (isSkillReadProgressDetail(line.toolName, skill)) {
-          line = { ...line, label, detail: skill };
+        if (isCompactProgressDetail(line.toolName, detail)) {
+          line = { ...line, label, detail };
         }
       }
       if (
