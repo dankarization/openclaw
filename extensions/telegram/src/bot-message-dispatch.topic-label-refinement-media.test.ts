@@ -33,6 +33,7 @@ vi.mock("./topic-label-refinement.js", async (importOriginal) => ({
 // mock-isolation: do not open a topic-cache database for dispatcher selection.
 vi.mock("./topic-name-cache.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./topic-name-cache.js")>()),
+  getTopicName: vi.fn(async () => undefined),
   updateTopicName: vi.fn(async () => {}),
 }));
 
