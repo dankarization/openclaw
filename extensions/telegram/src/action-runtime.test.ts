@@ -21,6 +21,7 @@ import {
   resetTelegramMessageCacheForTest,
 } from "./runtime.test-support.js";
 import { useTelegramHttpFixture } from "./send.telegram-http.test-support.js";
+import { getTopicName, resolveTelegramDirectTopicNameCacheScope } from "./topic-name-cache.js";
 
 describe("Telegram registered action authority and input contracts", () => {
   const fixture = useTelegramHttpFixture();
@@ -72,6 +73,32 @@ describe("Telegram registered action authority and input contracts", () => {
     env.restore();
     await state.cleanup();
   });
+
+  it.each([
+    { action: "topic-edit", chatId: -1001, direct: false },
+    { action: "topic-edit", chatId: 123, direct: true },
+    { action: "topic-create", chatId: -1001, direct: false },
+    { action: "topic-create", chatId: 123, direct: true },
+  ] as const)(
+    "keeps $action metadata readable in its inbound scope (direct: $direct)",
+    async ({ action, chatId, direct }) => {
+      cfg.agents = { list: [{ id: "main", default: true }] };
+      cfg.channels!.telegram!.actions = { createForumTopic: true, editForumTopic: true };
+      fixture.responseFor = (method) =>
+        method === "getChat"
+          ? { id: chatId, type: direct ? "private" : "supergroup", is_forum: true }
+          : method === "createForumTopic"
+            ? { message_thread_id: 77, name: "Chosen topic" }
+            : undefined;
+      await expect(
+        invoke(action, { to: "@topic_cache_fixture", threadId: 77, name: "Chosen topic" }),
+      ).resolves.toMatchObject({ details: { ok: true } });
+      const bareScope = resolveStorePath(cfg.session?.store, { agentId: "main" });
+      const directScope = resolveTelegramDirectTopicNameCacheScope(bareScope, "default");
+      expect(await getTopicName(chatId, 77, direct ? directScope : bareScope)).toBe("Chosen topic");
+      expect(await getTopicName(chatId, 77, direct ? bareScope : directScope)).toBeUndefined();
+    },
+  );
 
   it.for([
     {
@@ -134,15 +161,12 @@ describe("Telegram registered action authority and input contracts", () => {
           expect(requests.map(({ method }) => method)).toEqual(["getChat", testCase.method]);
         } else {
           await pending.catch(() => undefined);
-          const requestDescription = `Observed Telegram endpoints: ${requests.map(({ method }) => method).join(", ")}`;
           if (testCase.action === "react") {
-            await expect(pending, requestDescription).resolves.toMatchObject({
+            await expect(pending).resolves.toMatchObject({
               details: { ok: false, reason: "error", hint: "Reaction failed. Do not retry." },
             });
           } else {
-            await expect(pending, requestDescription).rejects.toThrow(
-              "Telegram action owner retired",
-            );
+            await expect(pending).rejects.toThrow("Telegram action owner retired");
           }
           expect(requests.map(({ method }) => method)).toEqual(["getChat"]);
         }
@@ -228,7 +252,7 @@ describe("Telegram registered action authority and input contracts", () => {
 
   it("rejects conflicting host authority, including threadless and missing-origin invocations", async () => {
     const params = { chatId: "-1001:topic:77", messageId: 456 };
-    const contexts: Partial<ChannelMessageActionContext>[] = [
+    for (const context of [
       { ...trusted, requesterAccountId: "other" },
       { ...trusted, requesterAccountId: " !!! " },
       { ...trusted, toolContext: { ...trusted.toolContext, currentChannelProvider: "slack" } },
@@ -238,8 +262,7 @@ describe("Telegram registered action authority and input contracts", () => {
         toolContext: { ...trusted.toolContext, currentMessagingTarget: "-1002:topic:77" },
       },
       { conversationReadOrigin: undefined },
-    ];
-    for (const context of contexts) {
+    ] satisfies Partial<ChannelMessageActionContext>[]) {
       await expect(invoke("delete", params, context)).rejects.toThrow(/provider-observed binding/);
     }
     await expect(

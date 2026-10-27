@@ -147,27 +147,22 @@ export const buildTelegramMessageContext = async ({
       : undefined;
   const replyThreadId = threadSpec.id;
   const dmThreadId = threadSpec.scope === "dm" ? threadSpec.id : undefined;
+  const resolveTopicMetadata = async (threadId: number, direct = false) => {
+    const topicRuntime = await loadTelegramMessageContextSessionRuntime(sessionRuntime);
+    let scope = topicRuntime.resolveStorePath(cfg.session?.store, {
+      agentId:
+        ownerAgentId?.trim() ||
+        resolveTelegramAccountOwnerAgentId({ cfg, accountId: account.accountId }),
+    });
+    if (direct) {
+      scope = resolveTelegramDirectTopicNameCacheScope(scope, account.accountId);
+    }
+    return resolveTelegramForumTopicMetadata({ msg, threadId, scope });
+  };
   let topicName: string | undefined;
   let isBotOwnedThread = false;
-  // Metadata ingestion also covers DM-scope topics: without it the topic-name
-  // cache never sees DM renames and the refinement's manual-rename guard
-  // cannot observe them (Codex 4302875124).
-  const ingestThreadId = resolvedThreadId ?? dmThreadId;
-  if ((isForum || threadSpec.scope === "dm") && ingestThreadId != null) {
-    const topicRuntime = await loadTelegramMessageContextSessionRuntime(sessionRuntime);
-    const topicNameCacheScope = resolveTelegramDirectTopicNameCacheScope(
-      topicRuntime.resolveStorePath(cfg.session?.store, {
-        agentId:
-          ownerAgentId?.trim() ||
-          resolveTelegramAccountOwnerAgentId({ cfg, accountId: account.accountId }),
-      }),
-      account.accountId,
-    );
-    const topic = await resolveTelegramForumTopicMetadata({
-      msg,
-      threadId: ingestThreadId,
-      scope: topicNameCacheScope,
-    });
+  if (isForum && resolvedThreadId != null) {
+    const topic = await resolveTopicMetadata(resolvedThreadId);
     topicName = topic.topicName;
     isBotOwnedThread = primaryCtx.me?.id !== undefined && topic.creatorUserId === primaryCtx.me.id;
   }
@@ -303,6 +298,18 @@ export const buildTelegramMessageContext = async ({
     }))
   ) {
     return null;
+  }
+
+  // Private bot forums use message_thread_id/is_topic_message. They are direct
+  // conversations, not group forums or channel Direct Messages topics.
+  if (
+    !isGroup &&
+    threadSpec.scope === "dm" &&
+    dmThreadId != null &&
+    (msg.is_topic_message === true || isTelegramForumTopicTitleUpdate(msg))
+  ) {
+    const topic = await resolveTopicMetadata(dmThreadId, true);
+    topicName = topic.topicName;
   }
 
   route = applyTelegramTargetSession({

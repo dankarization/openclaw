@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { resolveGlobalSingleton } from "openclaw/plugin-sdk/global-singleton";
 import type { PluginStateKeyedStore } from "openclaw/plugin-sdk/plugin-state-runtime";
 import { getTelegramRuntime } from "./runtime.js";
+import { resolveTelegramTargetChatType } from "./targets.js";
 
 const TELEGRAM_TOPIC_NAME_CACHE_MAX_ENTRIES = 2_048;
 const STORE_NAMESPACE_PREFIX = "telegram.topic-name-cache";
@@ -40,6 +41,17 @@ function cacheKey(chatId: number | string, threadId: number | string): string {
 
 export function resolveTelegramDirectTopicNameCacheScope(scope: string, accountId: string): string {
   return scope + "\u0000telegram-account:" + accountId;
+}
+
+/** Match inbound metadata namespaces using an already resolved Telegram chat ID. */
+export function resolveTelegramTopicNameCacheScope(
+  scope: string,
+  accountId: string,
+  chatId: string,
+): string {
+  return resolveTelegramTargetChatType(chatId) === "direct"
+    ? resolveTelegramDirectTopicNameCacheScope(scope, accountId)
+    : scope;
 }
 
 function resolveTopicNameCacheNamespace(scope: string): string {
