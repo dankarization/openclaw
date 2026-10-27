@@ -82,7 +82,7 @@ describe("Telegram registered action authority and input contracts", () => {
   ] as const)(
     "keeps $action metadata readable in its inbound scope (direct: $direct)",
     async ({ action, chatId, direct }) => {
-      cfg.agents = { list: [{ id: "main", default: true }] };
+      cfg.agents = { entries: { main: {} } };
       cfg.channels!.telegram!.actions = { createForumTopic: true, editForumTopic: true };
       fixture.responseFor = (method) =>
         method === "getChat"
