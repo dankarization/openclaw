@@ -114,14 +114,21 @@ export async function settleActivity() {
   flush();
 }
 
-export async function previews(page: TestActivityPage) {
+export async function previews(page: TestActivityPage, expectedCount?: number) {
   await settleActivity();
+  if (expectedCount !== undefined) {
+    await waitForSolid(() =>
+      expect(page.container.querySelectorAll(".activity-entry__preview")).toHaveLength(
+        expectedCount,
+      ),
+    );
+  }
   const entries = page.container.querySelectorAll(".activity-entry__preview");
   return Array.from(entries, (entry) => entry.textContent);
 }
 
 export async function expandFirst(page: TestActivityPage) {
-  await settleActivity();
+  await waitForSolid(() => expect(page.container.querySelector(".activity-entry")).not.toBeNull());
   const row = page.container.querySelector<HTMLDetailsElement>(".activity-entry")!;
   row.open = true;
   row.dispatchEvent(new Event("toggle"));
