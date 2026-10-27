@@ -53,7 +53,7 @@ vi.mock("./topic-name-cache.js", async (importOriginal) => ({
 }));
 
 import {
-  armTopicLabelRefinement,
+  finishInitialTopicLabel,
   maybeRefineTopicLabel,
   prepareTopicLabelTurn,
 } from "./topic-label-refinement.js";
@@ -79,9 +79,30 @@ const base = () => ({
   logVerbose,
 });
 
+async function recordInitialLabel(params: {
+  botId: number | string | undefined;
+  accountId: string;
+  chatId: number | string;
+  threadId: number;
+  label: string;
+  lifecycleRevision?: string;
+}) {
+  const lifecycleRevision = params.lifecycleRevision ?? "r1";
+  await prepareTopicLabelTurn({ ...params, lifecycleRevision, currentName: undefined });
+  await finishInitialTopicLabel({
+    ...base(),
+    ...params,
+    lifecycleRevision,
+    applyInitialLabel: async () => {
+      storeState.set("live-name", { name: params.label });
+    },
+  });
+}
+
 beforeEach(() => {
   storeState.clear();
   vi.clearAllMocks();
+  generateTopicLabel.mockReset().mockResolvedValue("Refined Label");
   // Production default: a landed auto label is cached (4302875124), so the
   // refinement's manual-rename guard reads back the armed label. Individual
   // tests override this to simulate pending labels, renames, or eviction.
@@ -89,19 +110,21 @@ beforeEach(() => {
 });
 
 describe("maybeRefineTopicLabel", () => {
-  it("caps inference output at three words in both the API edit and provenance", async () => {
-    await armTopicLabelRefinement({ ...base(), label: "Initial Label" });
+  it("preserves model output rather than imposing default prompt word counts", async () => {
+    await recordInitialLabel({ ...base(), label: "Initial Label" });
     generateTopicLabel.mockResolvedValueOnce("YouGile CRM integration planning guide");
     await maybeRefineTopicLabel({ ...base(), afterMessages: 1 });
-    expect(editForumTopic).toHaveBeenCalledWith(CHAT, THREAD, { name: "YouGile CRM integration" });
-    expect(storeState.get("live-name")?.name).toBe("YouGile CRM integration");
+    expect(editForumTopic).toHaveBeenCalledWith(CHAT, THREAD, {
+      name: "YouGile CRM integration planning guide",
+    });
+    expect(storeState.get("live-name")?.name).toBe("YouGile CRM integration planning guide");
     expect(storeState.get(BOT_ID + ":" + ACCOUNT + ":" + CHAT + ":" + THREAD)?.label).toBe(
-      "YouGile CRM integration",
+      "YouGile CRM integration planning guide",
     );
   });
 
   it("never truncates a manually chosen long title", async () => {
-    await armTopicLabelRefinement({ ...base(), label: "Initial Label" });
+    await recordInitialLabel({ ...base(), label: "Initial Label" });
     storeState.set("live-name", { name: "My own manually chosen long title" });
     await maybeRefineTopicLabel({ ...base(), afterMessages: 1 });
     expect(editForumTopic).not.toHaveBeenCalled();
@@ -109,18 +132,6 @@ describe("maybeRefineTopicLabel", () => {
     expect(storeState.get("live-name")?.name).toBe("My own manually chosen long title");
   });
 
-  it("resets an unfinished previous session's context when re-armed", async () => {
-    const key = `${BOT_ID}:${ACCOUNT}:${CHAT}:${THREAD}`;
-    storeState.set(key, { label: "Old label", count: 1, excerpts: ["old task"], done: false });
-    await armTopicLabelRefinement({
-      botId: BOT_ID,
-      accountId: ACCOUNT,
-      chatId: CHAT,
-      threadId: THREAD,
-      label: "",
-    });
-    expect(storeState.get(key)).toMatchObject({ label: "", count: 0, excerpts: [], done: false });
-  });
   it.each([undefined, "My manual name"])(
     "does not recover an interrupted initial label over unknown or manual cached name: %s",
     async (name) => {
@@ -147,7 +158,7 @@ describe("maybeRefineTopicLabel", () => {
   });
 
   it("counts turns and does not refine before threshold", async () => {
-    await armTopicLabelRefinement({
+    await recordInitialLabel({
       botId: BOT_ID,
       accountId: ACCOUNT,
       chatId: CHAT,
@@ -160,7 +171,7 @@ describe("maybeRefineTopicLabel", () => {
   });
 
   it("does not count text control commands toward later task messages", async () => {
-    await armTopicLabelRefinement({
+    await recordInitialLabel({
       botId: BOT_ID,
       accountId: ACCOUNT,
       chatId: CHAT,
@@ -179,7 +190,7 @@ describe("maybeRefineTopicLabel", () => {
   });
 
   it("refines exactly once at threshold and renames topic + cache", async () => {
-    await armTopicLabelRefinement({
+    await recordInitialLabel({
       botId: BOT_ID,
       accountId: ACCOUNT,
       chatId: CHAT,
@@ -197,7 +208,7 @@ describe("maybeRefineTopicLabel", () => {
   });
 
   it("does not share state across accounts (colliding chat/topic ids)", async () => {
-    await armTopicLabelRefinement({
+    await recordInitialLabel({
       botId: BOT_ID,
       accountId: "other",
       chatId: CHAT,
@@ -211,7 +222,7 @@ describe("maybeRefineTopicLabel", () => {
   });
 
   it("consumes the attempt before the external rename (edit failure does not retry)", async () => {
-    await armTopicLabelRefinement({
+    await recordInitialLabel({
       botId: BOT_ID,
       accountId: ACCOUNT,
       chatId: CHAT,
@@ -230,7 +241,7 @@ describe("maybeRefineTopicLabel", () => {
   });
 
   it("refuses the external rename once the account service is stopped (attempt NOT consumed)", async () => {
-    await armTopicLabelRefinement({
+    await recordInitialLabel({
       botId: BOT_ID,
       accountId: ACCOUNT,
       chatId: CHAT,
@@ -256,7 +267,7 @@ describe("maybeRefineTopicLabel", () => {
   });
 
   it("includes bot identity in the refinement key (token rotation cannot rename replacement bot's topic)", async () => {
-    await armTopicLabelRefinement({
+    await recordInitialLabel({
       botId: 111,
       accountId: ACCOUNT,
       chatId: CHAT,
@@ -271,7 +282,7 @@ describe("maybeRefineTopicLabel", () => {
   });
 
   it("carries intermediate turns into the refinement source", async () => {
-    await armTopicLabelRefinement({
+    await recordInitialLabel({
       botId: BOT_ID,
       accountId: ACCOUNT,
       chatId: CHAT,
@@ -291,7 +302,7 @@ describe("maybeRefineTopicLabel", () => {
   it.each([1, 2])(
     "resumes a threshold of %i reached before the initial label lands",
     async (afterMessages) => {
-      await armTopicLabelRefinement({
+      await recordInitialLabel({
         botId: BOT_ID,
         accountId: ACCOUNT,
         chatId: CHAT,
@@ -328,7 +339,7 @@ describe("maybeRefineTopicLabel", () => {
   );
 
   it("caps retained excerpts independently of the threshold and clears them on claim (4304532547)", async () => {
-    await armTopicLabelRefinement({
+    await recordInitialLabel({
       botId: BOT_ID,
       accountId: ACCOUNT,
       chatId: CHAT,
@@ -357,7 +368,7 @@ describe("maybeRefineTopicLabel", () => {
   });
 
   it("skips refinement without consuming the attempt when the cached name is unavailable (4304532550)", async () => {
-    await armTopicLabelRefinement({
+    await recordInitialLabel({
       botId: BOT_ID,
       accountId: ACCOUNT,
       chatId: CHAT,
@@ -378,7 +389,7 @@ describe("maybeRefineTopicLabel", () => {
 
   it("marks done without rename when model returns same label or empty", async () => {
     generateTopicLabel.mockResolvedValueOnce("Initial Label");
-    await armTopicLabelRefinement({
+    await recordInitialLabel({
       botId: BOT_ID,
       accountId: ACCOUNT,
       chatId: CHAT,
@@ -393,7 +404,7 @@ describe("maybeRefineTopicLabel", () => {
   });
 
   it("skips rename and stops when topic was manually renamed", async () => {
-    await armTopicLabelRefinement({
+    await recordInitialLabel({
       botId: BOT_ID,
       accountId: ACCOUNT,
       chatId: CHAT,
@@ -412,7 +423,7 @@ describe("maybeRefineTopicLabel", () => {
   });
 
   it("does not rename when the topic name disappears during inference", async () => {
-    await armTopicLabelRefinement({
+    await recordInitialLabel({
       botId: BOT_ID,
       accountId: ACCOUNT,
       chatId: CHAT,
@@ -432,7 +443,7 @@ describe("maybeRefineTopicLabel", () => {
   });
 
   it("does not rename through a stopped account after the post-inference cache read", async () => {
-    await armTopicLabelRefinement({
+    await recordInitialLabel({
       botId: BOT_ID,
       accountId: ACCOUNT,
       chatId: CHAT,
@@ -470,7 +481,7 @@ describe("maybeRefineTopicLabel", () => {
 
   it("marks done on generation failure (no repeated attempts)", async () => {
     generateTopicLabel.mockRejectedValueOnce(new Error("llm down"));
-    await armTopicLabelRefinement({
+    await recordInitialLabel({
       botId: BOT_ID,
       accountId: ACCOUNT,
       chatId: CHAT,
@@ -485,34 +496,26 @@ describe("maybeRefineTopicLabel", () => {
     expect(generateTopicLabel).toHaveBeenCalledTimes(1);
   });
 
-  it("fail-before: unconditional re-arm overwrote done state; pass-after: completed topic refinement survives re-arming", async () => {
-    await armTopicLabelRefinement({
-      botId: BOT_ID,
-      accountId: ACCOUNT,
-      chatId: CHAT,
-      threadId: THREAD,
-      label: "Initial Label",
-    });
-    await maybeRefineTopicLabel(base());
-    await maybeRefineTopicLabel(base());
-    expect(editForumTopic).toHaveBeenCalledTimes(1);
-    // Same topic after /reset: a new first turn re-arms, but the completed
-    // refinement must not be reset for a second paid attempt.
-    await armTopicLabelRefinement({
-      botId: BOT_ID,
-      accountId: ACCOUNT,
-      chatId: CHAT,
-      threadId: THREAD,
-      label: "Fresh Label",
-    });
-    await maybeRefineTopicLabel({ ...base(), userMessage: "another later task" });
-    await maybeRefineTopicLabel({ ...base(), userMessage: "another later task" });
-    expect(generateTopicLabel).toHaveBeenCalledTimes(1);
-    expect(editForumTopic).toHaveBeenCalledTimes(1);
-  });
+  it.each(["before", "during"] as const)(
+    "honors WebUI naming authority %s refinement inference",
+    async (timing) => {
+      await recordInitialLabel({ ...base(), label: "Initial Label" });
+      let manual = timing === "before";
+      const assertLifecycleCurrent = vi.fn(async () => {
+        if (manual) throw new Error("manual WebUI label selected");
+      });
+      generateTopicLabel.mockImplementationOnce(async () => {
+        manual = true;
+        return "Changed task";
+      });
+      await maybeRefineTopicLabel({ ...base(), afterMessages: 1, assertLifecycleCurrent });
+      expect(editForumTopic).not.toHaveBeenCalled();
+      expect(generateTopicLabel).toHaveBeenCalledTimes(timing === "before" ? 0 : 1);
+    },
+  );
 
   it("serializes concurrent turns so the single attempt is claimed exactly once (4304709772)", async () => {
-    await armTopicLabelRefinement({
+    await recordInitialLabel({
       botId: BOT_ID,
       accountId: ACCOUNT,
       chatId: CHAT,
@@ -554,7 +557,7 @@ describe("topic naming lifecycle", () => {
     expect(storeState.size).toBe(0);
   });
   it("reassesses an owned title after lifecycle change, but preserves a manual rename", async () => {
-    await armTopicLabelRefinement({ ...target, label: "YouGile CRM", lifecycleRevision: "r1" });
+    await recordInitialLabel({ ...target, label: "YouGile CRM", lifecycleRevision: "r1" });
     expect(
       await prepareTopicLabelTurn({ ...target, lifecycleRevision: "r2", currentName: "Manual" }),
     ).toBe("skip");
@@ -562,6 +565,26 @@ describe("topic naming lifecycle", () => {
       await prepareTopicLabelTurn({
         ...target,
         lifecycleRevision: "r2",
+        currentName: "YouGile CRM",
+      }),
+    ).toBe("initial");
+  });
+  it("retains generated-name ownership when reset inference fails and another reset follows", async () => {
+    const key = `${BOT_ID}:${ACCOUNT}:${CHAT}:${THREAD}`;
+    storeState.set(key, { label: "YouGile CRM", count: 0, done: true, lifecycleRevision: "r1" });
+    expect(
+      await prepareTopicLabelTurn({
+        ...target,
+        lifecycleRevision: "r2",
+        currentName: "YouGile CRM",
+      }),
+    ).toBe("initial");
+    // No finishInitialTopicLabel call: inference failed or returned empty.
+    expect(storeState.get(key)?.label).toBe("YouGile CRM");
+    expect(
+      await prepareTopicLabelTurn({
+        ...target,
+        lifecycleRevision: "r3",
         currentName: "YouGile CRM",
       }),
     ).toBe("initial");

@@ -21,7 +21,7 @@ import { prepareSkillCommandsForWorkspace } from "openclaw/plugin-sdk/skill-comm
 import { truncateUtf16Safe } from "openclaw/plugin-sdk/text-utility-runtime";
 import { resolveTelegramAccountOwnerAgentId } from "./account-owner.js";
 import {
-  limitAutomaticTopicLabel,
+  normalizeGeneratedTopicLabel,
   resolveAutoTopicLabelConfig,
   resolveAutoTopicLabelRefineConfig,
 } from "./auto-topic-label-config.js";
@@ -174,12 +174,13 @@ async function scheduleDmTopicLabel(params: {
   const readLifecycle = () =>
     getSessionTitleLifecycleAsync({ storePath, sessionKey, agentId: context.route.agentId });
   const lifecycle = await readLifecycle();
-  if (!lifecycle?.lifecycleRevision) {
+  if (!lifecycle?.lifecycleRevision || lifecycle.explicitLabel?.trim()) {
     return;
   }
   const assertLifecycleCurrent = async () => {
     const current = await readLifecycle();
     if (
+      current?.explicitLabel?.trim() ||
       current?.sessionId !== lifecycle.sessionId ||
       current?.lifecycleRevision !== lifecycle.lifecycleRevision
     ) {
@@ -258,7 +259,7 @@ async function scheduleDmTopicLabel(params: {
   await (async () => {
     try {
       assertAccountCurrent();
-      const label = limitAutomaticTopicLabel(
+      const label = normalizeGeneratedTopicLabel(
         await generateTopicLabel({
           userMessage,
           prompt: previousName

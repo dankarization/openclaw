@@ -22,10 +22,13 @@ import {
 } from "openclaw/plugin-sdk/interactive-runtime";
 import type { MessagePresentation } from "openclaw/plugin-sdk/interactive-runtime";
 import type { ReplyPayload } from "openclaw/plugin-sdk/reply-runtime";
-import { asOptionalRecord } from "openclaw/plugin-sdk/string-coerce-runtime";
+import { resolveStorePath } from "openclaw/plugin-sdk/session-store-runtime";
+import { resolveTelegramAccountOwnerAgentId } from "./account-owner.js";
 import { createTelegramActionGate, resolveTelegramPollActionGateState } from "./accounts.js";
+import { resolveDefaultTelegramAccountId } from "./accounts.js";
 import { TELEGRAM_MESSAGE_ACTION_MAP } from "./action-names.js";
 import {
+  normalizeTelegramDeliveryPin,
   readTelegramChatId,
   readTelegramForumTopicIconColor,
   readTelegramPositiveIntegerParam,
@@ -33,7 +36,6 @@ import {
   readTelegramSendMediaUrls,
   readTelegramThreadId,
 } from "./action-params.js";
-import { resolveActionTopicNameCacheScope } from "./action-topic-name-scope.js";
 import {
   appendTelegramDroppedControlFallback,
   buildTelegramControlDegradation,
@@ -72,7 +74,17 @@ import { TELEGRAM_SUPPORTED_REACTION_EMOJI_LIST } from "./status-reaction-varian
 import { getCacheStats, searchStickers } from "./sticker-cache.js";
 import { normalizeTelegramOutboundTarget, parseTelegramTarget } from "./targets.js";
 import { resolveTelegramToken } from "./token.js";
-import { updateTopicName } from "./topic-name-cache.js";
+import { resolveTelegramDirectTopicNameCacheScope, updateTopicName } from "./topic-name-cache.js";
+
+function resolveActionTopicNameCacheScope(cfg: OpenClawConfig, accountId?: string | null): string {
+  const resolvedAccountId = accountId ?? resolveDefaultTelegramAccountId(cfg);
+  return resolveTelegramDirectTopicNameCacheScope(
+    resolveStorePath(cfg.session?.store, {
+      agentId: resolveTelegramAccountOwnerAgentId({ cfg, accountId: resolvedAccountId }),
+    }),
+    resolvedAccountId,
+  );
+}
 
 const TELEGRAM_EMOJI_LIST_LIMIT = 100;
 const TELEGRAM_REACTION_HINT_LIMIT = 20;
@@ -115,23 +127,6 @@ function formatTelegramDeliveryTarget(to: string, messageThreadId?: number | nul
     return to;
   }
   return `${parsed.chatId}:topic:${topicId}`;
-}
-
-function normalizeTelegramDeliveryPin(params: Record<string, unknown>) {
-  const delivery = asOptionalRecord(params.delivery);
-  const pin = delivery ? delivery.pin : params.pin === true ? true : undefined;
-  if (pin === true) {
-    return { enabled: true } as const;
-  }
-  const raw = asOptionalRecord(pin);
-  if (raw?.enabled !== true) {
-    return undefined;
-  }
-  return {
-    enabled: true,
-    ...(raw.notify === true ? { notify: true } : {}),
-    ...(raw.required === true ? { required: true } : {}),
-  } as const;
 }
 
 export async function handleTelegramAction(

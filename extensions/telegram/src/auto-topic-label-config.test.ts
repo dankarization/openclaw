@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  limitAutomaticTopicLabel,
+  normalizeGeneratedTopicLabel,
   resolveAutoTopicLabelConfig,
   resolveAutoTopicLabelRefineConfig,
 } from "./auto-topic-label-config.js";
@@ -92,19 +92,19 @@ describe("resolveAutoTopicLabelConfig per-DM precedence", () => {
   });
 });
 
-describe("automatic topic word limit", () => {
+describe("automatic topic output normalization", () => {
   it.each([
-    ["YouGile CRM integration planning", "YouGile CRM integration"],
-    ["Настройка связи с новой CRM", "Настройка связи с"],
-    ["one—two—three—four", "one—two—three"],
+    ["YouGile CRM integration planning", "YouGile CRM integration planning"],
+    ["Настройка связи с новой CRM", "Настройка связи с новой CRM"],
+    ["one—two—three—four", "one—two—three—four"],
     ["CRM API", "CRM API"],
     ["", null],
-    ["✨ —", null],
-  ])("bounds generated %j independently of prompts", (input, expected) => {
-    expect(limitAutomaticTopicLabel(input)).toBe(expected);
+    ["✨ —", "✨ —"],
+  ])("preserves configured prompt output %j", (input, expected) => {
+    expect(normalizeGeneratedTopicLabel(input)).toBe(expected);
   });
 
   it("preserves a suitable existing short name exactly", () => {
-    expect(limitAutomaticTopicLabel("YouGile  CRM")).toBe("YouGile  CRM");
+    expect(normalizeGeneratedTopicLabel("YouGile  CRM")).toBe("YouGile  CRM");
   });
 });

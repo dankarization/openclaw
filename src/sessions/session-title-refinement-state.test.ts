@@ -39,27 +39,6 @@ describe("resolveSessionTitleRefineConfig", () => {
 describe("countTitleRefinementMessage", () => {
   const NAME = "Generated Title";
 
-  it("starts at 1 without prior state", () => {
-    expect(countTitleRefinementMessage(undefined, SID, NAME)).toEqual({
-      taskMessagesSinceTitle: 1,
-      refinementDone: false,
-      sessionId: SID,
-      generatedName: NAME,
-    });
-  });
-
-  it("increments prior state and tracks the owned generated name", () => {
-    const prior: SessionTitleRefinementState = {
-      taskMessagesSinceTitle: 2,
-      refinementDone: false,
-      sessionId: SID,
-      generatedName: NAME,
-    };
-    const next = countTitleRefinementMessage(prior, SID, NAME);
-    expect(next.taskMessagesSinceTitle).toBe(3);
-    expect(next.generatedName).toBe(NAME);
-  });
-
   it("resets on sessionId change (new session after /reset)", () => {
     const prior: SessionTitleRefinementState = {
       taskMessagesSinceTitle: 5,

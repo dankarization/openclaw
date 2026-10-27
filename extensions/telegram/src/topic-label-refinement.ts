@@ -6,7 +6,7 @@ import { truncateUtf16Safe } from "openclaw/plugin-sdk/text-utility-runtime";
 import { resolveTelegramAccountOwnerAgentId } from "./account-owner.js";
 import {
   AUTO_TOPIC_LABEL_REFINE_PROMPT,
-  limitAutomaticTopicLabel,
+  normalizeGeneratedTopicLabel,
 } from "./auto-topic-label-config.js";
 import { getTelegramRuntime } from "./runtime.js";
 import {
@@ -31,6 +31,8 @@ type TopicLabelRefinementEntry = {
   label: string;
   /** Durable intent until the initial edit and cache update have completed. */
   pendingInitialLabel?: string;
+  /** Initial inference is still pending; the prior label retains ownership only. */
+  awaitingInitialLabel?: boolean;
   /** Later user task messages, including those received during initial generation. */
   count: number;
   /** Intermediate user excerpts retained for the refinement source. */
@@ -90,38 +92,6 @@ async function withRefinementLock(key: string, run: () => Promise<void>): Promis
     if (refinementLocks.get(key) === next) {
       refinementLocks.delete(key);
     }
-  }
-}
-
-/** Records that this bot generated the initial label; arms the refinement counter. */
-export async function armTopicLabelRefinement(params: {
-  botId: number | string | undefined;
-  accountId: string;
-  chatId: number | string;
-  threadId: number;
-  label: string;
-  lifecycleRevision?: string;
-}): Promise<void> {
-  try {
-    await withRefinementLock(refinementKey(params), async () => {
-      const store = await loadRefinementStore();
-      const key = refinementKey(params);
-      // Resume interrupted attachment, but reset ordinary unfinished context
-      // when a new session starts in this topic. Completed attempts stay spent.
-      const existing = await store.lookup(key);
-      if (existing?.done || existing?.pendingInitialLabel) {
-        return;
-      }
-      await store.register(key, {
-        label: params.label,
-        count: 0,
-        excerpts: [],
-        done: false,
-        lifecycleRevision: params.lifecycleRevision,
-      });
-    });
-  } catch (err) {
-    console.warn(`auto-topic-label: refinement arming failed: ${String(err)}`);
   }
 }
 
@@ -249,6 +219,7 @@ async function runRefinementTurn(
     const next: TopicLabelRefinementEntry = { ...entry };
     if ("label" in event) {
       next.label = event.label;
+      delete next.awaitingInitialLabel;
       delete next.pendingInitialLabel;
     } else {
       const excerpt = truncateUtf16Safe(event.userMessage, REFINEMENT_SOURCE_MAX_CHARS);
@@ -285,10 +256,11 @@ async function runRefinementTurn(
         return;
       }
       next.label = next.pendingInitialLabel;
+      delete next.awaitingInitialLabel;
       delete next.pendingInitialLabel;
     }
     await store.register(key, next);
-    if (next.count < params.afterMessages || !next.label.trim()) {
+    if (next.awaitingInitialLabel || next.count < params.afterMessages || !next.label.trim()) {
       return;
     }
     // Manual-rename guard: refine only while the topic still carries our label.
@@ -313,6 +285,7 @@ async function runRefinementTurn(
     // Service authority BEFORE consuming the attempt: a stopped/reloaded
     // account must not have its single refinement spent on a turn that can
     // never reach the Bot API (Codex 4300799472).
+    await params.assertLifecycleCurrent?.();
     params.assertServiceCurrent();
     // Durable attempt claim BEFORE any external effect: a crash after the Bot
     // API edit (or a rejected edit) must never re-run the LLM and re-rename on
@@ -329,7 +302,7 @@ async function runRefinementTurn(
     params.assertServiceCurrent();
     let label: string | null;
     try {
-      label = limitAutomaticTopicLabel(
+      label = normalizeGeneratedTopicLabel(
         await generateTopicLabel({
           userMessage: [next.label, ...(next.excerpts ?? [])].filter(Boolean).join("\n---\n"),
           prompt: AUTO_TOPIC_LABEL_REFINE_PROMPT,
@@ -404,7 +377,8 @@ export async function prepareTopicLabelTurn(params: {
       return;
     }
     await store.register(key, {
-      label: "",
+      label: entry?.label ?? "",
+      awaitingInitialLabel: true,
       count: 0,
       excerpts: [],
       done: false,

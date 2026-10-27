@@ -8,6 +8,7 @@ import {
   dispatchWithContext,
   generateTopicLabel,
   loadSessionStore,
+  readTitleLifecycleForTest,
 } from "./bot-message-dispatch.test-harness.js";
 
 const naming = vi.hoisted(() => ({
@@ -37,6 +38,9 @@ vi.mock("./topic-name-cache.js", async (importOriginal) => ({
 
 describeTelegramDispatch("DM topic naming for captionless media", () => {
   beforeEach(() => {
+    readTitleLifecycleForTest
+      .mockReset()
+      .mockResolvedValue({ sessionId: "s1", lifecycleRevision: "title-generation-1" });
     naming.prepare.mockReset().mockResolvedValue("initial");
     naming.attach.mockClear();
     naming.refine.mockClear();
@@ -46,7 +50,7 @@ describeTelegramDispatch("DM topic naming for captionless media", () => {
     });
   });
 
-  it("enforces three words even when a custom prompt asks for a longer first title", async () => {
+  it("preserves custom prompt output beyond the default word-count suggestion", async () => {
     generateTopicLabel.mockResolvedValueOnce("YouGile CRM integration planning guide");
     const scope = new AsyncWorkScope();
     const context = createContext();
@@ -62,10 +66,57 @@ describeTelegramDispatch("DM topic naming for captionless media", () => {
       }),
     );
     await scope.drain();
-    expect(edit).toHaveBeenCalledWith(123, 777, { name: "YouGile CRM integration" });
+    expect(edit).toHaveBeenCalledWith(123, 777, { name: "YouGile CRM integration planning guide" });
     expect(naming.attach).toHaveBeenCalledWith(
-      expect.objectContaining({ label: "YouGile CRM integration" }),
+      expect.objectContaining({ label: "YouGile CRM integration planning guide" }),
     );
+  });
+
+  it("does not start later refinement over an explicit WebUI label", async () => {
+    readTitleLifecycleForTest.mockResolvedValue({
+      sessionId: "s1",
+      lifecycleRevision: "title-generation-1",
+      explicitLabel: "My chosen title",
+    });
+    naming.prepare.mockResolvedValue("refine");
+    const scope = new AsyncWorkScope();
+    const context = createContext();
+    context.ctxPayload.RawBody = "Continue the CRM integration";
+    await scope.track(() =>
+      dispatchWithContext({
+        context,
+        telegramCfg: { autoTopicLabel: { refine: true } },
+      }),
+    );
+    await scope.drain();
+    expect(naming.refine).not.toHaveBeenCalled();
+    expect(generateTopicLabel).not.toHaveBeenCalled();
+  });
+
+  it("does not overwrite a WebUI label chosen during initial inference", async () => {
+    const scope = new AsyncWorkScope();
+    const context = createContext();
+    context.ctxPayload.RawBody = "Continue the CRM integration";
+    const release = Promise.withResolvers<string>();
+    generateTopicLabel.mockImplementationOnce(() => release.promise);
+    const bot = createBot();
+    const edit = vi.fn<typeof bot.api.editForumTopic>().mockResolvedValue(true);
+    bot.api.editForumTopic = edit;
+    try {
+      await scope.track(() => dispatchWithContext({ context, bot }));
+      await vi.waitFor(() => expect(generateTopicLabel).toHaveBeenCalledTimes(1));
+      readTitleLifecycleForTest.mockResolvedValue({
+        sessionId: "s1",
+        lifecycleRevision: "title-generation-1",
+        explicitLabel: "My chosen title",
+      });
+      release.resolve("Automatic title");
+      await scope.drain();
+      expect(edit).not.toHaveBeenCalled();
+    } finally {
+      release.resolve("Automatic title");
+      await scope.drain();
+    }
   });
 
   it("ignores control-only turns and names the subsequent substantive task", async () => {
@@ -200,7 +251,6 @@ describeTelegramDispatch("DM topic naming for captionless media", () => {
     const release = Promise.withResolvers<void>();
     naming.refine.mockImplementationOnce(async () => {
       await release.promise;
-      return "initial";
     });
     const context = createContext();
     context.ctxPayload.RawBody = "";

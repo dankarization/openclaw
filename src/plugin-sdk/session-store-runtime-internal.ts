@@ -81,6 +81,7 @@ export async function getSessionTitleLifecycleAsync(params: SessionStoreReadPara
         sessionId: entry.sessionId,
         lifecycleRevision: entry.lifecycleRevision,
         resetMode: entry.titleRefinement?.resetMode,
+        explicitLabel: entry.label,
       }
     : undefined;
 }

@@ -32,6 +32,18 @@ export async function emitToolStart(options: ReplyOptions, payload: ToolStart) {
   return await options?.onToolStart?.(payload);
 }
 
+const readTitleLifecycleHoisted = vi.hoisted(() =>
+  vi.fn(
+    async (): Promise<{
+      sessionId: string;
+      lifecycleRevision: string;
+      explicitLabel?: string;
+    }> => ({ sessionId: "s1", lifecycleRevision: "title-generation-1" }),
+  ),
+);
+
+export const readTitleLifecycleForTest = readTitleLifecycleHoisted;
+
 const createTelegramDraftStreamHoisted = vi.hoisted(() => vi.fn());
 const dispatchReplyWithBufferedBlockDispatcherHoisted = vi.hoisted(() =>
   vi.fn<(params: DispatchReplyWithBufferedBlockDispatcherArgs) => Promise<unknown>>(),
@@ -397,10 +409,7 @@ vi.mock("openclaw/plugin-sdk/session-store-runtime", async (importOriginal) => (
   ...(await importOriginal<typeof import("openclaw/plugin-sdk/session-store-runtime")>()),
   resolveStorePath: (...args: Parameters<TelegramBotFixtureMocks["resolveStorePath"]>) =>
     telegramDepsForTest.resolveStorePath(...args),
-  getSessionTitleLifecycleAsync: async () => ({
-    sessionId: "s1",
-    lifecycleRevision: "title-generation-1",
-  }),
+  getSessionTitleLifecycleAsync: readTitleLifecycleHoisted,
   getSessionEntryAsync: (...args: Parameters<TelegramBotFixtureMocks["getSessionEntryAsync"]>) =>
     telegramDepsForTest.getSessionEntryAsync(...args),
   readSessionUpdatedAtAsync: (

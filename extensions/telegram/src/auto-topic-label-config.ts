@@ -104,25 +104,7 @@ export function resolveAutoTopicLabelConfig(
   };
 }
 
-const automaticTopicWords = new Intl.Segmenter("en", { granularity: "word" });
-
-/** Enforced after inference, including custom/reset prompts. Never apply to manual names. */
-export function limitAutomaticTopicLabel(label: string | null): string | null {
-  const text = label?.trim();
-  if (!text) {
-    return null;
-  }
-  let words = 0;
-  let end = 0;
-  for (const part of automaticTopicWords.segment(text)) {
-    if (!part.isWordLike) {
-      continue;
-    }
-    words += 1;
-    if (words > 3) {
-      return text.slice(0, end).trimEnd();
-    }
-    end = part.index + part.segment.length;
-  }
-  return words > 0 ? text : null;
+/** Normalize empty model output without overriding configured naming prompts. */
+export function normalizeGeneratedTopicLabel(label: string | null): string | null {
+  return label?.trim() || null;
 }
