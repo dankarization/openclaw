@@ -8,6 +8,7 @@ import { captureEnv } from "openclaw/plugin-sdk/test-env";
 import { awaitGateBeforeSettlement, withinTest } from "openclaw/plugin-sdk/test-fixtures";
 import { createOpenClawTestState, type OpenClawTestState } from "openclaw/plugin-sdk/test-state";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { handleTelegramAction } from "./action-runtime.js";
 import { telegramPlugin } from "./channel.js";
 import {
   isTelegramMessageCacheSourceMessage,
@@ -503,6 +504,16 @@ describe("Telegram registered action authority and input contracts", () => {
     async ({ action, params, error }) => {
       cfg.channels!.telegram!.actions = { sticker: true };
       await expect(invoke(action, params)).rejects.toThrow(error);
+      expect(requests).toEqual([]);
+    },
+  );
+
+  it.each(["__proto__", "constructor", "toString"])(
+    "rejects inherited object keys as action names before network delivery: %s",
+    async (action) => {
+      await expect(handleTelegramAction({ action }, cfg)).rejects.toThrow(
+        `Unsupported Telegram action: ${action}`,
+      );
       expect(requests).toEqual([]);
     },
   );

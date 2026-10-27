@@ -29,7 +29,9 @@ const TELEGRAM_ACTION_ALIASES = {
 type TelegramActionName = (typeof TELEGRAM_ACTION_ALIASES)[keyof typeof TELEGRAM_ACTION_ALIASES];
 
 export function normalizeTelegramActionName(action: string): TelegramActionName {
-  const normalized = TELEGRAM_ACTION_ALIASES[action as keyof typeof TELEGRAM_ACTION_ALIASES];
+  const normalized = Object.entries(TELEGRAM_ACTION_ALIASES).find(
+    ([alias]) => alias === action,
+  )?.[1];
   if (!normalized) {
     throw new Error(`Unsupported Telegram action: ${action}`);
   }
