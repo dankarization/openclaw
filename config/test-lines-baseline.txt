@@ -1,4 +1,4 @@
-# Pinned upstream 56eba2fae exact integrated-tree recount is 6,314,116 test lines.
-# The topic adds a measured 2,648 lines relative to that upstream base; admit only the
-# exact integrated total. This is a zero-slack ratchet, so future growth needs a new rationale.
-6314116
+# Pinned canonical main 0ba1c7d5 plus the retained naming topic recounts to 6,314,243 test lines.
+# This replaces the former 105-line canonical-main slack and admits only the measured integrated tree.
+# Zero slack: any later test growth requires a new exact recount and rationale.
+6314243
