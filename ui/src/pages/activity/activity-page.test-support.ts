@@ -101,28 +101,7 @@ export function createActivityPage(context: ApplicationContext, initial?: RouteL
   };
 }
 
-export async function expectActivitySummary(page: TestActivityPage, summary: string) {
-  await waitForSolid(() =>
-    expect(page.container.querySelector(".activity-entry__text")?.textContent?.trim()).toBe(
-      summary,
-    ),
-  );
-}
-
-export async function settleActivity() {
-  await new Promise(requestAnimationFrame);
-  flush();
-}
-
-export async function previews(page: TestActivityPage, expectedCount?: number) {
-  await settleActivity();
-  if (expectedCount !== undefined) {
-    await waitForSolid(() =>
-      expect(page.container.querySelectorAll(".activity-entry__preview")).toHaveLength(
-        expectedCount,
-      ),
-    );
-  }
+export function previews(page: TestActivityPage) {
   const entries = page.container.querySelectorAll(".activity-entry__preview");
   return Array.from(entries, (entry) => entry.textContent);
 }
