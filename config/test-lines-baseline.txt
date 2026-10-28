@@ -1,4 +1,4 @@
-# Pinned canonical main 0ba1c7d5 plus the retained naming topic recounts to 6,314,243 test lines.
-# This replaces the former 105-line canonical-main slack and admits only the measured integrated tree.
-# Zero slack: any later test growth requires a new exact recount and rationale.
-6314243
+# Pinned canonical main b0e550ecc plus retained PR184821 Telegram naming refinements recounts to 6314826 test lines.
+# The ceiling equals the measured integrated tree; zero slack preserves the ratchet after both upstream and topic coverage.
+# Any later test-line growth requires a new exact recount and recorded rationale.
+6314826
