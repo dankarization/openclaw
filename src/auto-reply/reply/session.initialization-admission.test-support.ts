@@ -104,6 +104,7 @@ export function registerSessionInitializationAdmissionTests({
     };
     const inbound = await recordInboundSessionMeta({ ...scope, ctx });
     assert(inbound, "Inbound metadata must persist the topic before reply initialization");
+    expect(inbound.lifecycleRevision).toEqual(expect.any(String));
     const result = await initSessionState({
       ctx,
       cfg: { session: { store: scope.storePath, reset: { mode: "idle", idleMinutes: 999 } } },

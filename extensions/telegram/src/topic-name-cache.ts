@@ -11,6 +11,8 @@ const DEFAULT_TOPIC_NAME_CACHE_SCOPE = "default";
 
 type TopicEntry = {
   name: string;
+  /** Telegram observed an implicit creation name, not a user-selected title. */
+  isNameImplicit?: boolean;
   creatorUserId?: number;
   iconColor?: number;
   iconCustomEmojiId?: string;
@@ -276,6 +278,8 @@ async function updateTopicNameWithPatch(
     const merged: TopicEntry = {
       name: patch.name ?? existing?.name ?? "",
       updatedAt: nextUpdatedAt(scope),
+      isNameImplicit:
+        patch.isNameImplicit ?? (patch.name !== undefined ? false : existing?.isNameImplicit),
       ...(iconColor !== undefined ? { iconColor } : {}),
       ...(iconCustomEmojiId !== undefined ? { iconCustomEmojiId } : {}),
       ...(closed !== undefined ? { closed } : {}),
@@ -318,7 +322,10 @@ export async function getTopicName(
 export async function recordTopicCreation(
   chatId: number | string,
   threadId: number | string,
-  creation: Pick<TopicEntry, "name" | "creatorUserId" | "iconColor" | "iconCustomEmojiId">,
+  creation: Pick<
+    TopicEntry,
+    "name" | "creatorUserId" | "iconColor" | "iconCustomEmojiId" | "isNameImplicit"
+  >,
   scope?: string,
 ): Promise<void> {
   // Decide after preceding mutations settle: a late creation service message
@@ -340,4 +347,15 @@ export async function getTopicCreatorUserId(
   const state = getTopicStoreState(scope);
   await hydrateTopicStoreState(state);
   return state.store.get(cacheKey(chatId, threadId))?.creatorUserId;
+}
+
+/** Unknown legacy names are never treated as platform placeholders. */
+export async function isTopicNameImplicit(
+  chatId: number | string,
+  threadId: number | string,
+  scope?: string,
+): Promise<boolean> {
+  const state = getTopicStoreState(scope);
+  await hydrateTopicStoreState(state);
+  return state.store.get(cacheKey(chatId, threadId))?.isNameImplicit === true;
 }

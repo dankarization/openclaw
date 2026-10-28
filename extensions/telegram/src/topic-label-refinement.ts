@@ -359,6 +359,7 @@ export async function prepareTopicLabelTurn(params: {
   threadId: number;
   lifecycleRevision: string;
   currentName: string | undefined;
+  isNameImplicit?: boolean;
 }): Promise<"initial" | "refine" | "skip"> {
   let decision: "initial" | "refine" | "skip" = "skip";
   await withRefinementLock(refinementKey(params), async () => {
@@ -372,7 +373,9 @@ export async function prepareTopicLabelTurn(params: {
     // No provenance means an existing name may be manual. Missing cache also
     // cannot prove ownership of a previously generated name after reset.
     if (
-      entry ? !entry.label || params.currentName !== entry.label : params.currentName !== undefined
+      entry
+        ? !entry.label || params.currentName !== entry.label
+        : params.currentName !== undefined && !params.isNameImplicit
     ) {
       return;
     }

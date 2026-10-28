@@ -62,6 +62,7 @@ import {
 import {
   resolveTelegramDirectTopicNameCacheScope,
   getTopicName,
+  isTopicNameImplicit,
   updateTopicName,
 } from "./topic-name-cache.js";
 
@@ -232,6 +233,9 @@ async function scheduleDmTopicLabel(params: {
     threadId: topicThreadId,
     lifecycleRevision: lifecycle.lifecycleRevision,
     currentName: previousName,
+    isNameImplicit:
+      previousName !== undefined &&
+      (await isTopicNameImplicit(context.chatId, topicThreadId, cacheScope)),
   });
   if (decision === "skip") {
     return;
