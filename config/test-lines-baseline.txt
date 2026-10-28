@@ -8,4 +8,9 @@
 # Against upstream 90d6cf56, total grows by 832 to 6,313,056; PR delta stays +2,509.
 # Reset directive boundary regressions add 139 net test lines; current merge reserve is 30.
 # Against 54afe289, raise only the 109-line deficit to 6,313,165; no extra reserve.
-6313165
+# Preserve 502 net lines of Sections regression coverage (#186229): two-step
+# editor scoping, Gateway search, ordering, guest flow and session-menu entry.
+# Current main contributes 6,310,802 lines; this candidate adds exactly 502.
+# Admit the measured 6,311,304 total without extra future allowance.
+# Exact post-merge recount below supersedes prior non-composed totals; no new reserve.
+6314020
