@@ -110,7 +110,7 @@ describe("maybeRefineDashboardSessionTitle", () => {
       await maybeRefineDashboardSessionTitle({ ...refineParams(current), cfg, userMessage });
     }
     expect(generateConversationLabelWithFallback).not.toHaveBeenCalled();
-    generateConversationLabelWithFallback.mockResolvedValue("First Pass Title");
+    generateConversationLabelWithFallback.mockResolvedValue("KEEP");
     await maybeRefineDashboardSessionTitle({
       ...refineParams(current),
       cfg,
@@ -120,6 +120,47 @@ describe("maybeRefineDashboardSessionTitle", () => {
     expect(current.displayName).toBe("First Pass Title");
     expect(current.titleRefinement?.resetMode).toBeUndefined();
     expect(current.titleRefinement?.refinementDone).toBe(false);
+  });
+
+  it.each([
+    { response: "KEEP", expected: "Освещение в гостиной" },
+    { response: "REPLACE: Настройка отопления", expected: "Настройка отопления" },
+    { response: "Освещение: три группы", expected: "Освещение в гостиной" },
+    { response: "REPLACE: отопление\nexplanation", expected: "Освещение в гостиной" },
+  ])("applies only a valid reset directive: $response", async ({ response, expected }) => {
+    let current: SessionEntry = {
+      ...generatedEntry,
+      displayName: "Освещение в гостиной",
+      lifecycleRevision: "after-reset",
+      titleRefinement: {
+        ...initializeTitleRefinementState("session-1", "Освещение в гостиной"),
+        resetMode: "reset",
+      },
+    };
+    updateSessionEntry.mockImplementation(async (_scope, update) => {
+      const patch = await update({ ...current });
+      if (patch) {
+        current = { ...current, ...patch };
+      }
+      loadSessionEntry.mockReturnValue(current);
+      return current;
+    });
+    generateConversationLabelWithFallback.mockResolvedValue(response);
+
+    await maybeRefineDashboardSessionTitle({
+      ...refineParams(current),
+      cfg,
+      userMessage: "Продолжим про освещение: нужны три группы света и вечерний сценарий",
+    });
+
+    expect(generateConversationLabelWithFallback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.stringContaining("KEEP"),
+      }),
+    );
+    expect(current.displayName).toBe(expected);
+    expect(current.titleRefinement?.generatedName).toBe(expected);
+    expect(current.titleRefinement?.resetMode).toBeUndefined();
   });
 
   it("refuses inference from the previous lifecycle even when sessionId is retained", async () => {

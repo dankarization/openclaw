@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   countTitleRefinementMessage,
+  normalizeResetTitleResponse,
+  resolveResetTitleResponse,
   resetTitleRefinementState,
   resolveSessionTitleRefineConfig,
   type SessionTitleRefinementState,
@@ -63,6 +65,24 @@ describe("countTitleRefinementMessage", () => {
     expect(state?.recentMessages?.[0]).toContain("task 3");
     expect(state?.recentMessages?.at(-1)).toContain("task 10");
     expect(state?.recentMessages?.every((message) => message.length <= 500)).toBe(true);
+  });
+});
+
+describe("reset naming response contract", () => {
+  it.each(["", "REPLACE:", "KEEP extra", "REPLACE: one\nexplanation", "Title only"])(
+    "rejects malformed directive %j",
+    (response) => {
+      expect(normalizeResetTitleResponse(response)).toBeNull();
+    },
+  );
+  it("preserves a semantically fitting automatic title only for KEEP", () => {
+    const previous = "Освещение в гостиной";
+    expect(normalizeResetTitleResponse("KEEP")).toBe("KEEP");
+    expect(resolveResetTitleResponse(previous, "KEEP")).toBe(previous);
+    expect(resolveResetTitleResponse(previous, "REPLACE: Настройка отопления")).toBe(
+      "Настройка отопления",
+    );
+    expect(resolveResetTitleResponse(previous, "Освещение в гостиной: три группы")).toBeNull();
   });
 });
 

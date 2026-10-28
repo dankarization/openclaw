@@ -6,7 +6,9 @@ import type { SessionTitleRefinementState } from "../sessions/session-title-refi
 import {
   countTitleRefinementMessage,
   resolveSessionTitleRefineConfig,
+  normalizeResetTitleResponse,
   resetTitlePrompt,
+  resolveResetTitleResponse,
   initializeTitleRefinementState,
 } from "../sessions/session-title-refinement-state.js";
 import { resolveSessionTitleSource } from "../sessions/session-title-source.js";
@@ -258,6 +260,7 @@ export async function maybeRefineDashboardSessionTitle(params: SessionTitleParam
         ? resetTitlePrompt(resetMode, generatedName)
         : SESSION_TITLE_REFINEMENT_PROMPT,
       mode: "refinement",
+      ...(resetMode ? { normalizeLabel: normalizeResetTitleResponse } : {}),
       operatorAuthority: params.operatorAuthority,
       ...(memory ? { assertCurrent: assertMemoryCurrent } : {}),
       // A single-concurrency/local model queues the refinement behind the
@@ -265,7 +268,8 @@ export async function maybeRefineDashboardSessionTitle(params: SessionTitleParam
       // burning the durable attempt on a 15-second timeout (Codex 4304532543).
       ...(params.retryAfter ? { retryAfter: params.retryAfter } : {}),
     });
-    if (!refined || (!resetMode && refined === generatedName)) {
+    const resolvedTitle = resetMode ? resolveResetTitleResponse(generatedName, refined) : refined;
+    if (!resolvedTitle || (!resetMode && resolvedTitle === generatedName)) {
       return;
     }
     let persisted = false;
@@ -286,15 +290,18 @@ export async function maybeRefineDashboardSessionTitle(params: SessionTitleParam
         }
         persisted = true;
         return {
-          displayName: refined,
+          displayName: resolvedTitle,
           titleRefinement: resetMode
-            ? { ...initializeTitleRefinementState(params.sessionId, refined), lifecycleRevision }
+            ? {
+                ...initializeTitleRefinementState(params.sessionId, resolvedTitle),
+                lifecycleRevision,
+              }
             : {
                 lifecycleRevision,
                 taskMessagesSinceTitle: claimedTitleRefinement.taskMessagesSinceTitle,
                 refinementDone: true,
                 sessionId: params.sessionId,
-                generatedName: refined,
+                generatedName: resolvedTitle,
               },
         };
       },

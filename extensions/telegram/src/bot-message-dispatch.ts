@@ -10,7 +10,9 @@ import {
   generateConversationLabel as generateTopicLabel,
   resolveChunkMode,
   resolveSessionTitleSource,
+  normalizeResetTitleResponse,
   resetTitlePrompt,
+  resolveResetTitleResponse,
 } from "openclaw/plugin-sdk/reply-dispatch-runtime";
 import { createSubsystemLogger, danger, logVerbose } from "openclaw/plugin-sdk/runtime-env";
 import {
@@ -263,18 +265,22 @@ async function scheduleDmTopicLabel(params: {
   await (async () => {
     try {
       assertAccountCurrent();
+      // Validate the reset directive before the ordinary label path bounds it:
+      // truncating first could turn malformed protocol output into a replacement.
+      const generatedLabel = await generateTopicLabel({
+        userMessage,
+        prompt: previousName
+          ? resetTitlePrompt(lifecycle.resetMode ?? "reset", previousName)
+          : autoTopicConfig.prompt,
+        maxLength: previousName ? 137 : 128,
+        cfg: params.cfg,
+        agentId: context.route.agentId,
+        agentDir: resolveAgentDir(params.cfg, context.route.agentId),
+        assertCurrent: assertAccountCurrent,
+        ...(previousName ? { normalizeLabel: normalizeResetTitleResponse } : {}),
+      });
       const label = normalizeGeneratedTopicLabel(
-        await generateTopicLabel({
-          userMessage,
-          prompt: previousName
-            ? resetTitlePrompt(lifecycle.resetMode ?? "reset", previousName)
-            : autoTopicConfig.prompt,
-          maxLength: 128,
-          cfg: params.cfg,
-          agentId: context.route.agentId,
-          agentDir: resolveAgentDir(params.cfg, context.route.agentId),
-          assertCurrent: assertAccountCurrent,
-        }),
+        previousName ? resolveResetTitleResponse(previousName, generatedLabel) : generatedLabel,
       );
       if (!label) {
         logVerbose("auto-topic-label: LLM returned empty label");

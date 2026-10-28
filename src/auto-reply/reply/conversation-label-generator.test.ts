@@ -6,6 +6,7 @@ import { createDiagnosticLogRecordCapture } from "../../logging/test-helpers/dia
 import { createWarnLogCapture } from "../../logging/test-helpers/warn-log-capture.js";
 import { createPluginMetadataSnapshotFixture } from "../../plugins/plugin-metadata.test-support.js";
 import { withPluginRuntimeGenerationScope } from "../../plugins/runtime/generation-scope.js";
+import { normalizeResetTitleResponse } from "../../sessions/session-title-refinement-state.js";
 
 const runIsolatedCompletion = vi.hoisted(() => vi.fn());
 const resolveSimpleCompletionSelectionForAgent = vi.hoisted(() => vi.fn());
@@ -212,6 +213,17 @@ describe("generateConversationLabel", () => {
       });
       await expect(label).rejects.toBe(expired);
       expect(runIsolatedCompletion).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([60, 128])(
+    "preserves a %i-character replacement inside its protocol envelope",
+    async (length) => {
+      const title = "я".repeat(length);
+      runIsolatedCompletion.mockResolvedValue({ text: `REPLACE: ${title}` });
+      await expect(
+        generate({ maxLength: length + 9, normalizeLabel: normalizeResetTitleResponse }),
+      ).resolves.toBe(`REPLACE: ${title}`);
     },
   );
 

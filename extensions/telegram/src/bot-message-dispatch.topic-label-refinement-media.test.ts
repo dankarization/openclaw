@@ -30,11 +30,16 @@ vi.mock("./topic-label-refinement.js", async (importOriginal) => ({
   finishInitialTopicLabel: naming.attach,
   maybeRefineTopicLabel: naming.refine,
 }));
+const topicNames = vi.hoisted(() => ({
+  get: vi.fn(async (): Promise<string | undefined> => undefined),
+  update: vi.fn(async () => {}),
+}));
 // mock-isolation: do not open a topic-cache database for dispatcher selection.
 vi.mock("./topic-name-cache.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./topic-name-cache.js")>()),
-  getTopicName: vi.fn(async () => undefined),
-  updateTopicName: vi.fn(async () => {}),
+  getTopicName: topicNames.get,
+  isTopicNameImplicit: vi.fn(async () => false),
+  updateTopicName: topicNames.update,
 }));
 
 describeTelegramDispatch("DM topic naming for captionless media", () => {
@@ -45,6 +50,8 @@ describeTelegramDispatch("DM topic naming for captionless media", () => {
     naming.prepare.mockReset().mockResolvedValue("initial");
     naming.attach.mockClear();
     naming.refine.mockClear();
+    topicNames.get.mockReset().mockResolvedValue(undefined);
+    topicNames.update.mockClear();
     dispatchReplyWithBufferedBlockDispatcher.mockImplementation(async ({ dispatcherOptions }) => {
       await dispatcherOptions.deliver({ text: "Task reply" }, { kind: "final" });
       return { queuedFinal: true };
@@ -93,6 +100,65 @@ describeTelegramDispatch("DM topic naming for captionless media", () => {
     expect(naming.refine).not.toHaveBeenCalled();
     expect(generateTopicLabel).not.toHaveBeenCalled();
   });
+
+  it("keeps the exact topic name after a same-session reset when the model returns cosmetic freeform text", async () => {
+    const original = "Помоги настроить освещение в гостиной";
+    readTitleLifecycleForTest.mockResolvedValue({
+      sessionId: "s1",
+      lifecycleRevision: "title-generation-2",
+      resetMode: "reset",
+    });
+    topicNames.get.mockResolvedValue(original);
+    generateTopicLabel.mockResolvedValueOnce(
+      "Освещение в гостиной: три группы и вечерний сценарий",
+    );
+    const scope = new AsyncWorkScope();
+    const context = createContext();
+    context.ctxPayload.RawBody =
+      "Продолжим про освещение: нужны три группы света и вечерний сценарий";
+    const bot = createBot();
+    const edit = vi.fn<typeof bot.api.editForumTopic>().mockResolvedValue(true);
+    bot.api.editForumTopic = edit;
+
+    await scope.track(() => dispatchWithContext({ context, bot }));
+    await scope.drain();
+
+    expect(edit).not.toHaveBeenCalled();
+    expect(generateTopicLabel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        normalizeLabel: expect.any(Function),
+        prompt: expect.stringContaining("KEEP"),
+      }),
+    );
+    expect(naming.attach).not.toHaveBeenCalled();
+  });
+
+  it.each(["Настройка отопления", "😀".repeat(128), "я".repeat(150)])(
+    "bounds the parsed REPLACE title: %s",
+    async (replacement) => {
+      const original = "Помоги настроить освещение в гостиной";
+      readTitleLifecycleForTest.mockResolvedValue({
+        sessionId: "s1",
+        lifecycleRevision: "title-generation-2",
+        resetMode: "reset",
+      });
+      topicNames.get.mockResolvedValue(original);
+      generateTopicLabel.mockResolvedValueOnce(`REPLACE: ${replacement}`);
+      const scope = new AsyncWorkScope();
+      const context = createContext();
+      context.ctxPayload.RawBody = "Теперь нужна настройка отопления";
+      const bot = createBot();
+      const edit = vi.fn<typeof bot.api.editForumTopic>().mockResolvedValue(true);
+      bot.api.editForumTopic = edit;
+
+      await scope.track(() => dispatchWithContext({ context, bot }));
+      await scope.drain();
+
+      expect(edit).toHaveBeenCalledWith(123, 777, {
+        name: Array.from(replacement).slice(0, 128).join(""),
+      });
+    },
+  );
 
   it("does not overwrite a WebUI label chosen during initial inference", async () => {
     const scope = new AsyncWorkScope();

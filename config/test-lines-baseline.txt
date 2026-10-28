@@ -6,5 +6,6 @@
 # Telegram/WebUI title lifecycle coverage adds 2,509 lines against frozen d307b217.
 # Its 285-line remaining reserve covers part; add exactly the measured 2,224 deficit.
 # Against upstream 90d6cf56, total grows by 832 to 6,313,056; PR delta stays +2,509.
-# Set the exact synthetic total; no extra reserve or counting exception.
-6313056
+# Reset directive boundary regressions add 139 net test lines; current merge reserve is 30.
+# Against 54afe289, raise only the 109-line deficit to 6,313,165; no extra reserve.
+6313165

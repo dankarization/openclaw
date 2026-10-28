@@ -299,6 +299,8 @@ export async function generateDashboardSessionTitle(params: {
   retryAfter?: Promise<void>;
   onFallback?: () => void;
   promptOverride?: string;
+  /** Optional response normalizer for protocol-based title reassessment. */
+  normalizeLabel?: (label: string) => string | null;
 }): Promise<string | null> {
   const sourceText = params.sourceText;
   const regularModel = resolveSessionModelRef(params.cfg, params.entry, params.agentId);
@@ -337,8 +339,8 @@ export async function generateDashboardSessionTitle(params: {
         ...(utilityModelRef ? { utilityModelRef } : {}),
         regularModelRef,
         ...(preferredProfile ? { preferredProfile } : {}),
-        normalizeLabel: normalizeDashboardSessionTitle,
-        maxLength: DASHBOARD_SESSION_TITLE_MAX_CHARS,
+        normalizeLabel: params.normalizeLabel ?? normalizeDashboardSessionTitle,
+        maxLength: DASHBOARD_SESSION_TITLE_MAX_CHARS + (params.normalizeLabel ? 9 : 0),
         abortSignal: params.abortSignal,
         assertCurrent: params.assertCurrent,
         operatorAuthority: params.operatorAuthority,

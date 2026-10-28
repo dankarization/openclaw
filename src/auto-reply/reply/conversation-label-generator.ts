@@ -40,6 +40,8 @@ export type ConversationLabelParams = {
   modelRef?: string;
   timeoutMs?: number;
   maxLength?: number;
+  /** Validates protocol output before the transport title cap is applied. */
+  normalizeLabel?: (label: string) => string | null;
   abortSignal?: AbortSignal;
   assertCurrent?: () => void;
   operatorAuthority?: AdmittedRunOperatorAuthority;

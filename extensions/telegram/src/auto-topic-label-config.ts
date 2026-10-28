@@ -104,7 +104,8 @@ export function resolveAutoTopicLabelConfig(
   };
 }
 
-/** Normalize empty model output without overriding configured naming prompts. */
+/** Normalize a title after any protocol wrapper has been interpreted. */
 export function normalizeGeneratedTopicLabel(label: string | null): string | null {
-  return label?.trim() || null;
+  const trimmed = label?.trim();
+  return trimmed ? Array.from(trimmed).slice(0, 128).join("") : null;
 }
