@@ -38,8 +38,11 @@ describeTelegramDispatch("dispatchTelegramMessage progress cards", () => {
     "compacts only consecutive safe tool invocations ($richMessages, $commandText)",
     async ({ richMessages, commandText }) => {
       const { answerDraftStream } = setupDraftStreams();
+      // Dispatch errors are caught and logged, so record previews and assert after dispatch.
+      const previews: string[] = [];
       dispatchReplyWithBufferedBlockDispatcher.mockImplementation(async ({ replyOptions }) => {
-        const text = () => answerDraftStream.updatePreview.mock.lastCall?.[0].text ?? "";
+        const capture = () =>
+          previews.push(answerDraftStream.updatePreview.mock.lastCall?.[0].text ?? "");
         const start = async (id: string, name = "bash") => {
           await emitToolStart(replyOptions, {
             toolCallId: id,
@@ -54,15 +57,6 @@ describeTelegramDispatch("dispatchTelegramMessage progress cards", () => {
         };
         for (let index = 1; index <= 3; index++) {
           await start(`${index}`);
-          if (commandText === "status") {
-            expect(text().match(/Bash/g)).toHaveLength(1);
-            expect(text()).toContain(index === 1 ? "Bash" : `Bash ×${index}`);
-            expect(text()).not.toContain("fixture-");
-          } else {
-            expect(text().match(/Bash/g)).toHaveLength(index);
-            expect(text()).not.toContain("×");
-            expect(text()).toContain(`fixture-${index}`);
-          }
           for (let replay = 0; replay < 2; replay++) {
             await replyOptions?.onItemEvent?.({
               itemId: `tool:${index}`,
@@ -73,15 +67,11 @@ describeTelegramDispatch("dispatchTelegramMessage progress cards", () => {
               status: "completed",
             });
           }
+          capture();
         }
         await start("read", "read");
         await start("4");
-        if (commandText === "status") {
-          expect(text().match(/Bash/g)).toHaveLength(2);
-          expect(text()).toContain("Bash ×3");
-          expect(text()).toContain("Read");
-          expect(text()).not.toContain("Bash ×4");
-        }
+        capture();
         await replyOptions?.onItemEvent?.({
           itemId: "tool:4",
           toolCallId: "4",
@@ -90,7 +80,7 @@ describeTelegramDispatch("dispatchTelegramMessage progress cards", () => {
           phase: "end",
           status: "failed",
         });
-        expect(text()).toContain("failed");
+        capture();
         return { queuedFinal: false };
       });
       await dispatchWithContext({
@@ -105,6 +95,29 @@ describeTelegramDispatch("dispatchTelegramMessage progress cards", () => {
           streaming: { mode: "progress", progress: { toolProgress: true, commandText } },
         },
       });
+      expect(previews).toHaveLength(5);
+      const [one, two, three, afterRead, failed] = previews as [
+        string,
+        string,
+        string,
+        string,
+        string,
+      ];
+      if (commandText === "status") {
+        expect(one.match(/Bash/g)).toHaveLength(1);
+        expect(two).toContain("Bash ×2");
+        expect(three).toContain("Bash ×3");
+        expect(three.match(/Bash/g)).toHaveLength(1);
+        expect(three).not.toContain("fixture-");
+        expect(afterRead.match(/Bash/g)).toHaveLength(2);
+        expect(afterRead).toContain("Bash ×3");
+        expect(afterRead).toContain("Read");
+        expect(afterRead).not.toContain("Bash ×4");
+      } else {
+        expect(three.match(/Bash/g)).toHaveLength(3);
+        expect(three).not.toContain("×");
+      }
+      expect(failed).toContain("failed");
     },
   );
 

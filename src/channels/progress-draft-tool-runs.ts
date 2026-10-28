@@ -33,6 +33,14 @@ function isCompactTool(line: ChannelProgressDraftLine): boolean {
   );
 }
 
+function continuesRun(previous: ChannelProgressDraftLine, line: ChannelProgressDraftLine): boolean {
+  return (
+    previous.toolName === line.toolName &&
+    previous.icon === line.icon &&
+    previous.detail === line.detail
+  );
+}
+
 /** Display-only runs; invocation ids, not lifecycle callbacks or rendered text, own counts. */
 export function createProgressDraftToolRuns(
   params: ChannelProgressDraftCompositorParams,
@@ -85,12 +93,7 @@ export function createProgressDraftToolRuns(
         continue;
       }
       if (isCompactTool(line)) {
-        if (
-          batch[0] &&
-          (batch[0].line.toolName !== line.toolName ||
-            batch[0].line.icon !== line.icon ||
-            batch[0].line.detail !== line.detail)
-        ) {
+        if (batch[0] && !continuesRun(batch[0].line, line)) {
           flush();
         }
         batch.push(member);
@@ -172,18 +175,15 @@ export function createProgressDraftToolRuns(
         return replace(lines, known.run, false);
       }
       const previous = current?.members.at(-1)?.line;
-      const continues =
-        isCompactTool(line) &&
-        previous &&
-        isCompactTool(previous) &&
-        previous.toolName === line.toolName &&
-        previous.icon === line.icon &&
-        previous.detail === line.detail;
-      const run = continues && current ? current : { members: [] };
+      const compact = isCompactTool(line);
+      const run =
+        compact && current && previous && isCompactTool(previous) && continuesRun(previous, line)
+          ? current
+          : { members: [] };
       const member = { line };
       run.members.push(member);
       invocations.set(line.id, { run, member });
-      current = isCompactTool(line) ? run : undefined;
+      current = compact ? run : undefined;
       return replace(lines, run, true);
     },
     remove(lines: Line[], id: string): Line[] | undefined {
