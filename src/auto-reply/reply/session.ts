@@ -643,7 +643,7 @@ async function initSessionStateAttemptLocked(
     ...preservedState,
     ...creationStamp,
     sessionId,
-    lifecycleRevision: isNewSession ? crypto.randomUUID() : baseEntry?.lifecycleRevision,
+    lifecycleRevision: baseEntry?.lifecycleRevision ?? crypto.randomUUID(),
     updatedAt: retainPendingResetMarker
       ? 0
       : recordedActivity
