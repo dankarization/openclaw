@@ -1,16 +1,4 @@
-# Preserve distinct guest recovery, authority and history regression coverage.
-# Frozen e094e4c8 used 6,301,989 lines, leaving 11 under the prior 6,302,000 ceiling.
-# Add 8,000 bounded lines (~0.127%); this is reserve, not a combined-repair estimate.
-# Counting, branch-delta handling and all test/CI requirements stay unchanged.
-# Future increases require separate justification; no automatic budget growth.
-# Telegram/WebUI title lifecycle coverage adds 2,509 lines against frozen d307b217.
-# Its 285-line remaining reserve covers part; add exactly the measured 2,224 deficit.
-# Against upstream 90d6cf56, total grows by 832 to 6,313,056; PR delta stays +2,509.
-# Reset directive boundary regressions add 139 net test lines; current merge reserve is 30.
-# Against 54afe289, raise only the 109-line deficit to 6,313,165; no extra reserve.
-# Preserve 502 net lines of Sections regression coverage (#186229): two-step
-# editor scoping, Gateway search, ordering, guest flow and session-menu entry.
-# Current main contributes 6,310,802 lines; this candidate adds exactly 502.
-# Admit the measured 6,311,304 total without extra future allowance.
-# Exact post-merge recount below supersedes prior non-composed totals; no new reserve.
-6314020
+# Pinned upstream 56eba2fae exact integrated-tree recount is 6,314,116 test lines.
+# The topic adds a measured 2,648 lines relative to that upstream base; admit only the
+# exact integrated total. This is a zero-slack ratchet, so future growth needs a new rationale.
+6314116
