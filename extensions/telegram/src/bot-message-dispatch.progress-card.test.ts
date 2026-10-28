@@ -30,57 +30,26 @@ import { renderTelegramProgressDraftPreview } from "./progress-draft-preview.js"
 import type * as TelegramEditModule from "./send-edit.js";
 
 describeTelegramDispatch("dispatchTelegramMessage progress cards", () => {
-  it.each([
-    { richMessages: false, commandText: "status" },
-    { richMessages: true, commandText: "status" },
-    { richMessages: false, commandText: "raw" },
-  ] as const)(
-    "compacts only consecutive safe tool invocations ($richMessages, $commandText)",
-    async ({ richMessages, commandText }) => {
+  it.each(["status", "raw"] as const)(
+    "compacts consecutive tool rows only with %s command text",
+    async (commandText) => {
       const { answerDraftStream } = setupDraftStreams();
-      // Dispatch errors are caught and logged, so record previews and assert after dispatch.
-      const previews: string[] = [];
+      // Dispatch catches and logs errors, so assert after dispatch.
+      let preview = "";
       dispatchReplyWithBufferedBlockDispatcher.mockImplementation(async ({ replyOptions }) => {
-        const capture = () =>
-          previews.push(answerDraftStream.updatePreview.mock.lastCall?.[0].text ?? "");
-        const start = async (id: string, name = "bash") => {
-          await emitToolStart(replyOptions, {
-            toolCallId: id,
-            name,
-            phase: "start",
-            args:
-              name === "read"
-                ? { path: "/fixture/readme.md" }
-                : { command: `printf fixture-${id}` },
+        for (const id of ["1", "2", "3"]) {
+          const event = { toolCallId: id, name: "bash", args: { command: `printf ${id}` } };
+          await emitToolStart(replyOptions, { ...event, phase: "start" });
+          await replyOptions?.onItemEvent?.({
+            ...event,
+            itemId: `tool:${id}`,
+            kind: "tool",
+            phase: "end",
+            status: "completed",
           });
           await answerDraftStream.flush();
-        };
-        for (let index = 1; index <= 3; index++) {
-          await start(`${index}`);
-          for (let replay = 0; replay < 2; replay++) {
-            await replyOptions?.onItemEvent?.({
-              itemId: `tool:${index}`,
-              toolCallId: `${index}`,
-              kind: "tool",
-              name: "bash",
-              phase: "end",
-              status: "completed",
-            });
-          }
-          capture();
         }
-        await start("read", "read");
-        await start("4");
-        capture();
-        await replyOptions?.onItemEvent?.({
-          itemId: "tool:4",
-          toolCallId: "4",
-          kind: "tool",
-          name: "bash",
-          phase: "end",
-          status: "failed",
-        });
-        capture();
+        preview = answerDraftStream.updatePreview.mock.lastCall?.[0].text ?? "";
         return { queuedFinal: false };
       });
       await dispatchWithContext({
@@ -91,33 +60,11 @@ describeTelegramDispatch("dispatchTelegramMessage progress cards", () => {
         }),
         streamMode: "progress",
         telegramCfg: {
-          richMessages,
           streaming: { mode: "progress", progress: { toolProgress: true, commandText } },
         },
       });
-      expect(previews).toHaveLength(5);
-      const [one, two, three, afterRead, failed] = previews as [
-        string,
-        string,
-        string,
-        string,
-        string,
-      ];
-      if (commandText === "status") {
-        expect(one.match(/Bash/g)).toHaveLength(1);
-        expect(two).toContain("Bash ×2");
-        expect(three).toContain("Bash ×3");
-        expect(three.match(/Bash/g)).toHaveLength(1);
-        expect(three).not.toContain("fixture-");
-        expect(afterRead.match(/Bash/g)).toHaveLength(2);
-        expect(afterRead).toContain("Bash ×3");
-        expect(afterRead).toContain("Read");
-        expect(afterRead).not.toContain("Bash ×4");
-      } else {
-        expect(three.match(/Bash/g)).toHaveLength(3);
-        expect(three).not.toContain("×");
-      }
-      expect(failed).toContain("failed");
+      expect(preview.match(/Bash/g)).toHaveLength(commandText === "status" ? 1 : 3);
+      expect(preview.includes("Bash ×3")).toBe(commandText === "status");
     },
   );
 

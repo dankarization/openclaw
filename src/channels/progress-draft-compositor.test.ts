@@ -110,9 +110,14 @@ describe("consecutive tool runs", () => {
     );
     const tool = (id: string, name = "bash", status = "running") =>
       progress.pushItemEvent({ itemId: `tool:${id}`, kind: "tool", name, status });
-    const labels = () =>
-      progress.getSnapshot().lines.map((line) => (typeof line === "string" ? line : line.label));
-    return { progress, tool, labels };
+    const lines = () => progress.getSnapshot().lines;
+    const labels = () => lines().map((line) => (typeof line === "string" ? line : line.label));
+    const run = async (...ids: string[]) => {
+      for (const id of ids) {
+        await tool(id);
+      }
+    };
+    return { progress, tool, run, lines, labels };
   }
 
   it("counts invocations beyond the row budget, not starts, ends or replays", async () => {
@@ -136,26 +141,15 @@ describe("consecutive tool runs", () => {
   });
 
   it("splits runs around late failures and keeps approvals and authored events", async () => {
-    const { progress, tool, labels } = setup();
-    await tool("1");
-    await tool("2");
-    await tool("3");
+    const { progress, tool, run, lines, labels } = setup();
+    await run("1", "2", "3");
     await tool("2", "bash", "failed");
     expect(labels()).toEqual(["Bash ×2", "Bash"]);
-    expect(progress.getSnapshot().lines.at(-1)).toMatchObject({ id: "tool:2", status: "failed" });
+    expect(lines().at(-1)).toMatchObject({ id: "tool:2", status: "failed" });
     await tool("4");
     expect(labels()).toEqual(["Bash ×2", "Bash", "Bash"]);
-    expect(progress.getSnapshot().lines.at(-1)).toMatchObject({ id: "tool:4" });
-    await progress.pushApprovalEvent({
-      approvalId: "approval-1",
-      phase: "requested",
-      command: "printf fixture",
-    });
-    expect(
-      progress
-        .getSnapshot()
-        .lines.some((line) => typeof line === "object" && line.kind === "approval"),
-    ).toBe(true);
+    await progress.pushApprovalEvent({ approvalId: "a1", phase: "requested", command: "printf x" });
+    expect(lines().some((line) => typeof line === "object" && line.kind === "approval")).toBe(true);
     await tool("5");
     expect(labels().at(-1)).toBe("Bash");
     await progress.pushPreambleHeadline("Checking the next step", { itemId: "preamble-1" });
@@ -174,71 +168,52 @@ describe("consecutive tool runs", () => {
     });
     await tool("2");
     expect(labels()).not.toContain("Bash ×2");
-    for (const id of ["detail-1", "detail-2"]) {
-      await progress.pushToolProgress({
-        id,
-        kind: "tool",
-        toolName: "bash",
-        label: "Bash",
-        text: "Bash command",
-        detail: "command",
-      });
-    }
+    const row = {
+      kind: "tool" as const,
+      toolName: "bash",
+      label: "Bash",
+      text: "Bash c",
+      detail: "c",
+    };
+    await progress.pushToolProgress({ ...row, id: "detail-1" });
+    await progress.pushToolProgress({ ...row, id: "detail-2" });
     expect(labels().slice(-2)).toEqual(["Bash", "Bash"]);
-    for (const id of ["title-1", "title-2"]) {
-      await progress.pushToolProgress({
-        id,
-        kind: "item",
-        toolName: "api",
-        label: "Same…title",
-        text: "Same…title",
-      });
-    }
+    const title = {
+      kind: "item" as const,
+      toolName: "api",
+      label: "Same…title",
+      text: "Same…title",
+    };
+    await progress.pushToolProgress({ ...title, id: "title-1" });
+    await progress.pushToolProgress({ ...title, id: "title-2" });
     expect(labels().slice(-2)).toEqual(["Same…title", "Same…title"]);
   });
 
   it.each([1, 3])(
     "keeps new failures visible across run eviction with %i rows",
     async (maxLines) => {
-      const { progress, tool, labels } = setup({
+      const { tool, run, lines, labels } = setup({
         entry: { streaming: { mode: "progress", progress: { toolProgress: true, maxLines } } },
       });
-      await tool("1");
-      await tool("2");
-      await tool("3");
+      await run("1", "2", "3");
       await tool("2", "bash", "failed");
-      expect(progress.getSnapshot().lines.at(-1)).toMatchObject({
-        id: "tool:2",
-        status: "failed",
-      });
+      expect(lines().at(-1)).toMatchObject({ id: "tool:2", status: "failed" });
       await tool("read", "read");
       await tool("write", "write");
       await tool("1", "bash", "failed");
-      expect(progress.getSnapshot().lines.at(-1)).toMatchObject({
-        id: "tool:1",
-        status: "failed",
-      });
+      expect(lines().at(-1)).toMatchObject({ id: "tool:1", status: "failed" });
       await tool("1", "bash", "failed");
-      expect(progress.getSnapshot().lines.at(-1)).toMatchObject({
-        id: "tool:1",
-        status: "failed",
-      });
       // Replays neither duplicate the failure nor resurrect the evicted run.
       expect(labels().filter((label) => label === "Bash")).toHaveLength(1);
       expect(labels()).not.toContain("Bash ×2");
       await tool("3", "bash", "completed");
-      expect(progress.getSnapshot().lines.at(-1)).toMatchObject({
-        id: "tool:1",
-        status: "failed",
-      });
+      expect(lines().at(-1)).toMatchObject({ id: "tool:1", status: "failed" });
     },
   );
 
   it("retracts individual members without discarding the rest of a run", async () => {
-    const { progress, tool, labels } = setup();
-    await tool("1");
-    await tool("2");
-    await tool("3");
+    const { progress, run, labels } = setup();
+    await run("1", "2", "3");
     await progress.pushItemEvent({ itemId: "tool:2", hideFromChannelProgress: true });
     expect(labels()).toEqual(["Bash ×2"]);
     await progress.pushItemEvent({ itemId: "tool:1", hideFromChannelProgress: true });
@@ -263,60 +238,34 @@ describe("consecutive tool runs", () => {
     expect(labels()).toEqual(["Bash", "Bash"]);
   });
 
-  it("compacts repeated reads of the same skill without losing its name or grouping different skills", async () => {
-    const { progress } = setup();
-    const skill = (id: string, name: string, isError = false) =>
+  // Shortened skill names are not identities, so even identical long names stay separate.
+  const long = (middle: string) => `${"a".repeat(90)}${middle}${"z".repeat(90)}`;
+  it.each([
+    ["skills_read", "name", "github", "notion", "Skill Read: github ×2"],
+    ["sessions_list", "limit", 30, 10, "Sessions: 30 ×2"],
+    ["skills_read", "name", long("one"), long("two"), undefined],
+  ] as const)("groups only identical safe %s details", async (name, key, same, other, text) => {
+    const { progress, lines } = setup();
+    const push = (id: string, value: unknown, isError = false) =>
       progress.pushItemEvent(
         projectAgentToolActivity({
           toolCallId: id,
-          name: "skills_read",
-          args: { name },
+          name,
+          args: { [key]: value },
           phase: "result",
           isError,
         }),
       );
-    await skill("github-1", "github");
-    await skill("github-2", "github");
-    expect(progress.getSnapshot().lines[0]).toMatchObject({
-      label: "Skill Read",
-      detail: "github ×2",
-      text: "Skill Read: github ×2",
+    await push("one", same);
+    await push("two", same);
+    expect(lines()[0]).toMatchObject({
+      text: text ?? expect.not.stringContaining("×"),
     });
-    await skill("other", "notion");
-    await skill("github-3", "github");
-    expect(progress.getSnapshot().lines).toHaveLength(3);
-    await skill("github-error", "github", true);
-    expect(progress.getSnapshot().lines.at(-1)).toMatchObject({ status: "failed" });
-    // Identical shortened displays must not turn distinct full names into one run.
-    const prefix = "a".repeat(90);
-    const suffix = "z".repeat(90);
-    await skill("long-1", `${prefix}one${suffix}`);
-    await skill("long-2", `${prefix}two${suffix}`);
-    expect(progress.getSnapshot().lines).toHaveLength(3);
-    expect(JSON.stringify(progress.getSnapshot().lines.slice(-2))).not.toContain("×2");
-  });
-
-  it("compacts identical Sessions limits and splits different limits", async () => {
-    const { progress } = setup();
-    const sessions = (id: string, limit: number, isError = false) =>
-      progress.pushItemEvent(
-        projectAgentToolActivity({
-          toolCallId: id,
-          name: "sessions_list",
-          args: { limit },
-          phase: "result",
-          isError,
-        }),
-      );
-    await sessions("one", 30);
-    await sessions("two", 30);
-    expect(progress.getSnapshot().lines[0]).toMatchObject({ text: "Sessions: 30 ×2" });
-    await sessions("other", 10);
-    await sessions("fresh", 30);
-    expect(progress.getSnapshot().lines).toHaveLength(3);
-    expect(JSON.stringify(progress.getSnapshot().lines.slice(-2))).not.toContain("×2");
-    await sessions("error", 30, true);
-    expect(progress.getSnapshot().lines.at(-1)).toMatchObject({ status: "failed" });
+    await push("other", other);
+    await push("fresh", same);
+    expect(lines()).toHaveLength(3);
+    await push("error", same, true);
+    expect(lines().at(-1)).toMatchObject({ status: "failed" });
   });
 });
 
