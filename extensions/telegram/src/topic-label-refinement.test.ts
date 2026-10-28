@@ -318,7 +318,6 @@ describe("maybeRefineTopicLabel", () => {
       // Dispatch caches the generated name before attaching it. No additional
       // task message should be needed to resume an already-reached threshold.
       storeState.set("live-name", { name: "Late Label" });
-      const { finishInitialTopicLabel } = await import("./topic-label-refinement.js");
       await finishInitialTopicLabel({
         ...base(),
         afterMessages,
@@ -502,7 +501,9 @@ describe("maybeRefineTopicLabel", () => {
       await recordInitialLabel({ ...base(), label: "Initial Label" });
       let manual = timing === "before";
       const assertLifecycleCurrent = vi.fn(async () => {
-        if (manual) throw new Error("manual WebUI label selected");
+        if (manual) {
+          throw new Error("manual WebUI label selected");
+        }
       });
       generateTopicLabel.mockImplementationOnce(async () => {
         manual = true;

@@ -305,24 +305,22 @@ async function scheduleDmTopicLabel(params: {
         ).catch(() => {});
         logVerbose(`auto-topic-label: renamed topic ${context.chatId}/${topicThreadId}`);
       };
-      {
-        await finishInitialTopicLabel({
-          botId: params.bot.botInfo?.id,
-          accountId: context.route.accountId,
-          bot: params.bot,
-          assertServiceCurrent: assertAccountCurrent,
-          assertLifecycleCurrent,
-          lifecycleRevision: lifecycle.lifecycleRevision,
-          cfg: params.cfg,
-          agentId: context.route.agentId,
-          chatId: context.chatId,
-          threadId: topicThreadId,
-          afterMessages: refineCfg.enabled ? refineCfg.afterMessages : Number.POSITIVE_INFINITY,
-          logVerbose,
-          label,
-          applyInitialLabel,
-        });
-      }
+      await finishInitialTopicLabel({
+        botId: params.bot.botInfo?.id,
+        accountId: context.route.accountId,
+        bot: params.bot,
+        assertServiceCurrent: assertAccountCurrent,
+        assertLifecycleCurrent,
+        lifecycleRevision: lifecycle.lifecycleRevision,
+        cfg: params.cfg,
+        agentId: context.route.agentId,
+        chatId: context.chatId,
+        threadId: topicThreadId,
+        afterMessages: refineCfg.enabled ? refineCfg.afterMessages : Number.POSITIVE_INFINITY,
+        logVerbose,
+        label,
+        applyInitialLabel,
+      });
     } catch (err) {
       logVerbose(`auto-topic-label: failed: ${String(err)}`);
     }

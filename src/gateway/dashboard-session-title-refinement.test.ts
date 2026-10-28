@@ -100,7 +100,9 @@ describe("maybeRefineDashboardSessionTitle", () => {
     };
     updateSessionEntry.mockImplementation(async (_scope, update) => {
       const patch = await update({ ...current });
-      if (patch) current = { ...current, ...patch };
+      if (patch) {
+        current = { ...current, ...patch };
+      }
       loadSessionEntry.mockReturnValue(current);
       return current;
     });
@@ -128,7 +130,9 @@ describe("maybeRefineDashboardSessionTitle", () => {
     };
     updateSessionEntry.mockImplementation(async (_scope, update) => {
       const patch = await update({ ...current });
-      if (patch) current = { ...current, ...patch };
+      if (patch) {
+        current = { ...current, ...patch };
+      }
       loadSessionEntry.mockReturnValue(current);
       return current;
     });
