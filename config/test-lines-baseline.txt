@@ -5,5 +5,6 @@
 # Future increases require separate justification; no automatic budget growth.
 # Telegram/WebUI title lifecycle coverage adds 2,509 lines against frozen d307b217.
 # Its 285-line remaining reserve covers part; add exactly the measured 2,224 deficit.
-# Synthetic integration uses 6,312,224 lines; no extra reserve or counting exception.
-6312224
+# Against upstream 90d6cf56, total grows by 832 to 6,313,056; PR delta stays +2,509.
+# Set the exact synthetic total; no extra reserve or counting exception.
+6313056
