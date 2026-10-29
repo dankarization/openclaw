@@ -160,6 +160,7 @@ export async function admitChatSend(params: ChatSendAdmissionParams) {
     request.goalOperation?.action === "start" && !entry && !requestedSessionId
       ? await prepareChatSendSessionEntry({
           cfg: session.cfg,
+          sessionKey,
           client,
           agentId,
           getRuntimeConfig: context.getRuntimeConfig,

@@ -11,6 +11,7 @@ import {
 } from "../../state/openclaw-agent-db.js";
 import { openOpenClawStateDatabase } from "../../state/openclaw-state-db.js";
 import { deliveryContextFromSession } from "../../utils/delivery-context.read.js";
+import { setRuntimeConfigSnapshot } from "../runtime-snapshot.js";
 import {
   appendTranscriptEvent,
   forkSessionAtMessage,
@@ -393,4 +394,17 @@ it("forks an exact active-path prefix without changing the source", async () => 
     entryId: "user-2",
   });
   expect(loadSessionEntry(scope)?.lifecycleRevision).toBe("source-lifecycle-revision");
+});
+
+it("forks a Shared parent's history into a private child under creation defaults", async () => {
+  const { scope, params } = await createSession();
+  await updateSessionEntry(scope, (entry) => ({ ...entry, visibility: "shared" }));
+  setRuntimeConfigSnapshot({ session: { sharing: { creationDefaults: { visibility: "draft" } } } });
+  const targetKey = "agent:main:fork:private-history-child";
+  const forked = await forkSessionAtMessage({ ...params, targetKey }, sourceExpectedState);
+  expect(forked).toMatchObject({ status: "created" });
+  expect(loadSessionEntry({ ...scope, sessionKey: targetKey })).toMatchObject({
+    visibility: "draft",
+  });
+  expect(loadSessionEntry(scope)).toMatchObject({ visibility: "shared" });
 });

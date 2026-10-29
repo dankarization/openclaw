@@ -167,6 +167,16 @@ export function planSessionMessageCut(
         }
       : {}),
     ...(params.mode === "fork" ? params.forkWorkspace : {}),
+    ...(params.mode === "fork"
+      ? {
+          access:
+            params.creationAccess ??
+            (currentEntry.access ? { mode: "creator" as const } : undefined),
+        }
+      : {}),
+    ...(params.mode === "fork" && params.creationVisibility
+      ? { visibility: params.creationVisibility }
+      : {}),
     ...(params.mode === "fork" && params.creation
       ? buildSessionCreationStamp(params.creation)
       : {}),

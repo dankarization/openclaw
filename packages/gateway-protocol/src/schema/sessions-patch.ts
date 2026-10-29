@@ -4,6 +4,7 @@ import { SESSION_AGENT_ATTENTION_ICON_IDS } from "../session-agent-status.js";
 import { closedObject } from "./closed-object.js";
 import { ErrorShapeSchema } from "./error-shape.js";
 import { NonEmptyString, SessionLabelString } from "./primitives.js";
+import { SessionAccessSchema } from "./session-access.js";
 import { SessionCommunicationPatchSchema } from "./sessions-communication.js";
 import { SessionPermissionModeSchema, SessionToolOverridesSchema } from "./sessions-row.js";
 import { stringLiteralUnion } from "./string-literal-union.js";
@@ -18,6 +19,8 @@ const ExpectedMarkedUnreadAt = Type.Optional(
 );
 
 const SessionsPatchMutationProperties = {
+  /** Creator/admin only; omission preserves confidentiality. */
+  access: Type.Optional(SessionAccessSchema),
   label: Type.Optional(Type.Union([SessionLabelString, Type.Null()])),
   /** Automatic device name, separate from explicit user renames; null clears it. */
   autoLabel: Type.Optional(Type.Union([SessionLabelString, Type.Null()])),

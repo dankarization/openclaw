@@ -44,7 +44,11 @@ export async function prepareRemoteIngressSessionRead(
     const { target } = prepared.readCurrent(getRuntimeConfig());
     const identity = principal.preparedSessionProfile;
     const visible = createProfileSessionEntryFilter(
-      { profileId: identity.profileId, sessionCap: principal.operatorRolePolicy?.sessions.others },
+      {
+        profileId: identity.profileId,
+        sessionCap: principal.operatorRolePolicy?.sessions.others,
+        cfg: getRuntimeConfig(),
+      },
       prepareSessionCreatorProfile(identity.profileId, identity.aliases),
     );
     if (!target || !visible(target.canonicalKey, target.entry)) {

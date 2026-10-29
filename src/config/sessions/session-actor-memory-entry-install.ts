@@ -15,7 +15,11 @@ import type { InternalSessionEntry as SessionEntry } from "./types.js";
 export function installSessionActorMemoryEntry(
   state: SessionActorMemoryState,
   entry: SessionEntry,
-  options: { providerReviewMutation?: boolean; consumePendingReset?: boolean } = {},
+  options: {
+    providerReviewMutation?: boolean;
+    consumePendingReset?: boolean;
+    accessMutation?: boolean;
+  } = {},
 ): SessionEntry {
   const previous = state.hot.entry;
   let next: SessionEntry = normalizeSessionEntryTimestamp({ ...entry, incognito: true });
@@ -23,6 +27,9 @@ export function installSessionActorMemoryEntry(
     throw new Error("Refusing invalid memory session entry identity");
   }
   next = preserveCreationStamp(next, previous);
+  if (previous && !options.accessMutation) {
+    next.access = previous.access;
+  }
   next.createdAt ??= previous?.updatedAt ?? Date.now();
   const sameWindow = previous?.sessionId === next.sessionId;
   const sameLifecycle = sameWindow && previous?.lifecycleRevision === next.lifecycleRevision;

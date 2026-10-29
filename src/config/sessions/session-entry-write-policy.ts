@@ -13,6 +13,7 @@ export function applySessionEntryWritePolicy(
   canonicalPreviousEntry: SessionEntry | undefined,
   options: {
     allowStoredAliases?: boolean;
+    accessMutation?: boolean;
     providerReviewMutation?: boolean;
     profileInvolvement?: SessionEntry["profileInvolvement"];
     previousEntry?: SessionEntry | null;
@@ -98,9 +99,20 @@ export function applySessionEntryWritePolicy(
     // Same-lifecycle bookkeeping cannot cancel the one-time reset owed by legacy state.
     normalizedEntry.updatedAt = 0;
   }
+  // A logical key retains confidentiality across transcript replacement and stale bookkeeping.
+  // Explicit access changes use the canonical replacement owner with its current-row grant.
+  if (canonicalPreviousEntry && !options.allowStoredAliases && !options.accessMutation) {
+    normalizedEntry.access = canonicalPreviousEntry.access;
+  }
   // The lifecycle-selected entry owns visibility copy-forward semantics.
   if (previousEntry && previousEntry.sessionId !== normalizedEntry.sessionId) {
-    delete normalizedEntry.visibility;
+    // A transcript replacement must not widen a private logical conversation.
+    // Other modes retain their existing lifecycle-selected copy-forward policy.
+    if (previousEntry.visibility === "draft" || normalizedEntry.visibility === "draft") {
+      normalizedEntry.visibility = "draft";
+    } else {
+      delete normalizedEntry.visibility;
+    }
   }
   if (normalizedEntry.archivedAt || normalizedEntry.incognito) {
     delete normalizedEntry.pendingExecNotifications;

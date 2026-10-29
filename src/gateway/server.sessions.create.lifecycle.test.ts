@@ -16,6 +16,7 @@ import {
   waitForGatewayActiveWork,
 } from "../infra/gateway-active-work.js";
 import { beginSessionEffect } from "../sessions/session-controller.lifecycle.js";
+import { sessionChanges } from "../sessions/session-row-changes.js";
 import { createDeferredCore } from "../shared/deferred.js";
 import { openOpenClawStateDatabase } from "../state/openclaw-state-db.js";
 import { ensureProfileForEmail } from "../state/user-profiles.js";
@@ -589,5 +590,39 @@ test("sessions.create replays an identical creation once and rejects conflicting
     );
   } finally {
     chatSend.mockRestore();
+  }
+});
+
+test("sessions.create admits web DMs privately and preserves explicit sharing overrides", async () => {
+  testState.sessionConfig = {
+    sharing: { creationDefaults: { visibility: "draft" } },
+  };
+  const key = "agent:main:dashboard:source-default-private";
+  const observed: Array<SessionEntry["visibility"]> = [];
+  const stop = sessionChanges.subscribe((change) => {
+    if ("sessionKey" in change && change.sessionKey === key) {
+      observed.push(readEntry(key)?.visibility);
+    }
+  });
+  try {
+    const created = await createSession({ key });
+    expect(created).toMatchObject({ ok: true, payload: { entry: { visibility: "draft" } } });
+    expect(observed.length).toBeGreaterThan(0);
+    expect(observed.every((visibility) => visibility === "draft")).toBe(true);
+    const sharedKey = "agent:main:dashboard:source-default-explicit-shared";
+    expect(await createSession({ key: sharedKey, visibility: "shared" })).toMatchObject({
+      ok: true,
+      payload: { entry: { visibility: "shared" } },
+    });
+    expect(await createSession({ key: sharedKey })).toMatchObject({
+      ok: true,
+      payload: { entry: { visibility: "shared" } },
+    });
+    expect(await createSession({ key, visibility: "shared" })).toMatchObject(
+      invalidCreate("visibility"),
+    );
+  } finally {
+    stop();
+    testState.sessionConfig = undefined;
   }
 });

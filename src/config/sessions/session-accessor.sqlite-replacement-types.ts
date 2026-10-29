@@ -12,6 +12,7 @@ import type { SessionEntry } from "./types.js";
 
 export type SqliteSessionEntryReplacement = SessionEntryReplacement & {
   previousSessionKeys?: readonly string[];
+  accessMutation?: boolean;
 };
 
 export type SessionEntryReplacementCommit = {

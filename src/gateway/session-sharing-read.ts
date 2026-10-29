@@ -1,7 +1,9 @@
 import { isPromiseLike } from "@openclaw/normalization-core/promise-like";
 import { ErrorCodes, errorShape } from "../../packages/gateway-protocol/src/index.js";
+import { GATEWAY_OWNER_PROFILE_ID } from "../../packages/gateway-protocol/src/schema/users.js";
 import { assertAdmittedRunOperatorAuthority } from "../agents/admitted-run-context.js";
 import type { SessionEntry } from "../config/sessions.js";
+import { canReadSessionAccess } from "../config/sessions/session-access.js";
 import { resolveSqliteSessionKey } from "../config/sessions/session-accessor.sqlite-scope-helpers.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { isIncognitoSessionKey } from "../routing/session-key.js";
@@ -69,7 +71,16 @@ export function canReceiveSessionEvent(params: {
         operatorScopeSatisfied("operator.read", client.connect.scopes ?? [])) &&
       (!policyConfig.gateway?.roles || operatorActor?.kind === "system") &&
       event !== "session.suggestion" &&
-      event !== "session.typing"
+      event !== "session.typing" &&
+      (operatorActor?.kind === "system" ||
+        client.authenticatedUserProfile?.profileId === GATEWAY_OWNER_PROFILE_ID ||
+        sessionKeys.every((key) => {
+          const target = params.prepared.target(key, params.agentId);
+          return (
+            target !== null &&
+            canReadSessionAccess(policyConfig, target.canonicalKey, target.entry, () => false)
+          );
+        }))
     );
   }
   const sharing = params.prepared.sharing;
@@ -82,6 +93,9 @@ export function canReceiveSessionEvent(params: {
     const target = params.prepared.target(sessionKey, params.agentId);
     // Deleted rows fail closed; their unscoped catalog invalidation still refreshes readers.
     if (!target) {
+      return false;
+    }
+    if (sharing.entryFilter?.(target.canonicalKey, target.entry) === false) {
       return false;
     }
     const isCreator = sharing.isCreator(target.entry.createdActor);
@@ -379,6 +393,7 @@ export function prepareProjectedSessionSharing(params: {
         profile && [...profile.aliases].toSorted(),
         policy,
         Boolean(cfg.gateway?.roles),
+        cfg.session?.sharing?.accessPolicy,
       ]));
     },
   };
@@ -391,35 +406,50 @@ export function createSessionListEntryFilter(
 ):
   | ((
       sessionKey: string | undefined,
-      entry: Pick<SessionEntry, "createdActor" | "visibility" | "incognito">,
+      entry: Pick<SessionEntry, "createdActor" | "visibility" | "incognito" | "access">,
     ) => boolean)
   | undefined {
   const operatorActor = resolveGatewayOperatorRoleActor(params.client);
   const identity = sharingIdentity(params.client, operatorActor);
-  if (isGatewayAdmin(params.client) || (!identity && operatorActor?.kind === "system")) {
+  if (
+    isGatewayAdmin(params.client) ||
+    (!identity &&
+      (operatorActor?.kind === "system" ||
+        params.client?.authenticatedUserProfile?.profileId === GATEWAY_OWNER_PROFILE_ID))
+  ) {
     return undefined;
   }
   if (!identity) {
-    return params.cfg?.gateway?.roles ? () => false : undefined;
+    return params.cfg?.gateway?.roles
+      ? () => false
+      : (key, entry) => canReadSessionAccess(params.cfg, key, entry, () => false);
   }
   const sessionCap = prepared
     ? prepared.sessionCap
     : params.cfg && operatorSessionCap(params.client, params.cfg);
-  return createProfileSessionEntryFilter({ profileId: identity.id, sessionCap }, isCreator);
+  return createProfileSessionEntryFilter(
+    { profileId: identity.id, sessionCap, cfg: params.cfg },
+    isCreator,
+  );
 }
 
 export function createProfileSessionEntryFilter(
-  params: { profileId: string; sessionCap?: ReturnType<typeof operatorSessionCap> },
+  params: {
+    profileId: string;
+    sessionCap?: ReturnType<typeof operatorSessionCap>;
+    cfg?: OpenClawConfig;
+  },
   isCreator?: ReturnType<typeof prepareSessionCreatorProfile>,
 ) {
   // Unprepared filters (notably preview) may survive yields and must read current aliases.
   const creatorMatches = isCreator ?? ((actor) => isSessionCreatorProfile(actor, params.profileId));
   return (
     sessionKey: string | undefined,
-    entry: Pick<SessionEntry, "createdActor" | "visibility" | "incognito">,
+    entry: Pick<SessionEntry, "createdActor" | "visibility" | "incognito" | "access">,
   ) =>
     entry.incognito !== true &&
     !isIncognitoSessionKey(sessionKey) &&
+    canReadSessionAccess(params.cfg, sessionKey, entry, creatorMatches) &&
     (creatorMatches(entry.createdActor) ||
       (params.sessionCap !== "none" && resolveSessionVisibility(entry) !== "draft"));
 }

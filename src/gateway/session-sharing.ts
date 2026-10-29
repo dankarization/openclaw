@@ -158,6 +158,14 @@ export function resolveSessionMutationAuthorization(request: SessionMutationAuth
         sessionKey: targetRef.sessionKey,
         target,
       });
+    if (target && !error) {
+      const filter = policy
+        ? policy.entryFilter
+        : createSessionListEntryFilter({ cfg, client: params.client });
+      if (filter?.(target.canonicalKey, target.entry) === false) {
+        return hiddenSessionNotFound(target.canonicalKey);
+      }
+    }
     if (
       error ||
       !target ||

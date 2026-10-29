@@ -116,19 +116,23 @@ export function prepareSessionMutationAuthorizationRequest(
     params.method === "sessions.patchMany" && isRecord(params.requestParams)
       ? params.requestParams.patch
       : params.requestParams;
+  const requiresAccessAuthority =
+    ["sessions.create", "sessions.patch", "sessions.patchMany"].includes(params.method) &&
+    isRecord(patch) &&
+    Object.hasOwn(patch, "access");
   const requiresCommunicationAuthority =
     ["sessions.create", "sessions.patch", "sessions.patchMany"].includes(params.method) &&
     isRecord(patch) &&
     Object.hasOwn(patch, "communication");
   if (
-    requiresCommunicationAuthority &&
+    (requiresCommunicationAuthority || requiresAccessAuthority) &&
     (!params.client || isSyntheticGatewayCaller(params.client))
   ) {
     return {
       ok: false as const,
       error: errorShape(
         ErrorCodes.FORBIDDEN,
-        "Session communication settings require a direct human request.",
+        "Session communication and access settings require a direct human request.",
       ),
     };
   }
@@ -153,13 +157,19 @@ export function prepareSessionMutationAuthorizationRequest(
     requiresSessionFacts:
       !adminBypass ||
       requiresCommunicationAuthority ||
+      requiresAccessAuthority ||
       bindsProgressLifecycle ||
       params.expectedTarget !== undefined,
     targetOwnership: {
       requireOwner:
         requiresCommunicationAuthority ||
+        requiresAccessAuthority ||
         isSessionArchiveMutation(params.method, params.requestParams),
-      ownerAction: requiresCommunicationAuthority ? "change communication settings" : undefined,
+      ownerAction: requiresAccessAuthority
+        ? "change confidential access"
+        : requiresCommunicationAuthority
+          ? "change communication settings"
+          : undefined,
     },
   };
 }

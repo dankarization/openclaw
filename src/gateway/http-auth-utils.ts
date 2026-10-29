@@ -429,7 +429,7 @@ export async function authorizeControlUiReadRequestOrReply(
 /** Decides whether a session-byte route may serve bytes for one resolved session entry. */
 type ControlUiSessionReadFilter = (
   sessionKey: string | undefined,
-  entry: Pick<SessionEntry, "createdActor" | "visibility" | "incognito">,
+  entry: Pick<SessionEntry, "createdActor" | "visibility" | "incognito" | "access">,
 ) => boolean;
 
 type AuthorizedControlUiSessionOwnerReadRequest = AuthorizedControlUiReadRequest &
@@ -470,7 +470,11 @@ export async function authorizeControlUiSessionOwnerReadRequestOrReply(
   }
   // Aliases were prepared with the profile; the filter never reads resident state later.
   const canReadSession = createProfileSessionEntryFilter(
-    { profileId: profile.profileId, sessionCap: requestAuth.operatorRolePolicy?.sessions.others },
+    {
+      profileId: profile.profileId,
+      sessionCap: requestAuth.operatorRolePolicy?.sessions.others,
+      cfg: params.cfg ?? getRuntimeConfig(),
+    },
     prepareSessionCreatorProfile(profile.profileId, profile.aliases),
   );
   return { ...requestAuth, canReadSession };

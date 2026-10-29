@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
+import { resolveSessionCreationVisibility } from "../../../config/sessions/creation-visibility.js";
 import {
   acquireSessionActorStorage,
   runWithSessionActorStorage,
@@ -290,6 +291,8 @@ export async function createInitialSubagentSession(input: {
                       }
                     : {}),
                   ...childSessionIdentity,
+                  access: { mode: "creator" },
+                  ...resolveSessionCreationVisibility(params.cfg, params.childSessionKey),
                   // Stamp after all request patches so model input cannot create a grant.
                   ...parentLineage,
                   ...(parentEntry?.skillLibrarySelections

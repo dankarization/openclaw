@@ -21,6 +21,7 @@ import {
   MODEL_SELECTION_LOCKED_PARENT_FORK_MESSAGE,
 } from "../auto-reply/reply/session-fork.js";
 import type { InternalSessionEntry, SessionEntry } from "../config/sessions.js";
+import { resolveSessionCreationVisibility } from "../config/sessions/creation-visibility.js";
 import { resolveAgentMainSessionKey } from "../config/sessions/main-session.js";
 import {
   createSessionEntryWithTranscript,
@@ -690,7 +691,19 @@ async function createGatewaySessionInScope(
         if (freshSessionError) {
           return freshSessionError;
         }
-        const visibility = resolveSessionCreateVisibility(params, existingEntry);
+        if (
+          params.access &&
+          existingEntry &&
+          JSON.stringify(params.access) !== JSON.stringify(existingEntry.access)
+        ) {
+          return invalidSessionRequest(
+            "sessions.create access requires a new session; use sessions.patch to manage an existing audience",
+          );
+        }
+        const visibility = resolveSessionCreateVisibility(
+          { ...params, sessionKey: target.canonicalKey },
+          existingEntry,
+        );
         if (!visibility.ok) {
           return visibility;
         }
@@ -840,6 +853,14 @@ async function createGatewaySessionInScope(
             ? buildSessionCreationStamp({ ...creation, sandbox: creationSandbox, incognito })
             : {}),
           ...(createdNewEntry && inheritedSpawnOwner ? { owner: inheritedSpawnOwner } : {}),
+          ...(createdNewEntry
+            ? {
+                access:
+                  params.access ??
+                  resolveSessionCreationVisibility(params.cfg, target.canonicalKey).access ??
+                  (params.parentSessionKey ? { mode: "creator" as const } : undefined),
+              }
+            : {}),
           ...(visibility.value && createdNewEntry ? { visibility: visibility.value } : {}),
           ...projectPreparedSessionWorkspace(existingEntry, {
             projectId,

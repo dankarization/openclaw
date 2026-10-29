@@ -67,6 +67,7 @@ import { resolveMaintenanceConfig } from "./store-maintenance-runtime.js";
 
 export type SessionEntryCanonicalReplacement = SessionEntryReplacement & {
   previousSessionKeys: readonly string[];
+  accessMutation?: boolean;
 };
 
 type ReplacementProjectionOptions = {
@@ -665,6 +666,7 @@ export async function applySessionEntryCanonicalReplacements<T>(
     (replacements) =>
       [...(replacements ?? [])].map((replacement) => ({
         entry: replacement.entry,
+        accessMutation: replacement.accessMutation,
         previousSessionKeys: uniqueStrings(
           replacement.previousSessionKeys.map((key) => key.trim()).filter(Boolean),
         ),

@@ -364,3 +364,23 @@ it("commits group and delivery facts with creation for one host-bound admission"
     expect(takeInProcessFreshChildSession(request)).toBeUndefined();
   });
 });
+
+it("creates a persistent child privately even when its parent is Shared", async () => {
+  await withOpenClawTestState({ scenario: "minimal" }, async () => {
+    const storePath = resolveOpenClawAgentSqlitePath({ agentId: "main" });
+    await upsertSessionEntryCore(
+      { agentId: "main", sessionKey, storePath },
+      {
+        sessionId: "shared-parent",
+        updatedAt: 1,
+        visibility: "shared",
+      },
+    );
+    const created = await spawn({
+      cfg: { session: { sharing: { creationDefaults: { visibility: "draft" } } } },
+    });
+    expect(created).toBeDefined();
+    expect(readEntry(storePath, childSessionKey)).toMatchObject({ visibility: "draft" });
+    expect(readEntry(storePath, sessionKey)).toMatchObject({ visibility: "shared" });
+  });
+});

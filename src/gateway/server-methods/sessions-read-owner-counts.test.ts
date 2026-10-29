@@ -333,3 +333,54 @@ it("updates personal membership after owner, participant, and archive publicatio
     ]);
     expect(archived.ownerSessionCounts).toEqual([{ profileId: ada, open: 2, running: 0 }]);
   }));
+
+it("revokes a source-bound audience before the next cached list without using Draft", () =>
+  withOpenClawTestState({ scenario: "minimal" }, async () => {
+    const creator = ensureProfileForEmail("acl-creator@example.test").id;
+    const selected = ensureProfileForEmail("acl-selected@example.test").id;
+    const outsider = ensureProfileForEmail("acl-outsider@example.test").id;
+    const rule = {
+      agentId: "main",
+      channel: "telegram",
+      peerId: "-100123",
+      profileIds: [selected],
+    };
+    const config = {
+      agents: { entries: { main: {} } },
+      gateway: {
+        roles: {
+          default: "staff",
+          definitions: {
+            staff: {
+              agents: ["main"],
+              scopes: ["operator.read", "operator.write"],
+              sessions: { others: "write" as const },
+            },
+          },
+        },
+      },
+      session: { sharing: { accessPolicy: { default: "creator" as const, groups: [rule] } } },
+    };
+    setRuntimeConfigSnapshot(config);
+    const context = requestContext(config);
+    const sessionKey = "agent:main:telegram:group:-100123:topic:7";
+    replaceSessionEntrySync(
+      { agentId: "main", sessionKey },
+      {
+        ...profileEntry("confidential", Date.now(), creator),
+        visibility: "shared",
+        access: { mode: "source" },
+      },
+    );
+    const member = identifiedClient(selected);
+    const other = identifiedClient(outsider);
+    const own = identifiedClient(creator);
+    const read = (client: typeof member) =>
+      listSessions({ client, context, request: { archived: "all", limit: 100 } });
+    expect((await read(member)).sessions.map((row) => row.key)).toEqual([sessionKey]);
+    expect((await read(other)).sessions).toEqual([]);
+    // Same-object policy edits must not reuse an audience-filtered list vector.
+    rule.profileIds = [];
+    expect((await read(member)).sessions).toEqual([]);
+    expect((await read(own)).sessions.map((row) => row.key)).toEqual([sessionKey]);
+  }));
