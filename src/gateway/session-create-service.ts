@@ -104,6 +104,7 @@ import type {
   GatewaySessionCommitResult,
   PreparedGatewaySessionLifecycle,
 } from "./session-create-service.types.js";
+import { authorizeSessionSourceCreation } from "./session-create-source-access.js";
 import {
   readRequestedSessionCreateTarget,
   readSessionCreateTarget,
@@ -663,6 +664,10 @@ async function createGatewaySessionInScope(
         // This callback owns generated and explicit keys alike; no existing row
         // is the canonical signal that this request will actually create one.
         if (!existingEntry) {
+          const sourceError = authorizeSessionSourceCreation(params, target.canonicalKey);
+          if (sourceError) {
+            return { ok: false, error: sourceError };
+          }
           const creationError = authorizeGatewaySessionCreation({
             cfg: params.cfg,
             agentId: target.agentId,
@@ -1081,7 +1086,15 @@ async function createGatewaySessionInScope(
               requireWriteSuccess: true,
             }
           : {}),
-        ...(commitGuard ? { commitGuard } : {}),
+        commitGuard: () => {
+          commitGuard?.();
+          if (createdNewEntry) {
+            const sourceError = authorizeSessionSourceCreation(params, target.canonicalKey);
+            if (sourceError) {
+              throw new Error(sourceError.message);
+            }
+          }
+        },
         followRegistration,
         ...(bindPreparedCreation || params.bindSharingCreation
           ? {

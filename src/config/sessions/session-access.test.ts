@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { buildAgentPeerSessionKey } from "../../routing/session-key.js";
 import type { OpenClawConfig } from "../types.openclaw.js";
 import { SessionSchema } from "../zod-schema.session-config.js";
 import { resolveSessionCreationVisibility } from "./creation-visibility.js";
@@ -110,6 +111,33 @@ describe("confidential session access, independent of visibility and participati
       ),
     ).toBe(true);
     expect(canReadSessionAccess(accountCfg, group, entry, matches("selected"))).toBe(false);
+  });
+  it("matches canonical default-account inbound groups without making omitted account a wildcard", () => {
+    const inboundKey = buildAgentPeerSessionKey({
+      agentId: "main",
+      channel: "telegram",
+      accountId: "default",
+      peerKind: "group",
+      peerId: "-100123",
+    });
+    expect(inboundKey).toBe(group);
+    const initial = resolveSessionCreationVisibility(cfg, inboundKey);
+    expect(initial.access).toEqual({ mode: "source" });
+    for (const key of [inboundKey, inboundKey + ":topic:7", inboundKey + ":thread:8"]) {
+      expect(canReadSessionAccess(cfg, key, { ...entry, ...initial }, matches("selected"))).toBe(
+        true,
+      );
+    }
+    for (const accountId of ["default", "other-bot"]) {
+      expect(
+        canReadSessionAccess(
+          cfg,
+          `agent:main:telegram:${accountId}:group:-100123:topic:7`,
+          entry,
+          matches("selected"),
+        ),
+      ).toBe(false);
+    }
   });
   it("revokes source audiences on the next decision, including config removal and legacy existing rows", () => {
     const revoked: OpenClawConfig = {

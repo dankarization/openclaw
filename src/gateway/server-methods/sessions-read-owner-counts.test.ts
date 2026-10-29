@@ -11,6 +11,7 @@ import {
 } from "../../config/sessions/session-accessor.js";
 import { recordSessionParticipant } from "../../config/sessions/session-accessor.sqlite-participants.native.js";
 import type { SessionEntry } from "../../config/sessions/types.js";
+import type { OpenClawConfig } from "../../config/types.js";
 import { registerAgentRunCapacityWait } from "../../infra/agent-run-capacity-wait.js";
 import {
   clearAgentRunContext,
@@ -359,8 +360,8 @@ it("revokes a source-bound audience before the next cached list without using Dr
           },
         },
       },
-      session: { sharing: { accessPolicy: { default: "creator" as const, groups: [rule] } } },
-    };
+      session: { sharing: { accessPolicy: { default: "creator", groups: [rule] } } },
+    } satisfies OpenClawConfig;
     setRuntimeConfigSnapshot(config);
     const context = requestContext(config);
     const sessionKey = "agent:main:telegram:group:-100123:topic:7";

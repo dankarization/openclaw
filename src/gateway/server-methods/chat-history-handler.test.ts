@@ -335,6 +335,8 @@ it.each(["chat.history", "chat.startup"] as const)(
 it.each([
   { method: "chat.history", change: "revocation", code: "INVALID_REQUEST" },
   { method: "chat.startup", change: "revocation", code: "INVALID_REQUEST" },
+  { method: "chat.history", change: "access revocation", code: "INVALID_REQUEST" },
+  { method: "chat.startup", change: "access revocation", code: "INVALID_REQUEST" },
   { method: "chat.history", change: "replacement", code: "UNAVAILABLE" },
   { method: "chat.startup", change: "replacement", code: "UNAVAILABLE" },
   { method: "chat.history", change: "reset", code: "UNAVAILABLE" },
@@ -346,6 +348,9 @@ it.each([
   ({ method, change, code }) =>
     withHistoryState(async () => {
       const scope = await seedSession("delta-publication", {
+        ...(change === "access revocation"
+          ? { access: { mode: "audience" as const, profileIds: ["viewer"] } }
+          : {}),
         lifecycleRevision: "before-reset",
         sessionStartedAt: 1,
         updatedAt: 1,
@@ -392,7 +397,9 @@ it.each([
             ? { sessionId: "replacement" }
             : change === "reset"
               ? { lifecycleRevision: "after-reset", sessionStartedAt: 3 }
-              : { visibility: change === "revocation" ? "draft" : "read-only" },
+              : change === "access revocation"
+                ? { access: { mode: "creator" } }
+                : { visibility: change === "revocation" ? "draft" : "read-only" },
         );
       } finally {
         release.resolve();

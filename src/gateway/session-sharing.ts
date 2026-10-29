@@ -17,6 +17,7 @@ import {
   resolveGatewayOperatorRoleActor,
 } from "./operator-role-policy.js";
 import type { SessionMutationAuthorization } from "./server-methods/types.js";
+import { authorizeSessionSourceCreation } from "./session-create-source-access.js";
 import { isSessionCreatorProfile } from "./session-creator.js";
 import { isRequiredSessionTargetMethod, mayCreateSessionTarget } from "./session-method-policy.js";
 import { SessionMutationAuthorizationChangedError } from "./session-mutation-authorization-error.js";
@@ -145,6 +146,21 @@ export function resolveSessionMutationAuthorization(request: SessionMutationAuth
     visibilityAuthorized?: boolean,
   ) => {
     const cfg = readPolicyConfig();
+    if (!target && (mayCreateSessionTarget(params.method) || authorizesAgentRun)) {
+      const sourceError = authorizeSessionSourceCreation(
+        {
+          cfg,
+          operatorRoleActor: params.client
+            ? resolveGatewayOperatorRoleActor(params.client)
+            : { kind: "system" },
+          requestingOperatorScopes: params.client?.connect.scopes,
+        },
+        resolveSessionMutationWriteRoute(cfg, targetRef).canonicalKey,
+      );
+      if (sourceError) {
+        return sourceError;
+      }
+    }
     const policy = preparedPolicy(cfg, members);
     const error =
       (target && authorizesAgentRun

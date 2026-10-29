@@ -21,6 +21,7 @@ import type {
   CreateGatewaySessionParams,
   CreateGatewaySessionResult,
 } from "./session-create-service.types.js";
+import { authorizeSessionSourceCreation } from "./session-create-source-access.js";
 import { resolvePluginSessionOwnershipError } from "./session-plugin-ownership.js";
 import { resolveSessionCreateAgentId } from "./session-request-agent.js";
 import { invalidSessionRequest, unavailableSessionRequest } from "./session-request-error.js";
@@ -186,6 +187,10 @@ export async function readSessionCreateTarget(
       }
     }
     if (!currentTargetEntry) {
+      const sourceError = authorizeSessionSourceCreation(params, target.canonicalKey);
+      if (sourceError) {
+        return { ok: false, error: sourceError };
+      }
       const creationError = authorizeGatewaySessionCreation({
         cfg: params.cfg,
         agentId: target.agentId,

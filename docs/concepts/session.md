@@ -122,6 +122,10 @@ An explicit per-session access policy takes precedence. Existing Drafts stay Dra
 their membership remains inactive until their creator/admin separately changes visibility.
 Incognito guarantees, creator/admin authority, role ceilings and agent ceilings are unchanged.
 A named audience restricts access; it does not grant an otherwise disallowed agent or scope.
+When this policy is enabled, only trusted channel ingress or an authenticated gateway
+administrator can initially create a channel-shaped session key. Web operators, including
+selected audience members, cannot preclaim a group/DM key and acquire creator authority;
+they can create ordinary web sessions or access an existing authorized channel session.
 
 ### Manage a single confidential audience
 
