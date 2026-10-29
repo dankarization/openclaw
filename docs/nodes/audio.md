@@ -242,7 +242,7 @@ provider-wide rather than scoped to the audio model entry.
         enabled: true,
         echoTranscript: true,
         echoFormat: '📝 "{transcript}"',
-        echoSilent: true, // optional: no push notification for the echo
+        echoSilent: true, // optional: Telegram delivers the echo with a muted (soundless) notification
       },
     },
   },

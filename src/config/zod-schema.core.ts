@@ -707,8 +707,9 @@ const ToolsMediaAudioSchema = ToolsMediaCapabilitySchema.unwrap()
      */
     echoFormat: z.string().optional(),
     /**
-     * Deliver the transcript echo without a push notification on channels that
-     * support silent sends (for example Telegram). Default: false.
+     * Deliver the transcript echo silently on channels that support it (for
+     * example Telegram, where the notification still appears but without sound).
+     * Default: false.
      */
     echoSilent: z.boolean().optional(),
   })

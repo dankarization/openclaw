@@ -23,7 +23,7 @@ export const MEDIA_AUDIO_FIELD_HELP = {
   "tools.media.audio.echoFormat":
     "Format the echoed transcript with a {transcript} placeholder. Keep the placeholder intact so delivery includes the transcript.",
   "tools.media.audio.echoSilent":
-    "Send the transcript echo without a notification on channels that support silent delivery, such as Telegram. Enable this when the agent reply should be the only alert.",
+    "Deliver the transcript echo silently (the notification arrives without sound) on channels that support it, such as Telegram. Enable this when the agent reply should be the only audible alert.",
 } satisfies Record<string, string>;
 
 export const MEDIA_AUDIO_FIELD_LABELS: Record<keyof typeof MEDIA_AUDIO_FIELD_HELP, string> = {
