@@ -5,6 +5,8 @@ import type { WebSocket } from "ws";
 import type { ResponseFrame } from "../../packages/gateway-protocol/src/schema/frames.js";
 import {
   appendTranscriptMessage,
+  listSessionPendingInputs,
+  loadTranscriptEventsSync,
   upsertSessionEntryCore,
 } from "../config/sessions/session-accessor.js";
 import { setUserProfileRole } from "../state/user-profile-writes.worker.js";
@@ -188,6 +190,24 @@ async function deniedSend(socket: WebSocket, key: string) {
   return await response;
 }
 
+async function expectHiddenSendDenied(
+  socket: WebSocket,
+  scope: Awaited<ReturnType<typeof seedGroup>>,
+) {
+  const transcript = loadTranscriptEventsSync(scope);
+  const pending = await listSessionPendingInputs(scope);
+  const response = await deniedSend(socket, scope.sessionKey);
+  expect(response, JSON.stringify(response.error)).toMatchObject({
+    ok: false,
+    error: {
+      code: "INVALID_REQUEST",
+      message: `Session "${scope.sessionKey}" was not found.`,
+    },
+  });
+  expect(await listSessionPendingInputs(scope)).toEqual(pending);
+  expect(loadTranscriptEventsSync(scope)).toEqual(transcript);
+}
+
 test("refuses an unidentified trusted-proxy connection", async () => {
   const { socket, response } = await openIdentity();
   try {
@@ -240,7 +260,8 @@ test.each(["creator", "selected", "outsider", "admin"] as const)(
   "enforces discovery, reads and writes for %s with independent confidential access",
   async (actor) => {
     const topic = ["creator", "selected", "outsider", "admin"].indexOf(actor) + 1;
-    const { sessionKey: key } = await seedGroup(topic);
+    const scope = await seedGroup(topic);
+    const key = scope.sessionKey;
     const socket = await client(actor);
     const allowed = actor !== "outsider";
     const list = await rpcReq<{ sessions: Array<{ key: string }> }>(socket, "sessions.list", {
@@ -269,21 +290,20 @@ test.each(["creator", "selected", "outsider", "admin"] as const)(
     expect((await rpcReq(socket, "sessions.patch", { key, label: "acl-write-" + actor })).ok).toBe(
       allowed,
     );
-    if (!allowed)
-      expect(await deniedSend(socket, key)).toMatchObject({
-        ok: false,
-        error: { code: "FORBIDDEN" },
-      });
+    if (!allowed) await expectHiddenSendDenied(socket, scope);
   },
 );
 
 test("revokes the selected audience before its next disclosure or write", async () => {
-  const { sessionKey: key, sessionId } = await seedGroup(8);
+  const scope = await seedGroup(8);
+  const { sessionKey: key, sessionId } = scope;
   const member = await client("selected");
   const access = { key, expectedSessionId: sessionId, access: { mode: "creator" } };
   const before = await rpcReq(member, "chat.history", { sessionKey: key, limit: 10 });
   expect(JSON.stringify(before.payload ?? {}).includes(text)).toBe(true);
-  expect((await rpcReq(member, "sessions.patch", access)).ok).toBe(false);
+  const rejected = await rpcReq(member, "sessions.patch", access);
+  expect(rejected).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+  expect(rejected.error?.message).toContain("Only the session creator or an admin");
   const revoked = await rpcReq(await client("creator"), "sessions.patch", access);
   expect(revoked.ok, JSON.stringify(revoked.error)).toBe(true);
   const described = await rpcReq<{ session: { key: string } | null }>(member, "sessions.describe", {
@@ -293,5 +313,5 @@ test("revokes the selected audience before its next disclosure or write", async 
   const history = await rpcReq(member, "chat.history", { sessionKey: key, limit: 10 });
   expect(JSON.stringify(history.payload ?? {}).includes(text)).toBe(false);
   expect((await rpcReq(member, "sessions.patch", { key, label: "revoked" })).ok).toBe(false);
-  expect(await deniedSend(member, key)).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+  await expectHiddenSendDenied(member, scope);
 });
