@@ -4,7 +4,19 @@ import { resolveSessionStorePathCore } from "../../config/sessions/paths.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { createCronExecutionId } from "../../cron/run-id.js";
 import { resolveCreatorSandbox } from "../../gateway/operator-role-policy.js";
-import { readExecRequestOwners } from "../../infra/exec-request-context.js";
+import {
+  readExecRequestOwners,
+  withExecRequestOwners,
+  type ExecRequestOwner,
+} from "../../infra/exec-request-context.js";
+import {
+  resolveSystemEventQueueKey,
+  withSystemEventOwner,
+} from "../../infra/system-event-ownership.js";
+import {
+  claimSystemEventTurn,
+  enqueueRequiredSystemEventEntry,
+} from "../../infra/system-events.js";
 import { channelRouteTargetsMatchExact } from "../../plugin-sdk/channel-route.js";
 import { normalizeAccountId } from "../../routing/account-id.js";
 import { normalizeAgentId } from "../../routing/session-key.js";
@@ -20,6 +32,7 @@ import {
   readSessionEventTargetEnvironment,
   readSessionEventTargetOperatorAuthority,
   readSessionEventTargetOwnerContinuation,
+  readSessionEventTargetRequesterOwner,
   resolveSessionEventKey,
 } from "./session-event-target.js";
 import { setChannelSourceTurnId } from "./source-turn-id.js";
@@ -57,11 +70,17 @@ export function prepareSessionEventInput(text: string, options: SessionEventOpti
   return { cfg, configPublication, agentId, sessionKey, env, storePath, operatorAuthority };
 }
 
-/** Validate existing occurrence custody after the caller checks its current abort signal. */
-export function assertSessionEventOccurrenceInput(
-  text: string,
-  options: SessionEventOptions,
-): void {
+/** Validate and claim producer input; execution consumes this occurrence custody. */
+export function claimSessionEventOccurrenceInput(params: {
+  text: string;
+  options: SessionEventOptions;
+  sessionKey: string;
+  agentId: string;
+  route?: DeliveryContext;
+  execRequestOwners?: readonly ExecRequestOwner[];
+  cancel: () => void;
+}) {
+  const { text, options, sessionKey, agentId, route, execRequestOwners, cancel } = params;
   if (options.preserveOccurrenceOnRejection && !options.occurrences?.length) {
     throw new Error("Preserving a rejected event requires its original queued occurrence");
   }
@@ -71,6 +90,49 @@ export function assertSessionEventOccurrenceInput(
   ) {
     throw new Error("Session event occurrence text changed before admission");
   }
+  const freshOccurrence = options.occurrences
+    ? undefined
+    : enqueueRequiredSystemEventEntry(
+        text,
+        withExecRequestOwners(
+          withSystemEventOwner(
+            {
+              sessionKey,
+              contextKey: options.contextKey,
+              deliveryContext: route,
+            },
+            agentId,
+          ),
+          execRequestOwners,
+        ),
+        // Refuse matching keyed plugin and tool-handoff retries; unkeyed and host occurrences stay distinct.
+        {
+          allowDuplicate:
+            (options.source !== "plugin" && options.source !== "tool_handoff") ||
+            !options.contextKey?.trim(),
+        },
+      );
+  const occurrences = options.occurrences
+    ? [...options.occurrences]
+    : freshOccurrence
+      ? [freshOccurrence]
+      : [];
+  const occurrence = occurrences[0];
+  if (!occurrence?.id || occurrences.some((event) => !event.id)) {
+    throw new Error("Session event was not enqueued: an identical occurrence is already pending");
+  }
+  const occurrenceId = occurrence.id;
+  const eventText = occurrences.map((event) => event.text).join("\n");
+  const ownership = claimSystemEventTurn(
+    resolveSystemEventQueueKey(sessionKey, agentId),
+    occurrences,
+    cancel,
+    agentId,
+  );
+  if (!ownership) {
+    throw new Error("Session event occurrence no longer available for admission");
+  }
+  return { occurrence, occurrences, occurrenceId, eventText, ownership };
 }
 
 export function resolveSessionEventExecRequestOwners(
@@ -158,9 +220,12 @@ export function buildSessionEventContext(params: {
     ? automation.operatorAuthority
     : options.source === "plugin" ||
         options.source === "tool_handoff" ||
-        options.source === "restart"
+        options.source === "restart" ||
+        // A scheduler turn about a job (not its run) acts for the job's restored operator source.
+        (!automation && (options.source === "cron" || options.source === "cron_failure_repair"))
       ? readSessionEventTargetOperatorAuthority(target)
       : undefined;
+  const requesterOwnerCheck = readSessionEventTargetRequesterOwner(target)?.assertCurrent;
   if (
     operatorAuthority &&
     (automation?.controlUiAdmin ||
@@ -177,6 +242,30 @@ export function buildSessionEventContext(params: {
         params.assertCurrent();
         return true;
       },
+      // Work that outlives this occurrence keeps only the live operator source.
+      successor: {
+        operatorAuthority,
+        isCurrent: () => {
+          operatorAuthority.assertCurrent();
+          return true;
+        },
+      },
+    });
+  } else if (requesterOwnerCheck) {
+    // Work the scheduler started for a job keeps its requester's owner tools only while
+    // the requester is still an owner, rechecked before each owner-only effect.
+    bindCommandOwnerAuthority(ctx, {
+      isCurrent: () => {
+        params.assertCurrent();
+        requesterOwnerCheck();
+        return true;
+      },
+      successor: {
+        isCurrent: () => {
+          requesterOwnerCheck();
+          return true;
+        },
+      },
     });
   } else {
     const commandOwner = readSessionEventTargetCommandOwner(target);
@@ -189,6 +278,11 @@ export function buildSessionEventContext(params: {
         isCurrent: () => {
           params.assertCurrent();
           return authority.isCurrent(getSessionEventRuntimeConfig());
+        },
+        // Work that outlives this occurrence keeps only the requester's live owner check.
+        successor: {
+          recoveryReference: authority.recoveryReference,
+          isCurrent: () => authority.isCurrent(getSessionEventRuntimeConfig()),
         },
       });
       // Owner-checked effects (for example Gateway maintenance) recheck this sender at
