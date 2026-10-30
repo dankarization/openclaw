@@ -294,8 +294,8 @@ export function renderChatComposerView(
       data-composer-editing={mobileEditing() ? "true" : "false"}
       data-composer-keyboard={props.mobileKeyboardVisible ? "true" : undefined}
       data-composer-keyboard-navigation={keyboardNavigation() ? "true" : undefined}
-      onPointerEnter={prepareComposerWidthEdge}
-      onKeyDown={prepareComposerWidthEdge}
+      onPointerEnter={() => void prepareComposerWidthEdge()}
+      onKeyDown={() => void prepareComposerWidthEdge()}
     >
       {lifecycle}
       <div class="agent-chat__composer-float" ref={[elementRef(props.onComposerFloatRef)]}>
@@ -400,6 +400,7 @@ export function renderChatComposerView(
               {
                 "agent-chat__input--offline": props.offline,
                 "agent-chat__input--dictating": context().dictation?.active,
+                "agent-chat__input--submit-queued": context().submitQueued,
                 "agent-chat__input--disabled": !context().canCompose,
               },
             ]}
