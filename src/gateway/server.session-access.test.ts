@@ -74,7 +74,7 @@ beforeAll(async () => {
   for (const actor of Object.keys(emails) as Actor[]) {
     profileIds.set(actor, ensureProfileForEmail(emails[actor]).id);
   }
-  await setUserProfileRole(profileIds.get("admin")!, "admin");
+  setUserProfileRole(profileIds.get("admin")!, "admin");
   await configureAccess();
   // Match the session-create harness: lazy loading is not RPC execution.
   await import("./server-methods/sessions-create.js");
@@ -85,13 +85,17 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  for (const socket of people.values()) socket.terminate();
+  for (const socket of people.values()) {
+    socket.terminate();
+  }
   await harness?.close();
 });
 
 async function openIdentity(email?: string) {
   const stateDir = process.env.OPENCLAW_STATE_DIR;
-  if (!stateDir) throw new Error("Gateway fixture must own an isolated state directory");
+  if (!stateDir) {
+    throw new Error("Gateway fixture must own an isolated state directory");
+  }
   const socket = await harness.openWs({
     origin: BROWSER_ORIGIN,
     "x-forwarded-for": "203.0.113.50",
@@ -125,7 +129,9 @@ async function openIdentity(email?: string) {
 
 async function client(actor: Actor) {
   const existing = people.get(actor);
-  if (existing) return existing;
+  if (existing) {
+    return existing;
+  }
   const { socket, response } = await openIdentity(emails[actor]);
   if (!response.ok) {
     socket.terminate();
@@ -290,7 +296,9 @@ test.each(["creator", "selected", "outsider", "admin"] as const)(
     expect((await rpcReq(socket, "sessions.patch", { key, label: "acl-write-" + actor })).ok).toBe(
       allowed,
     );
-    if (!allowed) await expectHiddenSendDenied(socket, scope);
+    if (!allowed) {
+      await expectHiddenSendDenied(socket, scope);
+    }
   },
 );
 
