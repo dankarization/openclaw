@@ -1,6 +1,8 @@
+import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { beforeEach, expect, test } from "vitest";
+import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 import type { WebSocket } from "ws";
+import type { ResponseFrame } from "../../packages/gateway-protocol/src/schema/frames.js";
 import {
   appendTranscriptMessage,
   upsertSessionEntryCore,
@@ -14,211 +16,282 @@ import {
   connectReq,
   CONTROL_UI_CLIENT,
   installGatewayTestHooks,
-  openWs,
+  onceMessage,
   rpcReq,
   testState,
-  TRUSTED_BROWSER_HEADERS,
-  withGatewayServer,
 } from "./server.auth.test-helpers.js";
+import { createGatewaySuiteHarness } from "./test-helpers.js";
 
 installGatewayTestHooks({ scope: "suite" });
 
-beforeEach(async () => {
-  // Match the session-create harness: lazy family loading is not RPC execution.
-  await import("./server-methods/sessions-create.js");
-});
+const emails = {
+  creator: "acl-creator@example.test",
+  selected: "acl-selected@example.test",
+  outsider: "acl-outsider@example.test",
+  admin: "acl-admin@example.test",
+};
+type Actor = keyof typeof emails;
+const profileIds = new Map<Actor, string>();
+const people = new Map<Actor, WebSocket>();
+let harness: Awaited<ReturnType<typeof createGatewaySuiteHarness>>;
+const privateKey = "agent:main:dashboard:acl-private-fixture";
+const text = "confidential websocket fixture";
 
-test("enforces confidential access across authenticated sockets without visual Draft", async () => {
+async function configureAccess() {
   await configureBrowserAuth(browserProxyAuth(), {
     roles: {
       default: "staff",
       definitions: {
         staff: {
           agents: ["main"],
-          scopes: ["operator.read", "operator.write"],
+          scopes: ["operator.read", "operator.write", "operator.talk"],
           sessions: { others: "write" },
         },
         admin: { agents: "*", scopes: ["operator.admin"], sessions: { others: "write" } },
       },
     },
   });
-  const emails = {
-    creator: "acl-creator@example.test",
-    selected: "acl-selected@example.test",
-    outsider: "acl-outsider@example.test",
-    admin: "acl-admin@example.test",
-  };
-  const creator = ensureProfileForEmail(emails.creator);
-  const selected = ensureProfileForEmail(emails.selected);
-  await setUserProfileRole(ensureProfileForEmail(emails.admin).id, "admin");
   testState.sessionConfig = {
     sharing: {
       accessPolicy: {
         default: "creator",
         groups: [
-          { agentId: "main", channel: "telegram", peerId: "-100123", profileIds: [selected.id] },
+          {
+            agentId: "main",
+            channel: "telegram",
+            peerId: "-100123",
+            profileIds: [profileIds.get("selected")!],
+          },
         ],
       },
     },
   };
-  await withGatewayServer(async ({ port }) => {
-    const sockets: WebSocket[] = [];
-    const stateDir = process.env.OPENCLAW_STATE_DIR;
-    if (!stateDir) {
-      throw new Error("Gateway fixture must own an isolated state directory");
-    }
-    const connect = async (email?: string) => {
-      const socket = await openWs(port, {
-        ...TRUSTED_BROWSER_HEADERS,
-        "x-forwarded-user": email ?? "",
-      });
-      sockets.push(socket);
-      const response = await connectReq(socket, {
-        client: CONTROL_UI_CLIENT,
-        browserOrigin: BROWSER_ORIGIN,
-        skipDefaultAuth: true,
-        prePairDevice: true,
-        deviceIdentityPath: path.join(
-          stateDir,
-          "acl-identities",
-          email ?? "unknown",
-          "client",
-          "credentials.sqlite",
-        ),
-        scopes: email === emails.admin ? ["operator.admin"] : ["operator.read", "operator.write"],
-      });
-      return { socket, response };
-    };
-    try {
-      const people = new Map<string, WebSocket>();
-      for (const [actor, email] of Object.entries(emails)) {
-        const connected = await connect(email);
-        expect(connected.response.ok, JSON.stringify(connected.response.error)).toBe(true);
-        people.set(actor, connected.socket);
-      }
-      expect((await connect()).response.ok).toBe(false);
-      const owner = people.get("creator")!;
-      const preclaimKey = "agent:main:telegram:group:-100123:topic:99";
-      for (const actor of ["selected", "outsider"]) {
-        const socket = people.get(actor)!;
-        for (const method of ["sessions.create", "sessions.patch", "chat.send"]) {
-          const params =
-            method === "chat.send"
-              ? {
-                  sessionKey: preclaimKey,
-                  message: "must not start a run",
-                  idempotencyKey: "native-preclaim-" + actor,
-                }
-              : { key: preclaimKey, ...(method === "sessions.patch" ? { label: "preclaim" } : {}) };
-          console.info("[session-access proof] preclaim", actor, method);
-          const denied = await rpcReq(socket, method, params);
-          expect(denied.ok, actor + " " + method).toBe(false);
-        }
-        const absent = await rpcReq<{ session?: unknown }>(owner, "sessions.describe", {
-          key: preclaimKey,
-        });
-        expect(absent.payload?.session).toBeUndefined();
-      }
-      const member = people.get("selected")!;
-      const privateKey = "agent:main:dashboard:acl-web-private";
-      console.info("[session-access proof] create private web session");
-      const created = await rpcReq(owner, "sessions.create", {
-        key: privateKey,
-        visibility: "shared",
-      });
-      expect(created.ok, JSON.stringify(created.error)).toBe(true);
-      const groupKey = "agent:main:telegram:group:-100123:topic:7";
-      const scope = { agentId: "main", sessionKey: groupKey, sessionId: "acl-ws-group" };
-      await upsertSessionEntryCore(scope, {
-        sessionId: scope.sessionId,
-        updatedAt: Date.now(),
-        visibility: "shared",
-        access: { mode: "source" },
-        createdActor: { type: "human", source: "profile", id: creator.id },
-      });
-      const text = "confidential websocket fixture";
-      await appendTranscriptMessage(scope, {
-        eventId: "acl-ws-seed",
-        message: { role: "user", content: text, timestamp: Date.now() },
-      });
-      for (const [actor, socket] of people) {
-        console.info("[session-access proof] audience matrix", actor);
-        const allowed = actor !== "outsider";
-        const list = await rpcReq<{ sessions: Array<{ key: string }> }>(socket, "sessions.list", {
-          archived: "all",
-        });
-        expect(list.ok, JSON.stringify(list.error)).toBe(true);
-        expect(
-          list.payload?.sessions.some((row) => row.key === groupKey),
-          actor,
-        ).toBe(allowed);
-        expect(
-          list.payload?.sessions.some((row) => row.key === privateKey),
-          actor,
-        ).toBe(actor === "creator" || actor === "admin");
-        const described = await rpcReq<{ session: { key: string } | null }>(
-          socket,
-          "sessions.describe",
-          { key: groupKey },
-        );
-        expect(described.payload?.session?.key === groupKey, actor).toBe(allowed);
-        const history = await rpcReq(socket, "chat.history", { sessionKey: groupKey, limit: 10 });
-        expect(JSON.stringify(history.payload ?? {}).includes(text), actor).toBe(allowed);
-        const search = await rpcReq(socket, "sessions.search", {
-          query: "confidential",
-          limit: 25,
-          scope: { archived: "all" },
-        });
-        expect(search.ok, JSON.stringify(search.error)).toBe(true);
-        expect(JSON.stringify(search.payload).includes(groupKey), actor).toBe(allowed);
-        expect(
-          (await rpcReq(socket, "sessions.patch", { key: groupKey, label: "acl-write-" + actor }))
-            .ok,
-          actor,
-        ).toBe(allowed);
-        if (!allowed) {
-          expect(
-            (
-              await rpcReq(socket, "chat.send", {
-                sessionKey: groupKey,
-                message: "forbidden",
-                idempotencyKey: "acl-outsider-send",
-              })
-            ).ok,
-          ).toBe(false);
-        }
-      }
-      const access = {
-        key: groupKey,
-        expectedSessionId: scope.sessionId,
-        access: { mode: "creator" },
-      };
-      expect((await rpcReq(member, "sessions.patch", access)).ok).toBe(false);
-      console.info("[session-access proof] revoke selected audience");
-      const revoked = await rpcReq(owner, "sessions.patch", access);
-      expect(revoked.ok, JSON.stringify(revoked.error)).toBe(true);
-      const afterDescribe = await rpcReq<{ session: { key: string } | null }>(
-        member,
-        "sessions.describe",
-        { key: groupKey },
-      );
-      expect(afterDescribe.payload?.session?.key === groupKey).toBe(false);
-      const history = await rpcReq(member, "chat.history", { sessionKey: groupKey, limit: 10 });
-      expect(JSON.stringify(history.payload ?? {}).includes(text)).toBe(false);
-      expect((await rpcReq(member, "sessions.patch", { key: groupKey, label: "revoked" })).ok).toBe(
-        false,
-      );
-      expect(
-        (
-          await rpcReq(member, "chat.send", {
-            sessionKey: groupKey,
-            message: "revoked",
-            idempotencyKey: "acl-revoked-send",
-          })
-        ).ok,
-      ).toBe(false);
-    } finally {
-      for (const socket of sockets) socket.terminate();
-    }
+}
+
+beforeAll(async () => {
+  for (const actor of Object.keys(emails) as Actor[]) {
+    profileIds.set(actor, ensureProfileForEmail(emails[actor]).id);
+  }
+  await setUserProfileRole(profileIds.get("admin")!, "admin");
+  await configureAccess();
+  // Match the session-create harness: lazy loading is not RPC execution.
+  await import("./server-methods/sessions-create.js");
+});
+
+beforeAll(async () => {
+  harness = await createGatewaySuiteHarness();
+});
+
+afterAll(async () => {
+  for (const socket of people.values()) socket.terminate();
+  await harness?.close();
+});
+
+async function openIdentity(email?: string) {
+  const stateDir = process.env.OPENCLAW_STATE_DIR;
+  if (!stateDir) throw new Error("Gateway fixture must own an isolated state directory");
+  const socket = await harness.openWs({
+    origin: BROWSER_ORIGIN,
+    "x-forwarded-for": "203.0.113.50",
+    "x-forwarded-proto": "https",
+    "x-forwarded-user": email ?? "",
   });
+  try {
+    const response = await connectReq(socket, {
+      client: CONTROL_UI_CLIENT,
+      browserOrigin: BROWSER_ORIGIN,
+      skipDefaultAuth: true,
+      prePairDevice: true,
+      deviceIdentityPath: path.join(
+        stateDir,
+        "acl-identities",
+        email ?? "unknown",
+        "client",
+        "credentials.sqlite",
+      ),
+      scopes:
+        email === emails.admin
+          ? ["operator.admin"]
+          : ["operator.read", "operator.write", "operator.talk"],
+    });
+    return { socket, response };
+  } catch (error) {
+    socket.terminate();
+    throw error;
+  }
+}
+
+async function client(actor: Actor) {
+  const existing = people.get(actor);
+  if (existing) return existing;
+  const { socket, response } = await openIdentity(emails[actor]);
+  if (!response.ok) {
+    socket.terminate();
+    throw new Error("Fixture authentication failed: " + JSON.stringify(response.error));
+  }
+  people.set(actor, socket);
+  return socket;
+}
+
+beforeEach(async () => {
+  // The suite reset preserves the physical store, not mutable config fixtures.
+  await configureAccess();
+  await upsertSessionEntryCore(
+    { agentId: "main", sessionKey: privateKey },
+    {
+      sessionId: "acl-private-fixture",
+      updatedAt: Date.now(),
+      visibility: "shared",
+      access: { mode: "source" },
+      createdActor: { type: "human", source: "profile", id: profileIds.get("creator")! },
+    },
+  );
+});
+
+async function seedGroup(topic: number) {
+  const scope = {
+    agentId: "main",
+    sessionKey: "agent:main:telegram:group:-100123:topic:" + topic,
+    sessionId: "acl-ws-group-" + topic,
+  };
+  await upsertSessionEntryCore(scope, {
+    sessionId: scope.sessionId,
+    updatedAt: Date.now(),
+    visibility: "shared",
+    access: { mode: "source" },
+    createdActor: { type: "human", source: "profile", id: profileIds.get("creator")! },
+  });
+  await appendTranscriptMessage(scope, {
+    eventId: "acl-ws-seed-" + topic,
+    message: { role: "user", content: text, timestamp: Date.now() },
+  });
+  return scope;
+}
+
+/** Denied sends must reach admission without the admitted-run helper's model prewarm. */
+async function deniedSend(socket: WebSocket, key: string) {
+  // Publish current fixture config through the normal RPC helper first.
+  expect((await rpcReq(socket, "health")).ok).toBe(true);
+  const id = randomUUID();
+  const response = onceMessage<Pick<ResponseFrame, "type" | "id" | "ok" | "error">>(
+    socket,
+    (frame) => frame.type === "res" && frame.id === id,
+  );
+  socket.send(
+    JSON.stringify({
+      type: "req",
+      id,
+      method: "chat.send",
+      params: { sessionKey: key, message: "must not run", idempotencyKey: id },
+    }),
+  );
+  return await response;
+}
+
+test("refuses an unidentified trusted-proxy connection", async () => {
+  const { socket, response } = await openIdentity();
+  try {
+    expect(response.ok).toBe(false);
+  } finally {
+    socket.terminate();
+  }
+});
+
+test.each(["selected", "outsider"] as const)(
+  "prevents %s from preclaiming an absent native source",
+  async (actor) => {
+    const socket = await client(actor);
+    const key = "agent:main:telegram:group:-100123:topic:99";
+    for (const method of ["sessions.create", "sessions.patch"] as const) {
+      const denied = await rpcReq(socket, method, {
+        key,
+        ...(method === "sessions.patch" ? { label: "preclaim" } : {}),
+      });
+      expect(denied, method).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+      expect(denied.error?.message, method).toContain("trusted ingress");
+    }
+    const denied = await deniedSend(socket, key);
+    expect(denied).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+    expect(denied.error?.message).toContain("trusted ingress");
+    const absent = await rpcReq<{ session?: unknown }>(await client("admin"), "sessions.describe", {
+      key,
+    });
+    expect(absent.ok, JSON.stringify(absent.error)).toBe(true);
+    expect(absent.payload?.session).toBeFalsy();
+  },
+);
+
+test("publishes a web conversation privately without visual Draft", async () => {
+  const key = "agent:main:dashboard:acl-web-created";
+  const created = await rpcReq(await client("creator"), "sessions.create", {
+    key,
+    visibility: "shared",
+  });
+  expect(created.ok, JSON.stringify(created.error)).toBe(true);
+  const described = await rpcReq<{ session: { key: string } | null }>(
+    await client("outsider"),
+    "sessions.describe",
+    { key },
+  );
+  expect(described.payload?.session?.key).not.toBe(key);
+});
+
+test.each(["creator", "selected", "outsider", "admin"] as const)(
+  "enforces discovery, reads and writes for %s with independent confidential access",
+  async (actor) => {
+    const topic = ["creator", "selected", "outsider", "admin"].indexOf(actor) + 1;
+    const { sessionKey: key } = await seedGroup(topic);
+    const socket = await client(actor);
+    const allowed = actor !== "outsider";
+    const list = await rpcReq<{ sessions: Array<{ key: string }> }>(socket, "sessions.list", {
+      archived: "all",
+    });
+    expect(list.ok, JSON.stringify(list.error)).toBe(true);
+    expect(list.payload?.sessions.some((row) => row.key === key)).toBe(allowed);
+    expect(list.payload?.sessions.some((row) => row.key === privateKey)).toBe(
+      actor === "creator" || actor === "admin",
+    );
+    const described = await rpcReq<{ session: { key: string } | null }>(
+      socket,
+      "sessions.describe",
+      { key },
+    );
+    expect(described.payload?.session?.key === key).toBe(allowed);
+    const history = await rpcReq(socket, "chat.history", { sessionKey: key, limit: 10 });
+    expect(JSON.stringify(history.payload ?? {}).includes(text)).toBe(allowed);
+    const search = await rpcReq(socket, "sessions.search", {
+      query: "confidential",
+      limit: 25,
+      scope: { archived: "all" },
+    });
+    expect(search.ok, JSON.stringify(search.error)).toBe(true);
+    expect(JSON.stringify(search.payload).includes(key)).toBe(allowed);
+    expect((await rpcReq(socket, "sessions.patch", { key, label: "acl-write-" + actor })).ok).toBe(
+      allowed,
+    );
+    if (!allowed)
+      expect(await deniedSend(socket, key)).toMatchObject({
+        ok: false,
+        error: { code: "FORBIDDEN" },
+      });
+  },
+);
+
+test("revokes the selected audience before its next disclosure or write", async () => {
+  const { sessionKey: key, sessionId } = await seedGroup(8);
+  const member = await client("selected");
+  const access = { key, expectedSessionId: sessionId, access: { mode: "creator" } };
+  const before = await rpcReq(member, "chat.history", { sessionKey: key, limit: 10 });
+  expect(JSON.stringify(before.payload ?? {}).includes(text)).toBe(true);
+  expect((await rpcReq(member, "sessions.patch", access)).ok).toBe(false);
+  const revoked = await rpcReq(await client("creator"), "sessions.patch", access);
+  expect(revoked.ok, JSON.stringify(revoked.error)).toBe(true);
+  const described = await rpcReq<{ session: { key: string } | null }>(member, "sessions.describe", {
+    key,
+  });
+  expect(described.payload?.session?.key === key).toBe(false);
+  const history = await rpcReq(member, "chat.history", { sessionKey: key, limit: 10 });
+  expect(JSON.stringify(history.payload ?? {}).includes(text)).toBe(false);
+  expect((await rpcReq(member, "sessions.patch", { key, label: "revoked" })).ok).toBe(false);
+  expect(await deniedSend(member, key)).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
 });

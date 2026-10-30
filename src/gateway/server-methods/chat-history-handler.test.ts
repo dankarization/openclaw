@@ -18,6 +18,7 @@ import { withOpenClawTestState } from "../../test-utils/openclaw-test-state.js";
 import { registerChatAbortController } from "../chat-abort.js";
 import { createDirectChatContext } from "../server-chat.agent-events.test-helpers.js";
 import { gatewayConnect, gatewayProfile } from "../server/client-fixtures.test-support.js";
+import { resolveSessionMutationAuthorizationAsync } from "../session-sharing-authorization-async.js";
 import { claimRpcSourceForTest } from "../test-helpers.rpc-source.js";
 import {
   seedHistorySession as seedSession,
@@ -29,6 +30,7 @@ import { createHistoryReadContext } from "./chat-history.test-helpers.js";
 import * as metadataCases from "./chat-metadata-ownership.test-support.js";
 import { connectChatMetadataAccount } from "./chat-metadata-runtime.test-support.js";
 import { captureRpcTargetForTest } from "./rpc-source-fixtures.test-support.js";
+import { sessionMutationHandlers } from "./sessions-mutations.js";
 import { identifiedClient } from "./sessions-read-cache.test-support.js";
 import type { GatewayRequestContext, GatewayRequestHandlerOptions, RespondFn } from "./types.js";
 
@@ -392,15 +394,47 @@ it.each([
       try {
         await Promise.race([entered.promise, pending]);
         expect(readSpy).toHaveBeenCalledOnce();
-        await sessions.patchSessionEntryCore(scope, () =>
-          change === "replacement"
-            ? { sessionId: "replacement" }
-            : change === "reset"
-              ? { lifecycleRevision: "after-reset", sessionStartedAt: 3 }
-              : change === "access revocation"
-                ? { access: { mode: "creator" } }
+        if (change === "access revocation") {
+          // Neutral bookkeeping preserves ACLs; revoke through the authorized owner.
+          const owner = identifiedClient("owner");
+          const params = {
+            key: scope.sessionKey,
+            expectedSessionId: scope.sessionId,
+            access: { mode: "creator" as const },
+          };
+          const authority = await resolveSessionMutationAuthorizationAsync({
+            client: owner,
+            context,
+            method: "sessions.patch",
+            requestParams: params,
+          });
+          expect(authority.error).toBeNull();
+          const patched = vi.fn<RespondFn>();
+          try {
+            await sessionMutationHandlers["sessions.patch"]!({
+              req: { type: "req", id: "revoke-history-access", method: "sessions.patch" },
+              params,
+              client: owner,
+              context,
+              respond: patched,
+              isWebchatConnect: () => true,
+              sessionMutationAuthorization: authority.authorization,
+            });
+          } finally {
+            authority.authorization?.release?.();
+          }
+          expect(patched).toHaveBeenCalledTimes(1);
+          expect(patched.mock.calls[0]?.[0], JSON.stringify(patched.mock.calls)).toBe(true);
+          expect(sessions.loadSessionEntry(scope)?.access?.mode).toBe("creator");
+        } else {
+          await sessions.patchSessionEntryCore(scope, () =>
+            change === "replacement"
+              ? { sessionId: "replacement" }
+              : change === "reset"
+                ? { lifecycleRevision: "after-reset", sessionStartedAt: 3 }
                 : { visibility: change === "revocation" ? "draft" : "read-only" },
-        );
+          );
+        }
       } finally {
         release.resolve();
         await pending;
