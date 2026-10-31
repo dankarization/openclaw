@@ -385,6 +385,7 @@ function projectSessionRowProfiles(
   const participants = [...projected].flatMap(([key, participant]) =>
     key === ownerKey ? [] : [participant],
   );
+  const count = participants.length || undefined;
   return {
     createdActor: projectSessionActor(
       resolveSessionCreatorActor(entry?.createdActor),
@@ -394,13 +395,9 @@ function projectSessionRowProfiles(
     ),
     owner,
     // Keep the released v4 summary stable; expanded identities are additive for newer clients.
-    participants: participants.length
-      ? participants.slice(0, SESSION_PARTICIPANT_LIMIT)
-      : undefined,
-    expandedParticipants: participants.length
-      ? participants.slice(0, MAX_SESSION_PARTICIPANTS)
-      : undefined,
-    participantCount: participants.length || undefined,
+    participants: count ? participants.slice(0, SESSION_PARTICIPANT_LIMIT) : undefined,
+    expandedParticipants: count ? participants.slice(0, MAX_SESSION_PARTICIPANTS) : undefined,
+    participantCount: count,
     archivedBy: projectSessionActor(entry?.archivedBy, userProfileIdentityById, cfg),
   };
 }

@@ -11,7 +11,7 @@ import type { SessionEntry } from "../config/sessions/types.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { toAgentStoreSessionKey } from "../routing/session-key.js";
 import type { SessionOperatorScope } from "../shared/session-method-scopes-base.js";
-import { resolveGatewayOperatorRoleActor } from "./operator-role-policy.js";
+import { operatorSessionCap, resolveGatewayOperatorRoleActor } from "./operator-role-policy.js";
 import {
   authenticatedProfileUnavailableError,
   isGatewayClientProfilePending,
@@ -22,26 +22,36 @@ import type {
   GatewayRequestContext,
   SessionMutationAuthorization,
 } from "./server-methods/types.js";
+import { authorizeSessionSourceCreation } from "./session-create-source-access.js";
 import {
   isAgentRunStartMethod,
   isSessionArchiveMutation,
   isSessionProfileDependentMethod,
+  mayCreateSessionTarget,
 } from "./session-method-policy.js";
 import { SessionMutationAuthorizationChangedError } from "./session-mutation-authorization-error.js";
 import type { SessionRowReadView } from "./session-row-prepared-read.js";
 import { getSessionRowProjection } from "./session-row-projection-access.js";
+import type { SessionRowProjection } from "./session-row-projection.js";
 import {
+  authorizeIncognitoSessionTarget,
   authorizeOwnSessionMutation,
+  authorizeSessionAgentRun,
+  authorizeSessionSharingTarget,
+  hiddenSessionNotFound,
   isGatewayAdmin,
+  sharingIdentity,
   withSessionSharingTarget,
   type SessionSharingTarget,
 } from "./session-sharing-policy.js";
 import { captureSessionMutationRouting } from "./session-sharing-preparation.js";
+import { createSessionListEntryFilter } from "./session-sharing-read.js";
 import type {
   createSessionSharingConsumption,
   PreparedMutationSharing,
   PreparedSessionSharingProfiles,
 } from "./session-sharing-read.js";
+import type { resolveSessionSharingMembership } from "./session-sharing-source.js";
 import {
   resolveChatSendAuthorizationParams,
   resolveTalkSessionTargetInput,
@@ -80,6 +90,106 @@ export type SessionMutationAuthorizationParams = {
   preparedTalkSessionTarget?: PreparedTalkSessionTarget;
   preparedProfiles?: PreparedSessionSharingProfiles;
 };
+
+/** Keep source creation, incognito, visibility, and current sharing checks on one policy path. */
+export function createSessionTargetPolicyAuthorizer(context: {
+  params: SessionMutationAuthorizationParams;
+  authorizesAgentRun: boolean;
+  authorizesRead: boolean;
+  targetOwnership: { requireOwner: boolean; ownerAction?: string };
+  preparedPolicy: ReturnType<typeof createSessionSharingConsumption>["policy"];
+  sessionCap: (cfg: OpenClawConfig) => ReturnType<typeof operatorSessionCap> | undefined;
+  resolveMembership: typeof resolveSessionSharingMembership;
+}) {
+  const {
+    params,
+    authorizesAgentRun,
+    authorizesRead,
+    targetOwnership,
+    preparedPolicy,
+    sessionCap,
+    resolveMembership,
+  } = context;
+  return (
+    targetRef: SessionMutationTarget,
+    target: SessionSharingTarget | null,
+    readPolicyConfig: () => OpenClawConfig,
+    projection?: SessionRowProjection,
+    members?: readonly string[],
+    visibilityAuthorized?: boolean,
+  ) => {
+    const cfg = readPolicyConfig();
+    if (!target && (mayCreateSessionTarget(params.method) || authorizesAgentRun)) {
+      const sourceError = authorizeSessionSourceCreation(
+        {
+          cfg,
+          operatorRoleActor: params.client
+            ? resolveGatewayOperatorRoleActor(params.client)
+            : { kind: "system" },
+          requestingOperatorScopes: params.client?.connect.scopes,
+        },
+        resolveSessionMutationWriteRoute(cfg, targetRef).canonicalKey,
+      );
+      if (sourceError) {
+        return sourceError;
+      }
+    }
+    const policy = preparedPolicy(cfg, members);
+    const error =
+      (target && authorizesAgentRun
+        ? authorizeSessionAgentRun(
+            { cfg, client: params.client, target },
+            policy ? { policy: policy.policy } : undefined,
+          )
+        : null) ??
+      authorizeIncognitoSessionTarget({
+        client: params.client,
+        sessionKey: targetRef.sessionKey,
+        target,
+      });
+    if (target && !error) {
+      const filter = policy
+        ? policy.entryFilter
+        : createSessionListEntryFilter({ cfg, client: params.client });
+      if (filter?.(target.canonicalKey, target.entry) === false) {
+        return hiddenSessionNotFound(target.canonicalKey);
+      }
+    }
+    if (
+      error ||
+      !target ||
+      (visibilityAuthorized ??
+        (VISIBILITY_AUTHORIZED_METHODS.has(params.method) &&
+          (sessionCap(readPolicyConfig()) ?? "write") === "write"))
+    ) {
+      return error;
+    }
+    const identity = sharingIdentity(params.client, resolveGatewayOperatorRoleActor(params.client));
+    if (authorizesRead) {
+      const entryFilter = policy
+        ? policy.entryFilter
+        : createSessionListEntryFilter({ cfg, client: params.client });
+      return entryFilter?.(target.storeKey, target.entry) === false
+        ? hiddenSessionNotFound(target.canonicalKey)
+        : null;
+    }
+    return policy
+      ? authorizeSessionSharingTarget(
+          { cfg, client: params.client, target, ...targetOwnership },
+          {
+            value: policy.sessionCap,
+            role: policy.roleForTarget(target),
+          },
+        )
+      : authorizeSessionSharingTarget({
+          cfg,
+          client: params.client,
+          target,
+          ...targetOwnership,
+          isMember: resolveMembership(target, identity?.id, members, projection),
+        });
+  };
+}
 
 export function prepareSessionMutationAuthorizationRequest(
   request: SessionMutationAuthorizationParams,

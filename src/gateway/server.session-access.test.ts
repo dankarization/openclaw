@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
+import { beforeEach, expect, test } from "vitest";
 import type { WebSocket } from "ws";
 import type { ResponseFrame } from "../../packages/gateway-protocol/src/schema/frames.js";
 import {
@@ -23,8 +23,6 @@ import {
   testState,
 } from "./server.auth.test-helpers.js";
 import { createGatewaySuiteHarness } from "./test-helpers.js";
-
-installGatewayTestHooks({ scope: "suite" });
 
 const emails = {
   creator: "acl-creator@example.test",
@@ -70,25 +68,26 @@ async function configureAccess() {
   };
 }
 
-beforeAll(async () => {
-  for (const actor of Object.keys(emails) as Actor[]) {
-    profileIds.set(actor, ensureProfileForEmail(emails[actor]).id);
-  }
-  setUserProfileRole(profileIds.get("admin")!, "admin");
-  await configureAccess();
-  // Match the session-create harness: lazy loading is not RPC execution.
-  await import("./server-methods/sessions-create.js");
-});
-
-beforeAll(async () => {
-  harness = await createGatewaySuiteHarness();
-});
-
-afterAll(async () => {
-  for (const socket of people.values()) {
-    socket.terminate();
-  }
-  await harness?.close();
+installGatewayTestHooks({
+  scope: "suite",
+  setup: async () => {
+    for (const actor of Object.keys(emails) as Actor[]) {
+      profileIds.set(actor, ensureProfileForEmail(emails[actor]).id);
+    }
+    setUserProfileRole(profileIds.get("admin")!, "admin");
+    await configureAccess();
+    // Match the session-create harness: lazy loading is not RPC execution.
+    await import("./server-methods/sessions-create.js");
+    harness = await createGatewaySuiteHarness();
+  },
+  cleanup: async () => {
+    // The suite owner joins late setup before cleanup, even if beforeAll times out.
+    for (const socket of people.values()) {
+      socket.terminate();
+    }
+    people.clear();
+    await harness?.close();
+  },
 });
 
 async function openIdentity(email?: string) {

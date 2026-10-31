@@ -11,19 +11,14 @@ import type { SessionPendingInputAuthorityFacts } from "../config/sessions/sessi
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { isIncognitoSessionKey } from "../routing/session-key.js";
 import { resolveSessionMethodScope } from "../shared/session-method-scopes-base.js";
-import {
-  authorizeGatewaySessionCreation,
-  operatorSessionCap,
-  resolveGatewayOperatorRoleActor,
-} from "./operator-role-policy.js";
+import { authorizeGatewaySessionCreation, operatorSessionCap } from "./operator-role-policy.js";
 import type { SessionMutationAuthorization } from "./server-methods/types.js";
-import { authorizeSessionSourceCreation } from "./session-create-source-access.js";
 import { isSessionCreatorProfile } from "./session-creator.js";
 import { isRequiredSessionTargetMethod, mayCreateSessionTarget } from "./session-method-policy.js";
 import { SessionMutationAuthorizationChangedError } from "./session-mutation-authorization-error.js";
 import { getSessionRowProjection } from "./session-row-projection-access.js";
-import type { SessionRowProjection } from "./session-row-projection.js";
 import {
+  createSessionTargetPolicyAuthorizer,
   expectedSessionMutationTargetError,
   createSessionCreationAuthorizationRecorder,
   withCurrentSessionSharingSource,
@@ -44,16 +39,12 @@ import * as sessionSharingDescribe from "./session-sharing-describe.js";
 import {
   authorizeIncognitoSessionTarget,
   authorizeOwnSessionMutation,
-  authorizeSessionAgentRun,
-  authorizeSessionSharingTarget,
   hiddenSessionNotFound,
   resolveIncognitoSessionSharingTarget,
-  sharingIdentity,
   type SessionSharingTarget,
 } from "./session-sharing-policy.js";
 import { captureSessionMutationRouting } from "./session-sharing-preparation.js";
 import {
-  createSessionListEntryFilter,
   createSessionSharingInputAuthority,
   createSessionSharingConsumption,
 } from "./session-sharing-read.js";
@@ -137,85 +128,15 @@ export function resolveSessionMutationAuthorization(request: SessionMutationAuth
     consuming.sharing || consuming.profiles
       ? preparedPolicy(cfg)?.sessionCap
       : operatorSessionCap(params.client, cfg);
-  const authorizeTargetPolicy = (
-    targetRef: SessionMutationTarget,
-    target: SessionSharingTarget | null,
-    readPolicyConfig: () => OpenClawConfig,
-    projection?: SessionRowProjection,
-    members?: readonly string[],
-    visibilityAuthorized?: boolean,
-  ) => {
-    const cfg = readPolicyConfig();
-    if (!target && (mayCreateSessionTarget(params.method) || authorizesAgentRun)) {
-      const sourceError = authorizeSessionSourceCreation(
-        {
-          cfg,
-          operatorRoleActor: params.client
-            ? resolveGatewayOperatorRoleActor(params.client)
-            : { kind: "system" },
-          requestingOperatorScopes: params.client?.connect.scopes,
-        },
-        resolveSessionMutationWriteRoute(cfg, targetRef).canonicalKey,
-      );
-      if (sourceError) {
-        return sourceError;
-      }
-    }
-    const policy = preparedPolicy(cfg, members);
-    const error =
-      (target && authorizesAgentRun
-        ? authorizeSessionAgentRun(
-            { cfg, client: params.client, target },
-            policy ? { policy: policy.policy } : undefined,
-          )
-        : null) ??
-      authorizeIncognitoSessionTarget({
-        client: params.client,
-        sessionKey: targetRef.sessionKey,
-        target,
-      });
-    if (target && !error) {
-      const filter = policy
-        ? policy.entryFilter
-        : createSessionListEntryFilter({ cfg, client: params.client });
-      if (filter?.(target.canonicalKey, target.entry) === false) {
-        return hiddenSessionNotFound(target.canonicalKey);
-      }
-    }
-    if (
-      error ||
-      !target ||
-      (visibilityAuthorized ??
-        (VISIBILITY_AUTHORIZED_METHODS.has(params.method) &&
-          (sessionCap(readPolicyConfig()) ?? "write") === "write"))
-    ) {
-      return error;
-    }
-    const identity = sharingIdentity(params.client, resolveGatewayOperatorRoleActor(params.client));
-    if (authorizesRead) {
-      const entryFilter = policy
-        ? policy.entryFilter
-        : createSessionListEntryFilter({ cfg, client: params.client });
-      return entryFilter?.(target.storeKey, target.entry) === false
-        ? hiddenSessionNotFound(target.canonicalKey)
-        : null;
-    }
-    return policy
-      ? authorizeSessionSharingTarget(
-          { cfg, client: params.client, target, ...targetOwnership },
-          {
-            value: policy.sessionCap,
-            role: policy.roleForTarget(target),
-          },
-        )
-      : authorizeSessionSharingTarget({
-          cfg,
-          client: params.client,
-          target,
-          ...targetOwnership,
-          isMember: resolveSessionSharingMembership(target, identity?.id, members, projection),
-        });
-  };
+  const authorizeTargetPolicy = createSessionTargetPolicyAuthorizer({
+    params,
+    authorizesAgentRun,
+    authorizesRead,
+    targetOwnership,
+    preparedPolicy,
+    sessionCap,
+    resolveMembership: resolveSessionSharingMembership,
+  });
   const resolveAuthorizedTarget = (targetRef: SessionMutationTarget) => {
     if (params.preparedTargets) {
       const retained = findPreparedSharingTarget(params, targetRef);
