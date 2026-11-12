@@ -7,6 +7,8 @@ Actual Telegram Desktop checks on November 12, 2026 (UTC+4), running OpenClaw 20
 3. At 10:34–10:36, sent `/reset`, then `/model default`, then an ordinary question about the same tomatoes. Neither command renamed the topic. The first ordinary message reconsidered the existing title and kept it.
 4. At 10:38–10:39, reset again, then asked about acoustic and electric guitars. The first ordinary message changed the title to **Акустическая и электрогитара для новичка**.
 
+5. At 10:49, manually renamed the existing topic to **Мои гитарные заметки** through Telegram Manage. At 10:50 reset it, then at 10:54 sent another guitar question. The manual name stayed unchanged.
+
 ## Actual application captures
 
 First-message title and exchange (two exact crops of the same capture):
@@ -26,8 +28,13 @@ Reset followed by a different subject:
 
 The images are lossless rectangular crops of real Telegram UI. Retained pixels are unchanged; unrelated chats, the desktop title and pinned content are omitted. The six-message counter is separate source-state evidence, not a claim inferred from screenshots.
 
+Manual name, reset, and a same-subject first message:
+
+![Preserved manual title](telegram-reset-manual-b2b6eb7-header.png)
+![Reset and guitar continuation](telegram-reset-manual-b2b6eb7-exchange.png)
+
 ## Validation and limits
 
 The integrated candidate passed 24 context tests, five first-topic pipeline variants, extension types, focused typed lint, formatting, line/test-budget checks, and a complete canonical build. A test fixture was corrected to keep its real session generation; the once-only naming assertion remains intact. The service-only topic event remains silent; a real message batched with it remains a user request and is counted once.
 
-The common naming proposal is tracked in #197334 with #184821, #174317 and #183368. Manual-title/concurrent-rename protections have focused automated coverage; they were not newly proven through Telegram manual-rename UI in this run. This report does not claim all historical conversations, translations, group topics, or every model response were exercised. Public PR CI and maintainer review are separate from these installed-build checks.
+The common naming proposal is tracked in #197334 with #184821, #174317 and #183368. One manual-title/reset/same-subject path was also verified through Telegram UI. Concurrent-rename races retain focused automated coverage and were not induced in production. This report does not claim all historical conversations, translations, group topics, or every model response were exercised. Public PR CI and maintainer review are separate from these installed-build checks.
