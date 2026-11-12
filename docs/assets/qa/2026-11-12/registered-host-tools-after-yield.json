@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "date": "2026-11-12",
+  "deployment": {
+    "version": "2026.11.3",
+    "installed_commit": "d1e2a89e4f37617f04c237a47f98b256e9ed5f9e",
+    "contains_local_patches": true,
+    "upstream_pr": 197658,
+    "upstream_head": "6bc4c9832ff3109acd1e61b62666bc2d1ff648c6",
+    "byte_identical_upstream_files": [
+      "src/gateway/server-lifecycle-runtime-context.ts",
+      "src/gateway/hosted-lifecycle-dispatch.test.ts"
+    ]
+  },
+  "context": {
+    "entry": "openclaw agent through the running Gateway",
+    "caller": "gateway owner",
+    "parent_agent": "main",
+    "child_agent": "programmer",
+    "parent_model": "openai/gpt-6.1-sol",
+    "child_model": "openai/gpt-6.1-sol",
+    "runtime": "OpenClaw-managed subagent using Codex",
+    "external_delivery": false,
+    "changes_requested": "none; read-only tool calls and sleep 20"
+  },
+  "timeline": [
+    {
+      "actor": "parent",
+      "operation": "sessions_spawn",
+      "result": "accepted",
+      "time_utc": "2026-11-12T15:56:17.789Z"
+    },
+    {
+      "actor": "parent",
+      "operation": "sessions_yield",
+      "result": "yielded",
+      "time_utc": "2026-11-12T15:56:24.568Z"
+    },
+    {
+      "actor": "child",
+      "operation": "registered exec",
+      "result": "sleep 20 started",
+      "time_utc": "2026-11-12T15:56:25.382Z"
+    },
+    {
+      "actor": "child",
+      "operation": "registered process",
+      "result": "sleep completed, exit 0",
+      "time_utc": "2026-11-12T15:56:46.812Z"
+    },
+    {
+      "actor": "child",
+      "operation": "registered sessions_list",
+      "result": "success; count 1, own current session running, hasMore false",
+      "time_utc": "2026-11-12T15:56:50.323Z"
+    },
+    {
+      "actor": "child",
+      "operation": "final",
+      "result": "QA_REGISTERED_HOST_TOOL_AFTER_YIELD returned",
+      "time_utc": "2026-11-12T15:56:57.179Z"
+    },
+    {
+      "actor": "parent",
+      "operation": "completion continuation",
+      "result": "received child result and returned final QA report",
+      "time_utc": "2026-11-12T15:57:06.872Z"
+    }
+  ],
+  "verification": {
+    "child_transcript_read_independently": true,
+    "parent_transcript_read_independently": true,
+    "child_final_status": "done",
+    "parent_final_status": "done",
+    "observed_tool_errors": 0,
+    "session_identifiers": "replaced by parent/child aliases",
+    "historical_business_tasks_replayed": false
+  },
+  "limits": [
+    "This was an owner CLI-to-Gateway run, not a new Telegram or LDAP-user reproduction.",
+    "It exercises an OpenClaw-managed child; native Codex helper variants are separate.",
+    "It is one successful run on a patched deployment, not proof that all delegation failures are resolved.",
+    "No screenshot or hosted CI result is claimed."
+  ]
+}
