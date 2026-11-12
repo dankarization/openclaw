@@ -30,6 +30,6 @@ The two additional screenshots were captured at about 03:51 UTC+4 after observin
 
 ## What this evidence covers
 
-These checks cover actual child tool execution after parent yield, automatic parent wake, parent tool execution after wake, same-child follow-up, and visible Telegram delivery on this exact build. They do not prove every native-helper route, revocation safety, automatic recovery from every failure, or a cure for all historical closed-scope errors. The native check below covers the native helper own shell commands; OpenClaw host-tool access is a separate contract. Initial topic naming was not fixed by this build.
+These checks cover actual child tool execution after parent yield, automatic parent wake, parent tool execution after wake, same-child follow-up, and visible Telegram delivery on this exact build. They do not prove every native-helper route, revocation safety, automatic recovery from every failure, or a cure for all historical closed-scope errors. The native check below covers its own shell commands; OpenClaw host-tool access is a separate contract. Initial topic naming was not fixed by this build.
 
 The screenshot is a lossless rectangular crop of the actual UI, excluding unrelated chats and the pinned message. Retained pixels are unchanged. Full private transcripts are not published.
