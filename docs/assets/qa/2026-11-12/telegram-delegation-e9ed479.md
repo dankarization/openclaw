@@ -28,6 +28,14 @@ The child kept the same session throughout. Its own tool receipts, rather than t
 
 The first check in the screenshot also returned a native child's result after parent yield. Its own 30-second sleep completed, but its JavaScript `ALL_TOOLS` search did not find `gateway_exec`, so the requested host command was not executed. This is not evidence of an executor regression: in searchable mode native tool search is a separate discovery surface, and the harness documentation directs new work requiring OpenClaw tools through managed `sessions_spawn`. The screenshot preserves the observed negative result; it is not being counted as successful host-tool execution.
 
+## Native command after yield
+
+![Native helper request and received final reply](telegram-native9-e9ed479.png)
+
+A second native check used the documented native-only route. One GPT-6.1 Terra helper executed its own 20-second sleep, then a separate new shell call printed `QA_NATIVE9_AFTER`. The parent yielded at 09:31:01.534 UTC+4; yield returned at 09:31:01.615. The child's separate printf call began at 09:31:23.672 and returned the marker at 09:31:24.725. The child completed at 09:31:26.579. The parent final was recorded at 09:31:34.021 and visibly received in Telegram at 09:31. No foreground wait or additional user prompt was needed. The child rollout was checked separately from the parent mirror.
+
+This confirms a native tool call after the parent yielded and the automatic result reaching the requester on this installed build. It does not establish OpenClaw host-tool execution from native children.
+
 ## Local regression coverage and remaining limits
 
 The matching integrated runtime passed production types/lint, the 38-case requester-wake E2E file, focused listener/owner-revocation checks, naming tests, 42 creation/privacy cases, and a real old-binary-to-new-binary access-control fixture. The complete built-CLI SQLite lifecycle proof passed after its client was corrected to handle an authoritative pre-delete lifecycle conflict with one bounded retry pinned to the original session id. The production deletion guards were unchanged.
