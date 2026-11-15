@@ -635,6 +635,7 @@ export async function mutateRequesterCompletionBatch(
     operation: RequesterWakeMutation | { kind: "settle"; outcome: SubagentAnnounceDeliveryResult };
   },
 ): Promise<CompletionMutationPublication> {
+  let committedNoticeReceipt = params.committed;
   return withSubagentCompletionFailureNoticeAuthority(
     params.entries,
     params.operation.kind === "settle" &&
@@ -669,7 +670,8 @@ export async function mutateRequesterCompletionBatch(
               !params.committed &&
               (mutation.kind === "requesterBatch" || mutation.kind === "requesterWake")
             ) {
-              params.onCommitted?.({ entries: mutation.entries, result });
+              committedNoticeReceipt = { entries: mutation.entries, result };
+              params.onCommitted?.(committedNoticeReceipt);
             }
           },
         },
@@ -691,5 +693,6 @@ export async function mutateRequesterCompletionBatch(
       }
       return publication;
     },
+    () => committedNoticeReceipt,
   );
 }

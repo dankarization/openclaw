@@ -49,6 +49,7 @@ import {
   type RequesterWakeMutationReceipt,
 } from "./subagent-registry-requester-wake-mutation.js";
 import type { SubagentRunRecord } from "./subagent-registry.types.js";
+import { releaseRequesterYieldNoticeAuthority } from "./subagent-requester-notice-authority.js";
 import {
   captureRequesterSettleRunIdentity,
   isSubagentObligationRetired,
@@ -75,6 +76,7 @@ function releaseRequesterSettleWakeBatch(
   const params = context.options;
   const entries = observedEntries.map((entry) => currentSubagentRunOrObserved(params.runs, entry));
   revokeRequesterCronAuthorityBatch(entries, rearmGeneration);
+  releaseRequesterYieldNoticeAuthority(entries, rearmGeneration);
   const retiredEntries = entries.filter((entry) => !params.runs.has(entry.runId));
   for (const entry of retiredEntries) {
     subagentRuns.confirmRetirement(entry);

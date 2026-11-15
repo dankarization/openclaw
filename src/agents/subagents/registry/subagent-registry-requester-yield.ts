@@ -25,6 +25,10 @@ import { getLatestSubagentRunByChildSessionKeyFromRuns } from "./subagent-regist
 import { markSubagentRunPausedAfterYield } from "./subagent-registry-run-pause.js";
 import type { SubagentRunRecord } from "./subagent-registry.types.js";
 import {
+  prepareRequesterYieldNoticeAuthority,
+  promoteRequesterYieldNoticeAuthority,
+} from "./subagent-requester-notice-authority.js";
+import {
   isRequesterCompletionCohortCurrent,
   isRequesterYieldCohortMember,
   isRequesterSettleWakeForRun,
@@ -342,6 +346,7 @@ export async function markRequesterTurnYieldedInRuns(params: {
   }
   const { preparedAuthority } = params;
   let cronAuthority: Awaited<ReturnType<PreparedRequesterCronAuthority["bind"]>>;
+  let noticeAuthority: Awaited<ReturnType<typeof prepareRequesterYieldNoticeAuthority>>;
   try {
     const selectEntries = () =>
       selectOwingRequesterTurnChildren(
@@ -357,6 +362,7 @@ export async function markRequesterTurnYieldedInRuns(params: {
     await params.transfer({
       entries: selectedEntries,
       prepare: async () => {
+        noticeAuthority = await prepareRequesterYieldNoticeAuthority(selectedEntries, params.runs);
         cronAuthority = await preparedAuthority?.bind({
           batch: selectedEntries,
           runs: params.runs,
@@ -370,7 +376,10 @@ export async function markRequesterTurnYieldedInRuns(params: {
           entry.requesterTurnYielded = true;
         }
       },
-      finish: () => cronAuthority?.commit(),
+      finish: () => {
+        cronAuthority?.commit();
+        noticeAuthority?.commit();
+      },
     });
     if (preparedAuthority) {
       try {
@@ -382,6 +391,7 @@ export async function markRequesterTurnYieldedInRuns(params: {
     return selectedEntries.length;
   } catch (error) {
     cronAuthority?.revoke();
+    noticeAuthority?.release();
     throw error;
   }
 }
@@ -656,6 +666,7 @@ export async function settleRequesterTurnAfterSessionSpawns(params: {
       promoteFollowupYield({ requesterTurnRunId, entries, rearmGeneration });
       promoteGoalContinuationYield({ requesterTurnRunId, entries, rearmGeneration });
       promoteRequesterCronAuthority({ requesterTurnRunId, batch: entries, rearmGeneration });
+      promoteRequesterYieldNoticeAuthority({ requesterTurnRunId, batch: entries, rearmGeneration });
       if (rearmGeneration !== undefined && params.requesterAgentId) {
         promoteRequesterFinalAttachment({
           requesterAgentId: params.requesterAgentId,

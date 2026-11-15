@@ -20,6 +20,7 @@ import { subagentRuns } from "./subagent-registry-memory.js";
 import { mutateSubagentRuns } from "./subagent-registry-persistence.js";
 import { loadSubagentRegistryFromSqlite } from "./subagent-registry-state.fixture.test-support.js";
 import { observeRootWork } from "./subagent-registry.browser-cleanup.test-support.js";
+import { admitRequesterWakeFixture } from "./subagent-registry.requester-wake-admitted-requester.test-support.js";
 import type { RequesterWakeFixture } from "./subagent-registry.requester-wake-session.test-support.js";
 import * as registry from "./subagent-registry.test-helpers.js";
 import type { SubagentRunRecord } from "./subagent-registry.types.js";
@@ -276,8 +277,14 @@ export function registerRequesterWakeReceiptBoundaryTests({
     const requesterTurnRunId = "run-requester-yield";
     const alpha = visibleChild("alpha");
     const beta = visibleChild("beta");
-    await spawnVisibleChild({ ...alpha, requesterTurnRunId });
-    await spawnVisibleChild({ ...beta, requesterTurnRunId });
+    const { inRequesterScope, releaseOriginalHold } = await admitRequesterWakeFixture({
+      createGatewayContext,
+      getFixture,
+      requesterSessionKey,
+      spawnVisibleChild,
+      children: [alpha, beta],
+      requesterTurnRunId,
+    });
     holdAgentCall(beta.childSessionKey);
     emitCompleted(alpha.runId, alpha.childSessionKey, "alpha complete");
     await waitForAgentCallCount(1);
@@ -314,8 +321,12 @@ export function registerRequesterWakeReceiptBoundaryTests({
     const settleWakeOwner = outcomeDrift || rejectRequesterWake ? observeRootWork() : undefined;
     const yieldTool = createRequesterYieldTool(requesterSessionKey, requesterTurnRunId);
     await expect(
-      yieldTool.execute("yield-requester-wake", { message: "Wait for visible children" }),
+      inRequesterScope(() =>
+        yieldTool.execute("yield-requester-wake", { message: "Wait for visible children" }),
+      ),
     ).resolves.toMatchObject({ details: { status: "yielded" } });
+    // Settlement must use custody retained from the requester, not its original hold.
+    releaseOriginalHold();
 
     const requesterScope = {
       agentId: "main",

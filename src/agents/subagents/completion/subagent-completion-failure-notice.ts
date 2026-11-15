@@ -16,6 +16,8 @@ import { SourceError } from "../registry/subagent-completion-source.js";
 import { subagentRuns } from "../registry/subagent-registry-memory.js";
 import { assertSubagentRegistryWriteSourceCurrent } from "../registry/subagent-registry-persistence.js";
 import type { SubagentRunRecord } from "../registry/subagent-registry.types.js";
+import { captureRequesterYieldNoticeAuthority } from "../registry/subagent-requester-notice-authority.js";
+import type { RequesterWakeCommittedWrite } from "./subagent-completion-mutation.types.js";
 
 export function isSubagentCompletionFailureNoticeRequired(
   outcome: SubagentAnnounceDeliveryResult | undefined,
@@ -53,6 +55,7 @@ export async function withSubagentCompletionFailureNoticeAuthority<T>(
   batch: readonly SubagentRunRecord[],
   required: boolean,
   settle: (publish: PublishFailureNotice) => Promise<T>,
+  committed?: () => RequesterWakeCommittedWrite | undefined,
 ): Promise<T> {
   const requester = batch[0];
   if (!required || !requester) {
@@ -65,13 +68,14 @@ export async function withSubagentCompletionFailureNoticeAuthority<T>(
   };
   let custody: Awaited<ReturnType<typeof captureOperatorToolGatewayContinuationContext>>;
   try {
-    custody = await subagentRuns.runWithCompletionBatchAuthority(
-      batch,
-      () => {
-        return captureOperatorToolGatewayContinuationContext(target);
-      },
-      { requireRetainedSource: true },
-    );
+    custody = await (captureRequesterYieldNoticeAuthority(batch, committed) ??
+      subagentRuns.runWithCompletionBatchAuthority(
+        batch,
+        () => {
+          return captureOperatorToolGatewayContinuationContext(target);
+        },
+        { requireRetainedSource: true },
+      ));
   } catch (error) {
     if (isAuthorityDenied(error)) {
       return settle(skipNotice);

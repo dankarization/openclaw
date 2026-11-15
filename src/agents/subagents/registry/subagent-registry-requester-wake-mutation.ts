@@ -302,6 +302,7 @@ export function createRequesterWakeSettlement(params: {
             release(members);
           }
         },
+        () => receipt.committed,
       ),
   };
   for (const member of batch) {
