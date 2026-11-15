@@ -15,8 +15,8 @@ import {
   resolveSubagentChildAgentId,
   resolveSubagentChildAuthority,
 } from "./subagent-child-owner-match.js";
+import { assertBatchSource, isCancellation, SourceError } from "./subagent-completion-source.js";
 import { projectSubagentRunForSessionList } from "./subagent-delivery-state.js";
-import { SUBAGENT_ENDED_REASON_KILLED } from "./subagent-lifecycle-events.js";
 import { SubagentRunIndex } from "./subagent-registry-memory-index.js";
 import type { SubagentCompletionCustody } from "./subagent-registry-memory.types.js";
 import {
@@ -347,16 +347,16 @@ class SubagentRunMap extends Map<string, SubagentRunRecord> {
         .map((id) => this.get(id))
         .find((candidate) => candidate && isQueuedSubagentRunRekey(entry, candidate));
     if (current && !isSameSubagentRunOwner(current, entry)) {
-      throw new Error("Subagent completion runtime owner is no longer active");
+      throw new SourceError("Subagent completion runtime owner is no longer active");
     }
     if (this.retiredCompletionEntries.has(getSubagentRunRuntimeKey(entry))) {
-      throw new Error("Subagent completion requester store was retired");
+      throw new SourceError("Subagent completion requester store was retired");
     }
     if (
       this.requiredCompletionEntries.has(getSubagentRunRuntimeKey(entry)) &&
       !isSameSubagentRunOwner(this.get(entry.runId), entry)
     ) {
-      throw new Error("Subagent completion authority is no longer active");
+      throw new SourceError("Subagent completion authority is no longer active");
     }
   }
 
@@ -366,26 +366,24 @@ class SubagentRunMap extends Map<string, SubagentRunRecord> {
     const custody = this.completionAuthorities.get(getSubagentRunRuntimeKey(entry));
     // Keep the requester's retained authority after child cancellation. Only a notice
     // without that custody uses its independently admitted cancellation caller.
-    if (!custody && this.isCancellationNotice(entry)) {
+    if (!custody && isCancellation(entry)) {
       return run();
     }
     if (this.requiredCompletionEntries.has(getSubagentRunRuntimeKey(entry)) && !custody) {
-      throw new Error("Subagent completion authority is no longer active");
+      throw new SourceError("Subagent completion authority is no longer active");
     }
     return custody ? custody.authority.run(run) : run();
   }
 
-  private isCancellationNotice(entry: SubagentRunRecord): boolean {
-    return (
-      entry.endedReason === SUBAGENT_ENDED_REASON_KILLED &&
-      entry.execution.outcome?.status === "error"
-    );
-  }
-
-  runWithCompletionBatchAuthority<T>(observed: readonly SubagentRunRecord[], run: () => T): T {
+  runWithCompletionBatchAuthority<T>(
+    observed: readonly SubagentRunRecord[],
+    run: () => T,
+    options?: { requireRetainedSource?: true },
+  ): T {
     const batch = observed.map((entry) => this.currentValue(entry));
     batch.forEach((entry) => this.assertCompletionEntryCurrent(entry));
-    const resultEntry = batch.find((entry) => !this.isCancellationNotice(entry));
+    assertBatchSource(batch, this.completionAuthorities, options?.requireRetainedSource);
+    const resultEntry = batch.find((entry) => !isCancellation(entry));
     if (!resultEntry) {
       const sources = batch.map(
         (entry) => this.completionAuthorities.get(getSubagentRunRuntimeKey(entry))?.authority,
@@ -416,7 +414,7 @@ class SubagentRunMap extends Map<string, SubagentRunRecord> {
     for (const entry of batch) {
       const custody = this.completionAuthorities.get(getSubagentRunRuntimeKey(entry));
       if (this.requiredCompletionEntries.has(getSubagentRunRuntimeKey(entry)) && !custody) {
-        throw new Error("Subagent completion authority is no longer active");
+        throw new SourceError("Subagent completion authority is no longer active");
       }
       custody?.authority.assertCurrent();
       const source = custody?.authority.operatorAuthority;
@@ -426,7 +424,7 @@ class SubagentRunMap extends Map<string, SubagentRunRecord> {
         !isDeepStrictEqual(source?.scopes, first?.scopes) ||
         !isDeepStrictEqual(custody?.authority.scopes, firstCustody?.authority.scopes)
       ) {
-        throw new Error("Subagent completion batch has incompatible operator authority");
+        throw new SourceError("Subagent completion batch has incompatible operator authority");
       }
     }
     return this.runWithCompletionAuthority(resultEntry, run);

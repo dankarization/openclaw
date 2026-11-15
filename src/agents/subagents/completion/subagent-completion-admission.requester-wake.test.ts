@@ -1,10 +1,14 @@
 import path from "node:path";
+import { expectDefined } from "@openclaw/normalization-core/expect";
 import { describe, expect, it, vi } from "vitest";
 import { observeHostDataSql } from "../../../../test/helpers/sqlite-statement-execution-counter.js";
 import {
   loadTranscriptEvents,
   replaceSessionEntry,
 } from "../../../config/sessions/session-accessor.js";
+import { captureOperatorToolGatewayContinuationContext } from "../../../gateway/server-plugin-in-process-dispatch.js";
+import { createContext } from "../../../gateway/server-plugin-in-process-dispatch.test-support.js";
+import { withPluginRuntimeGatewayRequestScope } from "../../../plugins/runtime/gateway-request-scope.js";
 import { runOpenClawStateWriteTransaction } from "../../../state/openclaw-state-db.js";
 import { captureOpenClawStateWorkerContext } from "../../../state/openclaw-state-worker-context.js";
 import { loadPendingFinalDeliveryPayload } from "../registry/subagent-delivery-state.js";
@@ -12,6 +16,7 @@ import { subagentRuns } from "../registry/subagent-registry-memory.js";
 import { restoreSubagentRunsFromDisk } from "../registry/subagent-registry-persistence.js";
 import { subscribeSubagentRunChanges } from "../registry/subagent-registry-publication.js";
 import { loadSubagentRegistryFromSqlite as loadRegistry } from "../registry/subagent-registry-state.fixture.test-support.js";
+import { retainedOperatorFixture } from "../registry/subagent-registry.completed-followup-authority.test-support.js";
 import { bindSubagentRunRecord } from "../registry/subagent-registry.store.codec.js";
 import { writeSubagentRunValuesInDatabase } from "../registry/subagent-registry.store.kernel.js";
 import type { SubagentRunRecord } from "../registry/subagent-registry.types.js";
@@ -181,6 +186,29 @@ describe("persisted subagent requester wakes", () => {
         // Old dispatching rows must converge on their next evaluation without a migration.
         db.value = await reopenOwners();
         input.subagent = subagentRuns.get(input.subagent.runId)!;
+        // This positive notice needs an explicitly admitted requester, including across reopen.
+        const operator = await retainedOperatorFixture(
+          "completion-notice-owner",
+          createContext([], () => ({ session: { store: input.subagent.requesterStorePath } })),
+        );
+        const custody = expectDefined(
+          await withPluginRuntimeGatewayRequestScope(
+            {
+              isWebchatConnect: () => false,
+              client: operator.client,
+              context: operator.context,
+              resolveGatewayContext: operator.resolveGatewayContext,
+            },
+            () =>
+              captureOperatorToolGatewayContinuationContext({
+                sessionKey: input.subagent.requesterSessionKey,
+                agentId: input.subagent.requesterAgentId,
+              }),
+          ),
+          "positive completion notice custody",
+        );
+        operator.source.release();
+        subagentRuns.bindCompletionAuthority(input.subagent, custody);
         using driver = requesterWakeDriver([input]);
         driver.wake.mockImplementation(async (params) => {
           await updateCompletionOwner(input.subagent.runId, (current) => ({

@@ -6,6 +6,10 @@ import { buildAnnounceIdempotencyKey } from "../../announce-idempotency.js";
 import { renderRuntimeCoordinationFailureCopy } from "../../failover/assistant-request-failure-copy.js";
 import type { SubagentAnnounceDeliveryResult } from "../announce/subagent-announce-dispatch.js";
 import { mutateRequesterCompletionBatch } from "../completion/subagent-completion-admission.store.js";
+import {
+  isSubagentCompletionFailureNoticeRequired,
+  withSubagentCompletionFailureNoticeAuthority,
+} from "../completion/subagent-completion-failure-notice.js";
 import type {
   RequesterWakeCommittedWrite,
   RequesterWakeMutation,
@@ -192,100 +196,113 @@ export function createRequesterWakeSettlement(params: {
     rearmGeneration,
     receipt,
     stateContext,
-    settle: async (): Promise<void> => {
-      const members = batch.filter(
-        (member) =>
-          pendingRequesterSettlements.get(getSubagentRunRuntimeKey(member)) === settlement &&
-          isRetainedRequesterSettleWakeMember(context, member, rearmGeneration, receipt),
-      );
-      // A quiet decision needs its whole cohort; a recorded outcome stays with surviving peers.
-      const settlesMembers =
-        members.length > 0 &&
-        (outcome !== undefined ||
-          receipt.committed !== undefined ||
-          members.length === batch.length);
-      if (
-        settlesMembers &&
-        !(await settleRequesterSettleWakeBatch(
-          context,
-          members,
-          rearmGeneration,
-          outcome,
-          stateContext,
-          receipt,
-        ))
-      ) {
-        return;
-      }
-      if (settlesMembers) {
-        const requester = batch[0];
-        if (
-          !admittedWake?.pauseNotice &&
-          admittedWake?.requesterYieldBatch &&
-          requester?.completionRequesterSessionId &&
-          outcome?.delivered !== true
-        ) {
-          const error =
-            outcome?.error ?? "Child completion could not continue the yielded request.";
-          const notice = renderRuntimeCoordinationFailureCopy("child_completion_delivery_failed");
-          const runId = admittedWake.requesterRunId;
-          if (runId) {
-            // A newer turn, reset, or Stop cannot inherit the failed batch's terminal.
-            await persistGatewaySessionLifecycleEvent({
-              sessionKey: requester.requesterSessionKey,
-              agentId: requester.requesterAgentId,
-              expectedWriter: {
-                runId,
-                sessionId: requester.completionRequesterSessionId,
-                lifecycleRevision: requester.completionRequesterLifecycleRevision,
-                requireYielded: true,
-              },
-              event: {
-                runId,
-                sessionId: requester.completionRequesterSessionId,
-                ts: Date.now(),
-                data: { phase: "error", error, errorNotice: notice },
-              },
-            });
-          } else {
-            // Stable batches lost their original run id. Report the batch failure,
-            // never assign whichever writer now occupies this session to that batch.
-            const { batchKey } = buildRequesterSettleWakeIdentity({
-              requesterSessionKey: requester.requesterSessionKey,
-              requesterAgentId: requester.requesterAgentId,
-              batchRunIds: admittedWake.batchRunIds ?? batch.map((entry) => entry.runId),
+    settle: async (): Promise<void> =>
+      withSubagentCompletionFailureNoticeAuthority(
+        batch,
+        isSubagentCompletionFailureNoticeRequired(outcome),
+        async (publishFailureNotice) => {
+          const members = batch.filter(
+            (member) =>
+              pendingRequesterSettlements.get(getSubagentRunRuntimeKey(member)) === settlement &&
+              isRetainedRequesterSettleWakeMember(context, member, rearmGeneration, receipt),
+          );
+          // A quiet decision needs its whole cohort; a recorded outcome stays with surviving peers.
+          const settlesMembers =
+            members.length > 0 &&
+            (outcome !== undefined ||
+              receipt.committed !== undefined ||
+              members.length === batch.length);
+          if (
+            settlesMembers &&
+            !(await settleRequesterSettleWakeBatch(
+              context,
+              members,
               rearmGeneration,
-            });
-            await recordGatewaySessionRunFailure({
-              target: {
-                sessionKey: requester.requesterSessionKey,
-                agentId: requester.requesterAgentId,
-                storePath: requester.requesterStorePath,
-                sessionId: requester.completionRequesterSessionId,
-                expectedLifecycleRevision: requester.completionRequesterLifecycleRevision,
-              },
-              runId: buildAnnounceIdempotencyKey(`${batchKey}:delivery-failure`),
-              error,
-              notice,
-              assertCommitAllowed: () => assertSubagentRegistryWriteSourceCurrent(stateContext),
-            });
+              outcome,
+              stateContext,
+              receipt,
+            ))
+          ) {
+            return;
           }
-        }
-        for (const retire of retireInputs) {
-          retire();
-        }
-        await onCommitted?.();
-      }
-      for (const member of batch) {
-        const key = getSubagentRunRuntimeKey(member);
-        if (pendingRequesterSettlements.get(key) === settlement) {
-          pendingRequesterSettlements.delete(key);
-        }
-      }
-      if (settlesMembers) {
-        release(members);
-      }
-    },
+          if (settlesMembers) {
+            const requester = batch[0];
+            const requesterSessionId = requester?.completionRequesterSessionId;
+            if (
+              !admittedWake?.pauseNotice &&
+              admittedWake?.requesterYieldBatch &&
+              requester &&
+              requesterSessionId &&
+              isSubagentCompletionFailureNoticeRequired(outcome)
+            ) {
+              await publishFailureNotice(async (assertNoticeAllowed) => {
+                const error =
+                  outcome?.error ?? "Child completion could not continue the yielded request.";
+                const notice = renderRuntimeCoordinationFailureCopy(
+                  "child_completion_delivery_failed",
+                );
+                const runId = admittedWake.requesterRunId;
+                if (runId) {
+                  // A newer turn, reset, or Stop cannot inherit the failed batch's terminal.
+                  await persistGatewaySessionLifecycleEvent({
+                    assertCommitAllowed: assertNoticeAllowed,
+                    assertTranscriptWriteAllowed: assertNoticeAllowed,
+                    sessionKey: requester.requesterSessionKey,
+                    agentId: requester.requesterAgentId,
+                    expectedWriter: {
+                      runId,
+                      sessionId: requesterSessionId,
+                      lifecycleRevision: requester.completionRequesterLifecycleRevision,
+                      requireYielded: true,
+                    },
+                    event: {
+                      runId,
+                      sessionId: requesterSessionId,
+                      ts: Date.now(),
+                      data: { phase: "error", error, errorNotice: notice },
+                    },
+                  });
+                } else {
+                  // Stable batches lost their original run id. Report the batch failure,
+                  // never assign whichever writer now occupies this session to that batch.
+                  const { batchKey } = buildRequesterSettleWakeIdentity({
+                    requesterSessionKey: requester.requesterSessionKey,
+                    requesterAgentId: requester.requesterAgentId,
+                    batchRunIds: admittedWake.batchRunIds ?? batch.map((entry) => entry.runId),
+                    rearmGeneration,
+                  });
+                  await recordGatewaySessionRunFailure({
+                    target: {
+                      sessionKey: requester.requesterSessionKey,
+                      agentId: requester.requesterAgentId,
+                      storePath: requester.requesterStorePath,
+                      sessionId: requesterSessionId,
+                      expectedLifecycleRevision: requester.completionRequesterLifecycleRevision,
+                    },
+                    runId: buildAnnounceIdempotencyKey(`${batchKey}:delivery-failure`),
+                    error,
+                    notice,
+                    assertCommitAllowed: assertNoticeAllowed,
+                  });
+                }
+              });
+            }
+            for (const retire of retireInputs) {
+              retire();
+            }
+            await onCommitted?.();
+          }
+          for (const member of batch) {
+            const key = getSubagentRunRuntimeKey(member);
+            if (pendingRequesterSettlements.get(key) === settlement) {
+              pendingRequesterSettlements.delete(key);
+            }
+          }
+          if (settlesMembers) {
+            release(members);
+          }
+        },
+      ),
   };
   for (const member of batch) {
     pendingRequesterSettlements.set(getSubagentRunRuntimeKey(member), settlement);

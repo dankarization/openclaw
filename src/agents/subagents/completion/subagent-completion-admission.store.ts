@@ -4,6 +4,7 @@ import { expectDefined } from "@openclaw/normalization-core";
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import { appendSessionTranscriptReport } from "../../../config/sessions/session-accessor.js";
 import { runWithoutOwnedSessionTranscriptWrites } from "../../../config/sessions/transcript-write-context-store.js";
+import { withSessionTranscriptWriteAssertion } from "../../../config/sessions/transcript-write-context.js";
 import type { DeliveryQueueStoredStatus } from "../../../infra/delivery-queue-sqlite.kernel.js";
 import type { QueuedSessionDelivery } from "../../../infra/session-delivery-queue.records.js";
 import type { SessionDeliveryWorkerOperations } from "../../../infra/session-delivery-queue.worker.js";
@@ -38,6 +39,10 @@ import {
   compareSubagentRunGeneration,
   isSameSubagentRunOwner,
 } from "../registry/subagent-run-generation.js";
+import {
+  isSubagentCompletionFailureNoticeRequired,
+  withSubagentCompletionFailureNoticeAuthority,
+} from "./subagent-completion-failure-notice.js";
 import { retiredCancellationEndedAt } from "./subagent-completion-mutation.kernel.js";
 import type {
   BlockSubagentCompletionRequest,
@@ -58,6 +63,7 @@ type MutationReceipt = SubagentCompletionMutationResult & { writeId: string };
 async function recordRequiredCompletionFailure(
   entry: SubagentRunRecord,
   reason: string,
+  assertNoticeAllowed: () => void,
   batch: readonly SubagentRunRecord[] = [entry],
 ): Promise<void> {
   subagentRegistryLog.warn("Subagent completion delivery failed", {
@@ -91,22 +97,22 @@ async function recordRequiredCompletionFailure(
           }:delivery-failure`,
         ))
       : `subagent-delivery-failure:${entry.taskRunId ?? entry.runId}:${entry.delivery?.generation ?? 1}`;
-  // This records a failed obligation, without borrowing its retired execution authority.
-  // A deleted/reset requester refuses the append; never redirect it to a replacement.
+  const target = {
+    agentId: entry.requesterAgentId,
+    sessionKey: entry.requesterSessionKey,
+    storePath: entry.requesterStorePath,
+    sessionId: entry.completionRequesterSessionId,
+    expectedLifecycleRevision: entry.completionRequesterLifecycleRevision,
+  };
+  // The retired execution cannot write; the retained requester must authorize this new notice.
   await runWithoutOwnedSessionTranscriptWrites(() =>
-    appendSessionTranscriptReport(
-      {
-        agentId: entry.requesterAgentId,
-        sessionKey: entry.requesterSessionKey,
-        storePath: entry.requesterStorePath,
-        sessionId: entry.completionRequesterSessionId,
-        expectedLifecycleRevision: entry.completionRequesterLifecycleRevision,
-      },
-      {
+    withSessionTranscriptWriteAssertion(target, assertNoticeAllowed, () =>
+      appendSessionTranscriptReport(target, {
         kind: "custom",
         customTypes: ["run-failed-before-reply"],
-        selectReport: (latest) =>
-          isRecord(latest?.details) && latest.details.runId === runId
+        selectReport: (latest) => {
+          assertNoticeAllowed();
+          return isRecord(latest?.details) && latest.details.runId === runId
             ? undefined
             : {
                 customType: "run-failed-before-reply",
@@ -117,8 +123,9 @@ async function recordRequiredCompletionFailure(
                   "child completion failure notice",
                 ),
                 details: { runId, childRunId: entry.runId },
-              },
-      },
+              };
+        },
+      }),
     ),
   );
 }
@@ -463,53 +470,71 @@ export async function blockSubagentCompletionDelivery(
   params: BlockSubagentCompletionRequest &
     CompletionMutationOptions & { requesterBatch?: readonly SubagentRunRecord[] },
 ): Promise<boolean> {
-  const {
-    context: _context,
-    databaseOptions: _databaseOptions,
-    assertCurrent: _assertCurrent,
-    requesterBatch: _requesterBatch,
-    ...request
-  } = params;
-  if (params.storeReplaced) {
-    const current = currentCompletionOwner(subagentRuns, params.subagent);
-    subagentRuns.retireCompletionAuthority(current);
-  }
-  const result = await mutateCompletion(
-    [params.subagent],
-    (rows) => {
-      const current = currentCompletionOwner(rows, params.subagent);
-      if ((current.delivery?.generation ?? 1) !== (params.subagent.delivery?.generation ?? 1)) {
-        throw new SubagentCompletionSourceChangedError(
-          "Subagent completion delivery generation changed",
+  const noticeRequired =
+    !params.storeReplaced &&
+    !params.operatorAuthorityUnavailable &&
+    params.disposition !== "intentional_non_delivery" &&
+    (params.suspendedReason === "permanent_failure" || params.disposition === "permanent_failure");
+  return withSubagentCompletionFailureNoticeAuthority(
+    params.requesterBatch ?? [params.subagent],
+    noticeRequired,
+    async (publishFailureNotice) => {
+      const {
+        context: _context,
+        databaseOptions: _databaseOptions,
+        assertCurrent: _assertCurrent,
+        requesterBatch: _requesterBatch,
+        ...request
+      } = params;
+      if (params.storeReplaced) {
+        const current = currentCompletionOwner(subagentRuns, params.subagent);
+        subagentRuns.retireCompletionAuthority(current);
+      }
+      const result = await mutateCompletion(
+        [params.subagent],
+        (rows) => {
+          const current = currentCompletionOwner(rows, params.subagent);
+          if ((current.delivery?.generation ?? 1) !== (params.subagent.delivery?.generation ?? 1)) {
+            throw new SubagentCompletionSourceChangedError(
+              "Subagent completion delivery generation changed",
+            );
+          }
+          return { kind: "block", params: { ...request, subagent: current }, now: Date.now() };
+        },
+        {
+          ...params,
+          onPublished(applied) {
+            if (
+              applied === true &&
+              (params.suspendedReason ||
+                params.operatorAuthorityUnavailable ||
+                params.storeReplaced ||
+                params.disposition === "permanent_failure")
+            ) {
+              // The durable outcome precedes releasing the completion input.
+              retireSubagentCompletionControllerInput(params.subagent);
+            }
+          },
+        },
+      );
+      if (
+        result.applied &&
+        (params.storeReplaced ||
+          params.suspendedReason === "permanent_failure" ||
+          params.disposition === "permanent_failure")
+      ) {
+        await publishFailureNotice((assertCurrent) =>
+          recordRequiredCompletionFailure(
+            params.subagent,
+            params.reason,
+            assertCurrent,
+            params.requesterBatch,
+          ),
         );
       }
-      return { kind: "block", params: { ...request, subagent: current }, now: Date.now() };
-    },
-    {
-      ...params,
-      onPublished(applied) {
-        if (
-          applied === true &&
-          (params.suspendedReason ||
-            params.operatorAuthorityUnavailable ||
-            params.storeReplaced ||
-            params.disposition === "permanent_failure")
-        ) {
-          // The durable outcome precedes releasing the completion input.
-          retireSubagentCompletionControllerInput(params.subagent);
-        }
-      },
+      return result.applied === true;
     },
   );
-  if (
-    result.applied &&
-    (params.storeReplaced ||
-      params.suspendedReason === "permanent_failure" ||
-      params.disposition === "permanent_failure")
-  ) {
-    await recordRequiredCompletionFailure(params.subagent, params.reason, params.requesterBatch);
-  }
-  return result.applied === true;
 }
 
 export async function reconcileRetiredSubagentCancellation(
@@ -610,47 +635,61 @@ export async function mutateRequesterCompletionBatch(
     operation: RequesterWakeMutation | { kind: "settle"; outcome: SubagentAnnounceDeliveryResult };
   },
 ): Promise<CompletionMutationPublication> {
-  const publication = await mutateCompletion(
+  return withSubagentCompletionFailureNoticeAuthority(
     params.entries,
-    (rows) => {
-      const cohort = {
-        entries: currentRequesterEntries(
-          rows,
-          params.entries,
-          params.operation.kind,
-          params.committed,
-        ),
-        committed: params.committed,
-      };
-      return params.operation.kind === "settle"
-        ? { ...cohort, kind: "requesterBatch", outcome: params.operation.outcome, now: Date.now() }
-        : { ...cohort, kind: "requesterWake", operation: params.operation };
-    },
-    {
-      ...params,
-      onPublished: () => params.onPublished?.(),
-      onCommitted(result, mutation) {
-        if (
-          !params.committed &&
-          (mutation.kind === "requesterBatch" || mutation.kind === "requesterWake")
-        ) {
-          params.onCommitted?.({ entries: mutation.entries, result });
+    params.operation.kind === "settle" &&
+      isSubagentCompletionFailureNoticeRequired(params.operation.outcome),
+    async (publishFailureNotice) => {
+      const publication = await mutateCompletion(
+        params.entries,
+        (rows) => {
+          const cohort = {
+            entries: currentRequesterEntries(
+              rows,
+              params.entries,
+              params.operation.kind,
+              params.committed,
+            ),
+            committed: params.committed,
+          };
+          return params.operation.kind === "settle"
+            ? {
+                ...cohort,
+                kind: "requesterBatch",
+                outcome: params.operation.outcome,
+                now: Date.now(),
+              }
+            : { ...cohort, kind: "requesterWake", operation: params.operation };
+        },
+        {
+          ...params,
+          onPublished: () => params.onPublished?.(),
+          onCommitted(result, mutation) {
+            if (
+              !params.committed &&
+              (mutation.kind === "requesterBatch" || mutation.kind === "requesterWake")
+            ) {
+              params.onCommitted?.({ entries: mutation.entries, result });
+            }
+          },
+        },
+      );
+      if (
+        publication.applied &&
+        params.operation.kind === "settle" &&
+        !params.operation.outcome.delivered
+      ) {
+        for (const entry of params.entries) {
+          const reason =
+            params.operation.outcome.error ??
+            params.operation.outcome.disposition ??
+            "not delivered";
+          await publishFailureNotice((assertCurrent) =>
+            recordRequiredCompletionFailure(entry, reason, assertCurrent, params.entries),
+          );
         }
-      },
+      }
+      return publication;
     },
   );
-  if (
-    publication.applied &&
-    params.operation.kind === "settle" &&
-    !params.operation.outcome.delivered
-  ) {
-    for (const entry of params.entries) {
-      await recordRequiredCompletionFailure(
-        entry,
-        params.operation.outcome.error ?? params.operation.outcome.disposition ?? "not delivered",
-        params.entries,
-      );
-    }
-  }
-  return publication;
 }

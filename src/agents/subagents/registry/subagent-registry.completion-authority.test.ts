@@ -47,6 +47,7 @@ import { createEnteredGate } from "../../entered-gate.test-support.js";
 import { createOperationalRunInstanceRef } from "../../operational-run-instance.js";
 import { setSubagentAnnounceDeliveryDepsForTest } from "../announce/subagent-announce-overrides.test-support.js";
 import * as announce from "../announce/subagent-announce.js";
+import { SourceError } from "./subagent-completion-source.js";
 import { subagentRuns } from "./subagent-registry-memory.js";
 import { mutateSubagentRuns } from "./subagent-registry-persistence.js";
 import { subscribeSubagentRunChanges } from "./subagent-registry-publication.js";
@@ -878,6 +879,9 @@ describe("registered completion source custody", () => {
           inGateway({ client: observer, context }, () => {
             subagentRuns.runWithCompletionAuthority(entry, assertRequesterAuthority);
             subagentRuns.runWithCompletionBatchAuthority([entry], assertRequesterAuthority);
+            subagentRuns.runWithCompletionBatchAuthority([entry], assertRequesterAuthority, {
+              requireRetainedSource: true,
+            });
           });
           await releaseSubagentRun(entry.runId);
         } else if (
@@ -904,6 +908,17 @@ describe("registered completion source custody", () => {
               expect(getPluginRuntimeGatewayRequestScope()?.client).toBe(observer),
             ),
           );
+          const noticeCapture = vi.fn();
+          inGateway({ client: observer, context }, () =>
+            expect(() =>
+              subagentRuns.runWithCompletionBatchAuthority(
+                [entry, subagentRuns.get("other")!],
+                noticeCapture,
+                { requireRetainedSource: true },
+              ),
+            ).toThrow(SourceError),
+          );
+          expect(noticeCapture).not.toHaveBeenCalled();
           await releaseSubagentRun(entry.runId);
           await releaseSubagentRun("other");
         } else if (ending === "cancelled-by-another-operator") {
