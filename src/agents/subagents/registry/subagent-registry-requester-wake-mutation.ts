@@ -233,36 +233,37 @@ export function createRequesterWakeSettlement(params: {
               admittedWake?.requesterYieldBatch &&
               requester &&
               requesterSessionId &&
-              isSubagentCompletionFailureNoticeRequired(outcome)
+              outcome !== undefined &&
+              !outcome.delivered
             ) {
-              await publishFailureNotice(async (assertNoticeAllowed) => {
-                const error =
-                  outcome?.error ?? "Child completion could not continue the yielded request.";
-                const notice = renderRuntimeCoordinationFailureCopy(
-                  "child_completion_delivery_failed",
-                );
-                const runId = admittedWake.requesterRunId;
-                if (runId) {
-                  // A newer turn, reset, or Stop cannot inherit the failed batch's terminal.
-                  await persistGatewaySessionLifecycleEvent({
-                    assertCommitAllowed: assertNoticeAllowed,
-                    assertTranscriptWriteAllowed: assertNoticeAllowed,
-                    sessionKey: requester.requesterSessionKey,
-                    agentId: requester.requesterAgentId,
-                    expectedWriter: {
-                      runId,
-                      sessionId: requesterSessionId,
-                      lifecycleRevision: requester.completionRequesterLifecycleRevision,
-                      requireYielded: true,
-                    },
-                    event: {
-                      runId,
-                      sessionId: requesterSessionId,
-                      ts: Date.now(),
-                      data: { phase: "error", error, errorNotice: notice },
-                    },
-                  });
-                } else {
+              const error =
+                outcome?.error ?? "Child completion could not continue the yielded request.";
+              const notice = renderRuntimeCoordinationFailureCopy(
+                "child_completion_delivery_failed",
+              );
+              const runId = admittedWake.requesterRunId;
+              if (runId) {
+                // A newer turn, reset, or Stop cannot inherit the failed batch's terminal.
+                await persistGatewaySessionLifecycleEvent({
+                  assertCommitAllowed: () => assertSubagentRegistryWriteSourceCurrent(stateContext),
+                  publishFailureNotice,
+                  sessionKey: requester.requesterSessionKey,
+                  agentId: requester.requesterAgentId,
+                  expectedWriter: {
+                    runId,
+                    sessionId: requesterSessionId,
+                    lifecycleRevision: requester.completionRequesterLifecycleRevision,
+                    requireYielded: true,
+                  },
+                  event: {
+                    runId,
+                    sessionId: requesterSessionId,
+                    ts: Date.now(),
+                    data: { phase: "error", error, errorNotice: notice },
+                  },
+                });
+              } else {
+                await publishFailureNotice(async (assertNoticeAllowed) => {
                   // Stable batches lost their original run id. Report the batch failure,
                   // never assign whichever writer now occupies this session to that batch.
                   const { batchKey } = buildRequesterSettleWakeIdentity({
@@ -284,8 +285,8 @@ export function createRequesterWakeSettlement(params: {
                     notice,
                     assertCommitAllowed: assertNoticeAllowed,
                   });
-                }
-              });
+                });
+              }
             }
             for (const retire of retireInputs) {
               retire();

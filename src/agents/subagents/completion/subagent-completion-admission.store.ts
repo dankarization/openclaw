@@ -24,6 +24,7 @@ import {
 } from "../registry/subagent-registry-memory.js";
 import {
   mutateSubagentRuns,
+  assertSubagentRegistryWriteSourceCurrent,
   runSubagentRegistryWorkerWrite,
   SubagentRegistryMutationRejectedError,
   SubagentRegistryCommitReceiptError,
@@ -40,6 +41,7 @@ import {
   isSameSubagentRunOwner,
 } from "../registry/subagent-run-generation.js";
 import {
+  isHostRetirementFailureNotice,
   isSubagentCompletionFailureNoticeRequired,
   withSubagentCompletionFailureNoticeAuthority,
 } from "./subagent-completion-failure-notice.js";
@@ -470,6 +472,10 @@ export async function blockSubagentCompletionDelivery(
   params: BlockSubagentCompletionRequest &
     CompletionMutationOptions & { requesterBatch?: readonly SubagentRunRecord[] },
 ): Promise<boolean> {
+  const hostRetirementNotice =
+    params.storeReplaced === true && !params.operatorAuthorityUnavailable;
+  const stateContext = params.context ?? captureOpenClawStateWorkerContext();
+  const assertHostNoticeCurrent = () => assertSubagentRegistryWriteSourceCurrent(stateContext);
   const noticeRequired =
     !params.storeReplaced &&
     !params.operatorAuthorityUnavailable &&
@@ -523,14 +529,24 @@ export async function blockSubagentCompletionDelivery(
           params.suspendedReason === "permanent_failure" ||
           params.disposition === "permanent_failure")
       ) {
-        await publishFailureNotice((assertCurrent) =>
-          recordRequiredCompletionFailure(
+        if (hostRetirementNotice) {
+          // The committed retirement owns only a fixed diagnostic for the original target.
+          await recordRequiredCompletionFailure(
             params.subagent,
             params.reason,
-            assertCurrent,
+            assertHostNoticeCurrent,
             params.requesterBatch,
-          ),
-        );
+          );
+        } else {
+          await publishFailureNotice((assertCurrent) =>
+            recordRequiredCompletionFailure(
+              params.subagent,
+              params.reason,
+              assertCurrent,
+              params.requesterBatch,
+            ),
+          );
+        }
       }
       return result.applied === true;
     },
@@ -636,6 +652,11 @@ export async function mutateRequesterCompletionBatch(
   },
 ): Promise<CompletionMutationPublication> {
   let committedNoticeReceipt = params.committed;
+  const stateContext = params.context ?? captureOpenClawStateWorkerContext();
+  const assertHostNoticeCurrent = () => assertSubagentRegistryWriteSourceCurrent(stateContext);
+  const hostRetirementNotice =
+    params.operation.kind === "settle" &&
+    isHostRetirementFailureNotice(params.operation.outcome, params.entries);
   return withSubagentCompletionFailureNoticeAuthority(
     params.entries,
     params.operation.kind === "settle" &&
@@ -686,9 +707,19 @@ export async function mutateRequesterCompletionBatch(
             params.operation.outcome.error ??
             params.operation.outcome.disposition ??
             "not delivered";
-          await publishFailureNotice((assertCurrent) =>
-            recordRequiredCompletionFailure(entry, reason, assertCurrent, params.entries),
-          );
+          if (hostRetirementNotice) {
+            // A retired obligation may report only to its exact recorded requester target.
+            await recordRequiredCompletionFailure(
+              entry,
+              reason,
+              assertHostNoticeCurrent,
+              params.entries,
+            );
+          } else {
+            await publishFailureNotice((assertCurrent) =>
+              recordRequiredCompletionFailure(entry, reason, assertCurrent, params.entries),
+            );
+          }
         }
       }
       return publication;

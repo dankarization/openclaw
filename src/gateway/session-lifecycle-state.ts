@@ -34,6 +34,7 @@ type GatewaySessionLifecycleEventParams = {
   event: LifecycleEventLike;
   assertCommitAllowed?: () => void;
   assertTranscriptWriteAllowed?: () => void;
+  publishFailureNotice?: (write: (assertCurrent: () => void) => Promise<void>) => Promise<void>;
   expectedWriter?: {
     allowUnstartedFailure?: true;
     requireYielded?: true;
@@ -230,35 +231,43 @@ async function persistPreparedGatewaySessionLifecycleEvent(
     } = failedRun;
     // Only accepted errors pay for branch navigation; assistant detection and
     // report deduplication share the appender's authoritative write snapshot.
-    const receipt = {
-      target: {
-        agentId: sessionEntry.agentId,
-        storePath: sessionEntry.storePath,
-        sessionKey: sessionEntry.canonicalKey,
-        sessionId: persisted.sessionId,
-        expectedLifecycleRevision: persisted.lifecycleRevision,
-        expectedWriterRunId: persisted.activeWriterRunId,
-      },
-      runId,
-      error,
-      errorKind,
-      suppressErrorNotice,
-      notice,
-      desktopNotice,
-      errorObservation,
-      assertCommitAllowed: composeSessionSourceAssertion([
-        params.assertCommitAllowed,
-        params.assertTranscriptWriteAllowed,
-      ]),
+    const writeFailureNotice = async (assertNoticeAllowed?: () => void) => {
+      const receipt = {
+        target: {
+          agentId: sessionEntry.agentId,
+          storePath: sessionEntry.storePath,
+          sessionKey: sessionEntry.canonicalKey,
+          sessionId: persisted.sessionId,
+          expectedLifecycleRevision: persisted.lifecycleRevision,
+          expectedWriterRunId: persisted.activeWriterRunId,
+        },
+        runId,
+        error,
+        errorKind,
+        suppressErrorNotice,
+        notice,
+        desktopNotice,
+        errorObservation,
+        assertCommitAllowed: composeSessionSourceAssertion([
+          params.assertCommitAllowed,
+          params.assertTranscriptWriteAllowed,
+          assertNoticeAllowed,
+        ]),
+      };
+      // Terminal settlement stays independent; diagnostic writes retain their source fence.
+      await withOwnedSessionTranscriptWrites(
+        {
+          sessionTarget: receipt.target,
+          assertCommitAllowed: receipt.assertCommitAllowed,
+          withTranscriptWrite: trackAsyncWork,
+        },
+        () => recordGatewaySessionRunFailure(receipt),
+      );
     };
-    // Terminal settlement stays independent; diagnostic writes retain their source fence.
-    await withOwnedSessionTranscriptWrites(
-      {
-        sessionTarget: receipt.target,
-        assertCommitAllowed: receipt.assertCommitAllowed,
-        withTranscriptWrite: trackAsyncWork,
-      },
-      () => recordGatewaySessionRunFailure(receipt),
-    );
+    if (params.publishFailureNotice) {
+      await params.publishFailureNotice(writeFailureNotice);
+    } else {
+      await writeFailureNotice();
+    }
   }
 }

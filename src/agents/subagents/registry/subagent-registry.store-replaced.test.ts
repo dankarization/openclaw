@@ -255,6 +255,39 @@ it.each([
   },
 );
 
+it("does not use retirement diagnostics when operator authority is explicitly unavailable", async () => {
+  const { subagent } = records();
+  const target = {
+    agentId: "main",
+    sessionKey: subagent.requesterSessionKey,
+    sessionId: "original-requester",
+    storePath: resolveSessionStorePathCore(undefined, { agentId: "main" }),
+  };
+  await upsertSessionEntryCore(target, {
+    sessionId: target.sessionId,
+    lifecycleRevision: "original-revision",
+    updatedAt: Date.now(),
+  });
+  Object.assign(subagent, {
+    completionTarget: "parent",
+    completionRequesterSessionId: target.sessionId,
+    completionRequesterLifecycleRevision: "original-revision",
+    requesterStorePath: target.storePath,
+  });
+  publishCommittedRecords(subagent);
+  expect(
+    await blockSubagentCompletionDelivery({
+      subagent,
+      reason: "operator authority unavailable",
+      storeReplaced: true,
+      operatorAuthorityUnavailable: true,
+      suspendedReason: "permanent_failure",
+    }),
+  ).toBe(true);
+  expect(await loadTranscriptEvents(target)).toEqual([]);
+  expect(loadSubagentRegistryFromSqlite().get(subagent.runId)?.delivery?.status).toBe("suspended");
+});
+
 it.each([false, true])(
   "settles an unreachable yielded task only after custody retires (%s)",
   async (retired) => {

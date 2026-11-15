@@ -2,8 +2,10 @@ import path from "node:path";
 import { expectDefined } from "@openclaw/normalization-core/expect";
 import { describe, expect, it, vi } from "vitest";
 import { observeHostDataSql } from "../../../../test/helpers/sqlite-statement-execution-counter.js";
+import { clearRuntimeConfigSnapshot, setRuntimeConfigSnapshot } from "../../../config/io.js";
 import {
   loadTranscriptEvents,
+  loadExactSessionEntryReadOnly,
   replaceSessionEntry,
 } from "../../../config/sessions/session-accessor.js";
 import { captureOperatorToolGatewayContinuationContext } from "../../../gateway/server-plugin-in-process-dispatch.js";
@@ -15,6 +17,7 @@ import { loadPendingFinalDeliveryPayload } from "../registry/subagent-delivery-s
 import { subagentRuns } from "../registry/subagent-registry-memory.js";
 import { restoreSubagentRunsFromDisk } from "../registry/subagent-registry-persistence.js";
 import { subscribeSubagentRunChanges } from "../registry/subagent-registry-publication.js";
+import { createRequesterWakeSettlement } from "../registry/subagent-registry-requester-wake-mutation.js";
 import { loadSubagentRegistryFromSqlite as loadRegistry } from "../registry/subagent-registry-state.fixture.test-support.js";
 import { retainedOperatorFixture } from "../registry/subagent-registry.completed-followup-authority.test-support.js";
 import { bindSubagentRunRecord } from "../registry/subagent-registry.store.codec.js";
@@ -253,6 +256,70 @@ describe("persisted subagent requester wakes", () => {
       }
     },
   );
+
+  it("terminalizes a failed yielded wake even when notice authority is unavailable", async () => {
+    const input = armRequesterWake(records());
+    const runId = "original-yielded-requester";
+    const sessionId = "original-requester-session";
+    const revision = "original-requester-revision";
+    const storePath = path.join(process.env.OPENCLAW_STATE_DIR!, "sessions.json");
+    Object.assign(input.subagent, {
+      completionRequesterSessionId: sessionId,
+      completionRequesterLifecycleRevision: revision,
+      requesterStorePath: storePath,
+    });
+    Object.assign(input.subagent.requesterSettleWake!, {
+      requesterYieldBatch: true,
+      requesterRunId: runId,
+    });
+    const scope = {
+      sessionKey: input.subagent.requesterSessionKey,
+      agentId: input.subagent.requesterAgentId,
+      storePath,
+      sessionId,
+    };
+    setRuntimeConfigSnapshot({ session: { store: storePath } });
+    try {
+      await replaceSessionEntry(scope, {
+        sessionId,
+        lifecycleRevision: revision,
+        lifecycleRunId: runId,
+        activeWriterRunId: runId,
+        startedAt: Date.now() - 1000,
+        endedAt: Date.now() - 500,
+        updatedAt: Date.now(),
+      });
+      persistOwner(input);
+      using driver = requesterWakeDriver([input]);
+      const release = vi.fn();
+      const settle = createRequesterWakeSettlement({
+        context: driver.controller,
+        scope: "failed-yielded-requester",
+        batch: [input.subagent],
+        rearmGeneration: 1,
+        outcome: {
+          delivered: false,
+          path: "none",
+          disposition: "permanent_failure",
+          reason: "operator_authority_unavailable",
+          error: "The original operator no longer has access",
+        },
+        stateContext: captureOpenClawStateWorkerContext(),
+        admittedWake: structuredClone(input.subagent.requesterSettleWake),
+        release,
+      });
+      await settle();
+      expect(stored(input)?.requesterSettleWake).toBeUndefined();
+      expect(loadExactSessionEntryReadOnly(scope)?.entry).toMatchObject({
+        status: "failed",
+        lastRunId: runId,
+      });
+      expect(await loadTranscriptEvents(scope)).toEqual([]);
+      expect(release).toHaveBeenCalledOnce();
+    } finally {
+      clearRuntimeConfigSnapshot();
+    }
+  });
 
   it("settles lost operator authority without discarding child results or queuing a notice", async () => {
     const input = armRequesterWake(records());

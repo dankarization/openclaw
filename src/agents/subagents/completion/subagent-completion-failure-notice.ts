@@ -17,6 +17,7 @@ import { subagentRuns } from "../registry/subagent-registry-memory.js";
 import { assertSubagentRegistryWriteSourceCurrent } from "../registry/subagent-registry-persistence.js";
 import type { SubagentRunRecord } from "../registry/subagent-registry.types.js";
 import { captureRequesterYieldNoticeAuthority } from "../registry/subagent-requester-notice-authority.js";
+import { isSameSubagentRunOwner } from "../registry/subagent-run-generation.js";
 import type { RequesterWakeCommittedWrite } from "./subagent-completion-mutation.types.js";
 
 export function isSubagentCompletionFailureNoticeRequired(
@@ -28,6 +29,25 @@ export function isSubagentCompletionFailureNoticeRequired(
     !outcome.storeReplaced &&
     outcome.disposition !== "intentional_non_delivery" &&
     outcome.reason !== "operator_authority_unavailable"
+  );
+}
+
+/** A committed retirement may report only its fixed diagnostic to the original target. */
+export function isHostRetirementFailureNotice(
+  outcome: SubagentAnnounceDeliveryResult | undefined,
+  entries: readonly SubagentRunRecord[],
+): boolean {
+  return (
+    outcome !== undefined &&
+    !outcome.delivered &&
+    outcome.reason !== "operator_authority_unavailable" &&
+    (outcome.storeReplaced === true ||
+      entries.every((entry) => {
+        const current = subagentRuns.get(entry.runId);
+        return (
+          isSameSubagentRunOwner(current, entry) && current?.delivery?.suspendedReason === "expiry"
+        );
+      }))
   );
 }
 
