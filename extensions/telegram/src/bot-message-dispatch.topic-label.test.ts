@@ -1,5 +1,4 @@
 import { resetPluginStateStoreForTests } from "openclaw/plugin-sdk/plugin-state-test-runtime";
-import * as replyDispatchRuntime from "openclaw/plugin-sdk/reply-dispatch-runtime";
 import {
   getSessionEntryByIdAsync,
   upsertSessionEntry,
@@ -12,6 +11,10 @@ import {
   dispatchReplyWithBufferedBlockDispatcher,
   dispatchWithContext as dispatchWithoutLabelDrain,
   generateTopicLabel,
+  getSessionEntry,
+  readTopicSourceMock,
+  readTopicSourceActual,
+  resolveStorePath,
   mockDefaultSessionEntry,
   prepareSkillCommandsForAgents,
 } from "./bot-message-dispatch.test-harness.js";
@@ -346,32 +349,27 @@ describeTelegramDispatch("Telegram generated topic refinement", () => {
     );
 
     const attemptsBeforeRefinement = generateTopicLabel.mock.calls.length;
-    const readSource = replyDispatchRuntime.readConversationLabelRefinementSource;
-    const sessionStoreRuntime = await import("openclaw/plugin-sdk/session-store-runtime");
-    const originalReadSessionEntry = sessionStoreRuntime.getSessionEntryAsync;
+    const readSource = readTopicSourceActual;
+    const originalReadSessionEntry = getSessionEntry.getMockImplementation()!;
     let sourceReadCompleted = false;
     let postResetEntry: Awaited<ReturnType<typeof originalReadSessionEntry>> | undefined;
-    const latestEntryReadSpy = vi
-      .spyOn(sessionStoreRuntime, "getSessionEntryAsync")
-      .mockImplementation(async (...args) => {
-        const entry = await originalReadSessionEntry(...args);
-        if (
-          sourceReadCompleted &&
-          entry?.sessionId === "s1" &&
-          entry.lifecycleRevision === "generation-2"
-        ) {
-          postResetEntry = entry;
-        }
-        return entry;
-      });
-    const readSourceSpy = vi
-      .spyOn(replyDispatchRuntime, "readConversationLabelRefinementSource")
-      .mockImplementation(async (...args) => {
-        await seedSessionEntry({ sessionId: "s1", lifecycleRevision: "generation-2" });
-        const source = await readSource(...args);
-        sourceReadCompleted = true;
-        return source;
-      });
+    const latestEntryReadSpy = getSessionEntry.mockImplementation(async (...args) => {
+      const entry = await originalReadSessionEntry(...args);
+      if (
+        sourceReadCompleted &&
+        entry?.sessionId === "s1" &&
+        entry.lifecycleRevision === "generation-2"
+      ) {
+        postResetEntry = entry;
+      }
+      return entry;
+    });
+    const readSourceSpy = readTopicSourceMock.mockImplementation(async (...args) => {
+      await seedSessionEntry({ sessionId: "s1", lifecycleRevision: "generation-2" });
+      const source = await readSource(...args);
+      sourceReadCompleted = true;
+      return source;
+    });
     await dispatchWithContext({ context: context("Sixth follow-up"), bot });
 
     await vi.waitFor(() => expect(readSourceSpy).toHaveBeenCalledTimes(1));
@@ -444,8 +442,15 @@ describeTelegramDispatch("Telegram generated topic refinement", () => {
     const editForumTopic = vi.spyOn(bot.api, "editForumTopic");
     await seedSessionEntry({ sessionId: "s1" });
     const initial = context("Plan the release");
-    initial.topicNameCacheScope = "separate-account-owner-store";
-    await updateTopicName(123, 777, { name: "My project" }, initial.topicNameCacheScope);
+    const sessionStore = initial.turn.storePath;
+    const ownerStore = sessionStore + ".account-owner";
+    resolveStorePath.mockImplementation((...args: unknown[]) =>
+      (args[1] as { agentId?: string } | undefined)?.agentId === "default"
+        ? sessionStore
+        : ownerStore,
+    );
+    const ownerScope = resolveTelegramDirectTopicNameCacheScope(ownerStore, "default");
+    await updateTopicName(123, 777, { name: "My project" }, ownerScope);
     await dispatchWithContext({ context: initial, bot });
     expect(editForumTopic).not.toHaveBeenCalled();
   });

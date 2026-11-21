@@ -75,8 +75,9 @@ describeTelegramDispatch("DM topic label recovery", () => {
   const http = useTelegramHttpFixture();
   it("names from the first real message after a command, outside the closed turn scope", async () => {
     replyWith("Done");
+    const afterTurnClosed = Promise.withResolvers<void>();
     generateTopicLabel.mockImplementation(async () => {
-      await new Promise(setImmediate);
+      await afterTurnClosed.promise;
       getAsyncWorkSignal()?.throwIfAborted();
       return "Invoice review";
     });
@@ -91,6 +92,7 @@ describeTelegramDispatch("DM topic label recovery", () => {
     await seedSessionEntry({ sessionId: "s1" });
     await turn.track(() => dispatchWithoutLabelDrain({ context: real, bot, streamMode: "off" }));
     await turn.drain();
+    afterTurnClosed.resolve();
     const { waitForPendingTopicLabelsForTests } =
       await import("./bot-message-dispatch-topic-label.js");
     await waitForPendingTopicLabelsForTests();
@@ -150,7 +152,7 @@ describeTelegramDispatch("DM topic label recovery", () => {
     await dispatchWithContext({ context: context(), cfg, bot, streamMode: "off" });
     await vi.waitFor(() => expect(generateTopicLabel).toHaveBeenCalledTimes(2));
     await vi.waitFor(() =>
-      expect(skipLog).toHaveBeenCalledWith("auto-topic-label: topic name changed, skipping rename"),
+      expect(skipLog).toHaveBeenCalledWith("auto-topic-label: stale naming result skipped"),
     );
     expect(http.requests).toEqual([
       {

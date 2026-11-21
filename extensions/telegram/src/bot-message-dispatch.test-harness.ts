@@ -95,6 +95,18 @@ const readLatestAssistantTextByIdentityHoisted = vi.hoisted(() =>
 );
 const resolveStorePathHoisted = vi.hoisted(() => vi.fn(() => "/tmp/sessions.json"));
 const generateTopicLabelHoisted = vi.hoisted(() => vi.fn());
+const topicSourceReader = vi.hoisted(() => ({
+  mock: vi.fn<
+    typeof import("openclaw/plugin-sdk/reply-dispatch-runtime").readConversationLabelRefinementSource
+  >(),
+  actual: undefined as
+    | typeof import("openclaw/plugin-sdk/reply-dispatch-runtime").readConversationLabelRefinementSource
+    | undefined,
+}));
+export const readTopicSourceMock = topicSourceReader.mock;
+export const readTopicSourceActual: typeof import("openclaw/plugin-sdk/reply-dispatch-runtime").readConversationLabelRefinementSource =
+  (...args) => topicSourceReader.actual!(...args);
+
 const describeStickerImageHoisted = vi.hoisted(() =>
   vi.fn(async (): Promise<string | null> => null),
 );
@@ -126,10 +138,10 @@ export const prepareSkillCommandsForAgents = prepareSkillCommandsForAgentsHoiste
 const createChannelMessageReplyPipeline = createChannelMessageReplyPipelineHoisted;
 const wasSentByBot = wasSentByBotHoisted;
 export const appendAssistantMirrorMessageByIdentity = appendAssistantMirrorMessageByIdentityHoisted;
-const getSessionEntry = getSessionEntryHoisted;
+export const getSessionEntry = getSessionEntryHoisted;
 export const loadSessionStore = loadSessionStoreHoisted;
 export const readLatestAssistantTextByIdentity = readLatestAssistantTextByIdentityHoisted;
-const resolveStorePath = resolveStorePathHoisted;
+export const resolveStorePath = resolveStorePathHoisted;
 export const generateTopicLabel = generateTopicLabelHoisted;
 const describeStickerImage = describeStickerImageHoisted;
 const resolveAgentDir = resolveAgentDirHoisted;
@@ -286,11 +298,17 @@ vi.mock("./send.js", async (importOriginal) => ({
   reactMessageTelegram: reactMessageTelegramHoisted,
 }));
 
-vi.mock("openclaw/plugin-sdk/reply-dispatch-runtime", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("openclaw/plugin-sdk/reply-dispatch-runtime")>()),
-  generateConversationLabel: generateTopicLabelHoisted,
-  resolveChunkMode: resolveChunkModeHoisted,
-}));
+vi.mock("openclaw/plugin-sdk/reply-dispatch-runtime", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("openclaw/plugin-sdk/reply-dispatch-runtime")>();
+  topicSourceReader.actual = actual.readConversationLabelRefinementSource;
+  return {
+    ...actual,
+    generateConversationLabel: generateTopicLabelHoisted,
+    readConversationLabelRefinementSource: topicSourceReader.mock,
+    resolveChunkMode: resolveChunkModeHoisted,
+  };
+});
 
 vi.mock("openclaw/plugin-sdk/media-runtime", async (importOriginal) => ({
   ...(await importOriginal<typeof import("openclaw/plugin-sdk/media-runtime")>()),
@@ -521,6 +539,7 @@ async function resetTelegramDispatchTestState() {
       (loadSessionStore() as Record<string, unknown>)[sessionKey],
   );
   generateTopicLabel.mockReset().mockResolvedValue("Topic label");
+  readTopicSourceMock.mockReset().mockImplementation(readTopicSourceActual);
   describeStickerImage.mockReset().mockResolvedValue(null);
   resolveAgentDir.mockReset().mockReturnValue("/tmp/agent");
   resolveHumanDelayConfig.mockReset().mockReturnValue(undefined);
