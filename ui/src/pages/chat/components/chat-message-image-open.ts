@@ -1,5 +1,6 @@
 import { fetchControlUiResource } from "../../../app/browser-http.ts";
 import type { ImageLightboxItem } from "../../../components/image-lightbox.types.ts";
+import { isInlineImageSource } from "../../../lib/chat/message-extract.ts";
 import { resolveSafeExternalUrl } from "../../../lib/open-external-url.ts";
 import { imageTitle, openResolvedImage } from "./chat-image-presentation.ts";
 import { chatImageRenditionWidth } from "./chat-image-rendition.ts";
@@ -29,6 +30,7 @@ async function loadGalleryImage(
   opts: ImageRenderOptions | undefined,
   retryFailed: boolean,
   original = false,
+  thumbnail = false,
 ): Promise<ImageLightboxItem | null> {
   let src: string | null;
   let release: (() => void) | undefined;
@@ -37,11 +39,13 @@ async function loadGalleryImage(
       image.url,
       opts,
       image.artifactId,
-      original || readCachedManagedImageUrl(image.url, opts, image.artifactId, "full")
-        ? "full"
-        : managedImageInlineVariant(image),
+      thumbnail
+        ? "thumbnail"
+        : original || readCachedManagedImageUrl(image.url, opts, image.artifactId, "full")
+          ? "full"
+          : managedImageInlineVariant(image),
       retryFailed,
-      chatImageRenditionWidth("viewer"),
+      thumbnail ? 480 : chatImageRenditionWidth("viewer"),
     );
     src = resource.value ?? (await resource.pending) ?? null;
     if (!src || !isChatMediaResourceCurrent(resource)) {
@@ -49,6 +53,11 @@ async function loadGalleryImage(
     }
     release = retainManagedImageBlobUrl(resource.cacheKey);
   } else {
+    // Legacy files and third-party URLs have no bounded rendition contract.
+    // Keep their original bytes on the explicit selection/download path.
+    if (thumbnail && !isCanonicalInboundMediaSource(image.url) && !isInlineImageSource(image.url)) {
+      return null;
+    }
     const availability = await loadAssistantAttachmentAvailability(image.url, opts, retryFailed);
     if (availability?.status !== "available") {
       return null;
@@ -60,7 +69,7 @@ async function loadGalleryImage(
       opts,
       image.fileName,
       original ? undefined : "thumbnail",
-      chatImageRenditionWidth("viewer"),
+      thumbnail ? 480 : chatImageRenditionWidth("viewer"),
     );
   }
   const safeSrc = resolveSafeExternalUrl(src, window.location.href, { allowDataImage: true });
@@ -138,6 +147,17 @@ export function openMessageImage(
     if (gallery && gallery.items.length > 1 && gallery.index >= 0) {
       nextItem.gallery = {
         index: gallery.index,
+        thumbnails: gallery.items.map(({ image, messageId }) => ({
+          title: imageTitle(image),
+          load: () =>
+            loadGalleryImage(
+              image,
+              messageId === opts?.messageId ? opts : { ...opts, messageId },
+              false,
+              false,
+              true,
+            ),
+        })),
         items: gallery.items.map(({ image, messageId }) => {
           // Unidentified siblings (a live stream) must not borrow the opener's media scope.
           const options = messageId === opts?.messageId ? opts : { ...opts, messageId };
