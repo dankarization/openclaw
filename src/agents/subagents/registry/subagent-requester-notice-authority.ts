@@ -20,9 +20,11 @@ type Custody = NonNullable<
 type YieldNoticeAuthority = {
   batch: readonly SubagentRunRecord[];
   runs: ReadonlyMap<string, SubagentRunRecord>;
+  registryOwner: typeof subagentRuns.readLookup;
   custody: Custody;
   requesterTurnRunId: string;
   rearmGeneration?: number;
+  committed?: () => RequesterWakeCommittedWrite | undefined;
   assertTarget(committed?: RequesterWakeCommittedWrite): void;
   release: () => void;
 };
@@ -36,17 +38,20 @@ const noticeTarget = (entry: SubagentRunRecord) => [
   entry.completionRequesterLifecycleRevision,
 ];
 
-function assertCohort(authority: YieldNoticeAuthority, batch: readonly SubagentRunRecord[]): void {
+function assertCohort(
+  authority: YieldNoticeAuthority,
+  batch: readonly SubagentRunRecord[],
+  committed?: RequesterWakeCommittedWrite,
+): void {
   if (
     batch.length !== authority.batch.length ||
     !authority.batch.every((expected) =>
       batch.some((entry) => isSameSubagentRunOwner(entry, expected)),
-    ) ||
-    batch.some((entry) => !isSameSubagentRunOwner(authority.runs.get(entry.runId), entry))
+    )
   ) {
     throw new SourceError("Requester notice lost its admitted yield cohort");
   }
-  authority.assertTarget();
+  authority.assertTarget(committed);
 }
 
 /** Retain the original cohort's source before yield can retire child execution custody. */
@@ -120,6 +125,7 @@ export async function prepareRequesterYieldNoticeAuthority(
     const authority: YieldNoticeAuthority = {
       batch: [...batch],
       runs,
+      registryOwner,
       custody,
       assertTarget,
       requesterTurnRunId: requester.requesterTurnRunId,
@@ -192,7 +198,7 @@ export function captureRequesterYieldNoticeAuthority(
   if (authorities.some((value) => value !== authority)) {
     throw new SourceError("Requester notice sources do not share the admitted yield cohort");
   }
-  assertCohort(authority, batch);
+  assertCohort(authority, batch, committed?.());
   if (
     authority.rearmGeneration === undefined ||
     batch.some(
@@ -247,6 +253,20 @@ export function captureRequesterYieldNoticeAuthority(
   });
 }
 
+/** Keep only the acknowledged settlement receipt available to the projection listener. */
+export function retainRequesterYieldNoticeSettlement(
+  batch: readonly SubagentRunRecord[],
+  committed: () => RequesterWakeCommittedWrite | undefined,
+): void {
+  const authority = batch[0] && byEntry.get(getSubagentRunRuntimeKey(batch[0]));
+  if (
+    authority &&
+    batch.every((entry) => byEntry.get(getSubagentRunRuntimeKey(entry)) === authority)
+  ) {
+    authority.committed = committed;
+  }
+}
+
 export function releaseRequesterYieldNoticeAuthority(
   batch: readonly SubagentRunRecord[],
   rearmGeneration: number | undefined,
@@ -266,10 +286,19 @@ export function releaseRequesterYieldNoticeAuthority(
 // Registry deletion/replacement/reset closes retained holders; publication never mints permission.
 subscribeSubagentRunChanges("projection", () => {
   for (const authority of retained) {
+    const committed = authority.committed?.();
     if (
-      authority.batch.some(
-        (entry) => !isSameSubagentRunOwner(authority.runs.get(entry.runId), entry),
-      )
+      subagentRuns.readLookup !== authority.registryOwner ||
+      authority.batch.some((entry) => {
+        const current = authority.runs.get(entry.runId);
+        return current
+          ? !isSameSubagentRunOwner(current, entry)
+          : !(
+              committed?.result.applied === true &&
+              committed.result.retiredRunIds.includes(entry.runId) &&
+              committed.entries.some(({ subagent }) => isSameSubagentRunOwner(subagent, entry))
+            );
+      })
     ) {
       authority.release();
     }

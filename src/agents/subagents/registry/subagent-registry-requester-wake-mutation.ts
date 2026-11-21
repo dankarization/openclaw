@@ -18,6 +18,7 @@ import { captureSubagentControllerInputRetirement } from "./subagent-controller-
 import type { SubagentLifecycleWakeContext } from "./subagent-registry-lifecycle-context.js";
 import { assertSubagentRegistryWriteSourceCurrent } from "./subagent-registry-persistence.js";
 import type { RequesterSettleWakeState, SubagentRunRecord } from "./subagent-registry.types.js";
+import { retainRequesterYieldNoticeSettlement } from "./subagent-requester-notice-authority.js";
 import {
   buildRequesterSettleWakeIdentity,
   sameRequesterSettleRunIdentity,
@@ -190,6 +191,7 @@ export function createRequesterWakeSettlement(params: {
   } = params;
   // Retry bookkeeping with the observed outcome, never by replaying delivery or inventing failure.
   const receipt: RequesterWakeMutationReceipt = {};
+  retainRequesterYieldNoticeSettlement(batch, () => receipt.committed);
   const retireInputs = batch.map(captureSubagentControllerInputRetirement);
   const settlement = {
     scope,

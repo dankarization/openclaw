@@ -9,12 +9,14 @@ import { withOpenClawTestState } from "../../../test-utils/openclaw-test-state.j
 import { createSubagentRunRecord } from "../../subagent-test-fixtures.test-helpers.js";
 import { subagentRuns } from "../registry/subagent-registry-memory.js";
 import * as source from "../registry/subagent-registry-persistence.js";
+import { publishSubagentRunChanges } from "../registry/subagent-registry-publication.js";
 import { retainedOperatorFixture } from "../registry/subagent-registry.completed-followup-authority.test-support.js";
 import {
   prepareRequesterYieldNoticeAuthority,
   promoteRequesterYieldNoticeAuthority,
   releaseRequesterYieldNoticeAuthority,
   captureRequesterYieldNoticeAuthority,
+  retainRequesterYieldNoticeSettlement,
 } from "../registry/subagent-requester-notice-authority.js";
 import {
   isSameSubagentRunOwner,
@@ -339,6 +341,42 @@ describe("yielded requester failure notice custody", () => {
         expect(authority.assertCurrent).toThrow();
       }),
   );
+
+  it("retries a transient notice failure after its committed retirement publication", async () =>
+    withYieldNoticeFixture(async ({ batch }) => {
+      let committed: RequesterWakeCommittedWrite | undefined;
+      retainRequesterYieldNoticeSettlement(batch, () => committed);
+      const write = vi
+        .fn()
+        .mockRejectedValueOnce(new Error("transient append failure"))
+        .mockResolvedValue(undefined);
+      const attempt = () =>
+        withSubagentCompletionFailureNoticeAuthority(
+          batch,
+          true,
+          async (publish) => {
+            if (!committed) {
+              committed = {
+                entries: batch.map((subagent) => ({ subagent })),
+                result: {
+                  applied: true,
+                  records: [],
+                  retiredRunIds: batch.map((entry) => entry.runId),
+                },
+              };
+              for (const entry of batch) {
+                subagentRuns.delete(entry.runId);
+              }
+              publishSubagentRunChanges();
+            }
+            await publish(write);
+          },
+          () => committed,
+        );
+      await expect(attempt()).rejects.toThrow("transient append failure");
+      await expect(attempt()).resolves.toBeUndefined();
+      expect(write).toHaveBeenCalledTimes(2);
+    }));
 
   it("accepts an acknowledged retained-row postimage without a serialized runtime key", async () =>
     withYieldNoticeFixture(async ({ batch }) => {
