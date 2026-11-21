@@ -164,7 +164,8 @@ export function prepareChatSendUserTurn(params: {
     | "systemInputProvenance"
     | "systemProvenanceReceipt"
     | "toolBindings"
-  > & Partial<Pick<NormalizedChatSendRequest, "p">>;
+  > &
+    Partial<Pick<NormalizedChatSendRequest, "p">>;
   session: Pick<PreparedChatSendSession, "agentId" | "clientRunId" | "sessionKey"> &
     Partial<Pick<PreparedChatSendSession, "cfg">>;
   admission: Pick<AdmittedChatSend, "originatingRoute"> &

@@ -296,8 +296,17 @@ export async function admitScheduledOccurrence(
       });
       const parent = await readParent(principal.parent.sessionKey, storePath);
       parentRow = parent.row;
-      if (!requesterOwner && principal.requester.kind !== "operator-source") {
-        requesterOwner = await checkRequesterOwner(params.cfg, principal.requester);
+      const requester =
+        principal.requester.kind === "operator-source" &&
+        principal.requester.source.kind === "channel"
+          ? resolveScheduledRequester({
+              toolsAllowProvenance: job.toolsAllowProvenance,
+              createdActor: job.createdActor,
+              ownerProfileId: job.ownerProfileId,
+            })
+          : principal.requester;
+      if (!requesterOwner && requester.kind !== "operator-source") {
+        requesterOwner = await checkRequesterOwner(params.cfg, requester);
       }
       const live = classifyScheduledParent(parentRow);
       const parentSessionKey = principal.parent.sessionKey;
@@ -372,11 +381,13 @@ export async function admitScheduledOccurrence(
           parentRow,
           operatorSourceRequester
             ? run.operatorAuthority !== undefined &&
-                (job.operatorSource?.source.kind === "gateway"
-                  ? operatorScopeSatisfied("operator.admin", run.operatorAuthority.scopes)
-                  : run.operatorAuthority.openclawIdPrincipal?.kind !== "member")
-            : // A fired condition can wait long for a run slot after admission, so the
-              // requester's owner bit is read again for each run, not reused.
+                (job.operatorSource?.source.kind === "channel"
+                  ? (requesterOwner?.isOwner?.(selectLiveRuntimeConfig(run.cfg)) ??
+                      requesterOwner?.owner) === true
+                  : job.operatorSource?.source.kind === "gateway"
+                    ? operatorScopeSatisfied("operator.admin", run.operatorAuthority.scopes)
+                    : run.operatorAuthority.openclawIdPrincipal?.kind !== "member")
+            : // Recheck the owner bit for every delayed occurrence.
               (requesterOwner?.isOwner?.(selectLiveRuntimeConfig(run.cfg)) ??
                 requesterOwner?.owner),
         );
@@ -396,7 +407,11 @@ export async function admitScheduledOccurrence(
         result.facts.authority.basis === "trusted-policy"
           ? undefined
           : operatorSourceRequester
-            ? operatorAuthority && (() => operatorAuthority.assertCurrent())
+            ? operatorAuthority &&
+              (() => {
+                operatorAuthority.assertCurrent();
+                requesterOwner?.assertCurrent?.();
+              })
             : requesterOwner?.assertCurrent;
       const assertParentCurrent =
         result.status === "ready" && result.facts.principal.kind === "parent" && lease

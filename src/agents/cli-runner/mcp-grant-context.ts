@@ -7,6 +7,7 @@ import { resolveGatewayMessageChannel } from "../../utils/message-channel.js";
 import { cloneExecElevatedDefaults } from "../bash-tools.exec-types.js";
 import {
   bindActiveCronAuthorityCurrentness,
+  bindPersonalReminderIdentity,
   bindCronManagementToolConstruction,
   captureCronRequesterGrantIssuer,
 } from "../cron-creator-authority-context.js";
@@ -47,6 +48,9 @@ export function finalizeCliMcpGrant(
   return {
     context: {
       ...context,
+      ...(bindPersonalReminderIdentity(context.runId)
+        ? { personalReminder: bindPersonalReminderIdentity(context.runId) }
+        : {}),
       ...(toolsAllow !== undefined ? { toolsAllow: [...toolsAllow] } : {}),
       // Only parent-observed native startup can fill this pending authority.
       ...(nativeAuthorityPending ? { nativeCronCreatorToolAllowlist: null } : {}),

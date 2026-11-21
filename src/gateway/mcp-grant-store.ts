@@ -45,6 +45,8 @@ import type { CronCreatorAuthorityGrant } from "./cron-creator-authority-grant.t
 export type McpCurrentConversationOrigin = "run-bound-grant" | "server-session" | "caller-token";
 
 export type McpLoopbackRequestContext = {
+  /** Host-created capability on the exact admitted input, never an MCP header. */
+  personalReminder?: import("./cron-creator-authority-grant.types.js").PersonalReminderIdentity;
   /** Host-captured tool-policy identity; never supplied by MCP clients. */
   requester?: PluginHookToolRequesterContext;
   /** Host-captured requester facts; child MCP input cannot supply or replace them. */

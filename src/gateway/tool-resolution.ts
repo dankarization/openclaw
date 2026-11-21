@@ -73,6 +73,10 @@ import {
   resolveGatewayRequesterToolPolicies,
   resolveGatewaySenderAuthority,
 } from "./tool-resolution-authority.js";
+import {
+  resolvePersonalReminderSubagentPolicy,
+  filterPersonalReminderOwnerDeny,
+} from "./tool-resolution.personal-reminder.js";
 
 type GatewayScopedToolSurface = "http" | "loopback";
 
@@ -217,7 +221,17 @@ export async function resolveGatewayScopedTools(
     nodeExecSurface,
     accountId: gatewayCaller.accountId,
   });
-  const { groupPolicy, senderPolicy, subagentPolicy, inheritedToolPolicy } = requesterPolicies;
+  const { groupPolicy, senderPolicy, inheritedToolPolicy } = requesterPolicies;
+  const personalChild =
+    surface === "loopback" &&
+    params.personalReminder &&
+    params.admittedRunContext &&
+    params.isGrantCurrent;
+  const subagentPolicy = resolvePersonalReminderSubagentPolicy(
+    requesterPolicies.subagentPolicy,
+    params.cfg.tools?.subagents?.tools?.deny ?? [],
+    Boolean(personalChild),
+  );
   const completionHandoff =
     stableSessionSurface && requesterPolicies.requesterPolicySource === "completion-handoff";
   // The Gateway runs these tools, so it enforces the session's permission mode for every caller,
@@ -261,7 +275,10 @@ export async function resolveGatewayScopedTools(
     params.admittedRunContext &&
     getAdmittedRunDelegatedAuthority(params.admittedRunContext);
   const ownerOnlyGatewayDeny = [
-    ...scheduledTools.ownerOnlyDeny(senderIsOwner, sessionPortalTarget !== undefined),
+    ...filterPersonalReminderOwnerDeny(
+      scheduledTools.ownerOnlyDeny(senderIsOwner, sessionPortalTarget !== undefined),
+      Boolean(personalChild),
+    ),
     // Attach grants also use loopback; session binding is not run authority.
     ...(senderIsOwner !== true &&
     !assignmentAdmitted &&
@@ -457,6 +474,7 @@ export async function resolveGatewayScopedTools(
     pluginToolDenylist: catalogDenylist,
     cronCreatorToolAllowlist,
     cronCreatorToolAllowlistCaptureRef,
+    personalReminder: personalChild ? params.personalReminder : undefined,
     inheritedToolAllowlist,
     inheritedToolDenylist,
     inheritedToolPolicySource: requesterPolicies.inheritedToolPolicySource,

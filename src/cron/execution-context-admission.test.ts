@@ -89,48 +89,113 @@ const LINKED_JOB = {
 };
 
 describe("admitScheduledOccurrence", () => {
-  it("rechecks a stored Discord requester's owner status for each occurrence", async () => {
+  it.each([false, true])(
+    "rechecks a stored channel requester owner status (recovery source=%s)",
+    async (captured) => {
+      readSessionEntryInWorker.mockResolvedValue({
+        sessionId: "parent-session",
+        lifecycleRevision: "rev-1",
+      });
+      const stored = job({
+        ...LINKED_JOB,
+        ...(captured
+          ? {
+              operatorSource: {
+                executionRevision: "exec-1",
+                source: {
+                  version: 1 as const,
+                  kind: "channel" as const,
+                  agentId: "main",
+                  sessionKey: PARENT_KEY,
+                  sessionId: "parent-session",
+                  lifecycleRevision: "rev-1",
+                  sourceRunId: "source-run",
+                  snapshot: {
+                    reference: { version: 1 as const, id: "f4ec235c-940e-4c3d-a68f-9e445747c21b" },
+                    profileId: "channel-member",
+                    scopes: ["operator.write"],
+                  },
+                },
+              },
+            }
+          : {}),
+        toolsAllowProvenance: {
+          version: 1,
+          source: "authenticated-requester",
+          channelRequester: {
+            version: 1,
+            channel: "discord",
+            accountId: "default",
+            senderId: "100000000000000001",
+          },
+        },
+      });
+
+      // Reuse the persisted requester, not the creator's historical owner status.
+      for (const [senderId, owner] of [
+        ["100000000000000001", true],
+        ["100000000000000002", false],
+      ] as const) {
+        const cfg = { commands: { ownerAllowFrom: [`discord:${senderId}`] } };
+        const occurrence = await admitScheduledOccurrence({
+          cfg,
+          job: stored,
+          agentId: "main",
+          trigger: "cron",
+        });
+        try {
+          expect(
+            occurrence.mint({
+              ...RUN,
+              cfg,
+              operatorAuthority: captured ? RESTORED_OPERATOR : undefined,
+            }).result,
+          ).toMatchObject({
+            status: "ready",
+            facts: {
+              authority: {
+                owner,
+                basis: captured ? "operator-source" : owner ? "channel-owner" : "none",
+              },
+              toolPolicy: { automations: { scope: owner ? "self-and-parent-wake" : "self" } },
+              resources: { memory: { source: "parent", owner } },
+            },
+          });
+        } finally {
+          occurrence.release();
+        }
+      }
+    },
+  );
+
+  it("does not turn a legacy sourceless requester into an ambient owner", async () => {
     readSessionEntryInWorker.mockResolvedValue({
       sessionId: "parent-session",
       lifecycleRevision: "rev-1",
     });
-    const stored = job({
+    const legacy = job({
       ...LINKED_JOB,
-      toolsAllowProvenance: {
-        version: 1,
-        source: "authenticated-requester",
-        channelRequester: {
-          version: 1,
-          channel: "discord",
-          accountId: "default",
-          senderId: "100000000000000001",
-        },
-      },
+      payload: { kind: "agentTurn", message: "legacy", toolsAllow: ["read", "exec"] },
     });
-
-    // Reuse the persisted requester, not the creator's historical owner status.
-    for (const [senderId, owner] of [
-      ["100000000000000001", true],
-      ["100000000000000002", false],
-    ] as const) {
-      const cfg = { commands: { ownerAllowFrom: [`discord:${senderId}`] } };
-      const occurrence = await admitScheduledOccurrence({
-        cfg,
-        job: stored,
-        agentId: "main",
-        trigger: "cron",
+    const occurrence = await admit(legacy);
+    try {
+      const ambient = {
+        assertCurrent: vi.fn(),
+        scopes: ["operator.admin"],
+      } as unknown as AdmittedRunOperatorAuthority;
+      expect(
+        occurrence.mint({ ...RUN, operatorAuthority: ambient, toolsAllow: ["read", "exec"] })
+          .result,
+      ).toMatchObject({
+        status: "ready",
+        facts: {
+          authority: { owner: false, basis: "none", admissionSource: "requester-schedule" },
+          toolPolicy: { allow: ["read", "exec"], automations: { scope: "none" } },
+        },
       });
-      try {
-        expect(occurrence.mint({ ...RUN, cfg }).result).toMatchObject({
-          status: "ready",
-          facts: {
-            authority: { owner, basis: owner ? "channel-owner" : "none" },
-            resources: { memory: { source: "parent", owner } },
-          },
-        });
-      } finally {
-        occurrence.release();
-      }
+      expect(legacy.operatorSource).toBeUndefined();
+    } finally {
+      occurrence.release();
     }
   });
 

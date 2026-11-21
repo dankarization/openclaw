@@ -59,6 +59,7 @@ import {
 import { hasInboundAudio } from "./inbound-media.js";
 import { normalizeMessageTimestampMs } from "./message-timestamp.js";
 import { resolveOriginMessageProvider } from "./origin-routing.js";
+import { resolvePersonalReminderOrigin } from "./personal-reminder-origin.js";
 import { resolveReplySteeringIntent } from "./reply-steering-intent.js";
 import { resolveReplyToMode } from "./reply-threading.js";
 import { resolveInboundReplyToolAuthorityOverlay } from "./reply-tool-authority-inbound.js";
@@ -401,8 +402,21 @@ export async function executePreparedReplyRun(
     InputProvenance: inputProvenance,
   });
   const channelOwnerAuthority = getCommandOwnerAuthority(sessionCtx);
+  const personalReminder = resolvePersonalReminderOrigin({
+    fresh: freshChannelCronAuthorityTurn && !command.senderIsOwner,
+    provider: messageProvider,
+    senderId: sessionCtx.SenderId,
+    accountId: ctx.AccountId ?? sessionCtx.AccountId,
+    operator: opts?.operatorAuthority,
+    requesterProfileId: getRequesterProfile(ctx)?.id,
+    agentId,
+    sessionKey,
+    sessionId: preparedSessionState.sessionId,
+    lifecycleRevision: preparedSessionState.sessionEntry?.lifecycleRevision,
+    route: replyRoute,
+  });
   const authorityRunId =
-    freshChannelCronAuthorityTurn && command.senderIsOwner
+    freshChannelCronAuthorityTurn && (command.senderIsOwner || personalReminder)
       ? (opts?.runId ?? crypto.randomUUID())
       : undefined;
   const inheritedCronCreatorAuthorityCapability = opts?.cronCreatorAuthorityCapability;
@@ -412,6 +426,8 @@ export async function executePreparedReplyRun(
           channel: messageProvider,
           senderId: sessionCtx.SenderId,
           accountId: ctx.AccountId ?? sessionCtx.AccountId,
+          personalReminder,
+          operator: opts?.operatorAuthority,
         })
       : undefined;
   if (authorityRunId && !inheritedCronCreatorAuthorityCapability && !createChannelCronAuthority) {

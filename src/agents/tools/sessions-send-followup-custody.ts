@@ -18,7 +18,38 @@ import {
   getGatewayToolCallerIdentity,
 } from "./gateway-caller-context.js";
 
-class FollowupAccessChangedError extends Error {}
+type FollowupAccessPhase = "admission" | "revocation";
+type FollowupAccessEndpoint = "requester" | "child";
+type FollowupAccessCode = "INVALID_REQUEST" | "FORBIDDEN" | "UNAVAILABLE";
+
+// Private custody errors never expose session identities or policy details to tool callers.
+class FollowupAccessChangedError extends Error {
+  constructor(
+    message: string,
+    readonly phase: FollowupAccessPhase,
+    readonly endpoint: FollowupAccessEndpoint,
+    readonly code: FollowupAccessCode,
+  ) {
+    super(message);
+  }
+}
+
+/** Public, bounded projection of this owner's own admission or revocation verdict. */
+export function readFollowupAccessDenial(error: unknown) {
+  if (!(error instanceof FollowupAccessChangedError)) return undefined;
+  return {
+    error: "Ask an authorized operator to check continuation access for both conversations.",
+    followupAccess: {
+      phase: error.phase,
+      endpoint: error.endpoint,
+      code: error.code,
+    },
+  };
+}
+
+function publicFollowupAccessCode(code: string): FollowupAccessCode {
+  return code === "INVALID_REQUEST" || code === "UNAVAILABLE" ? code : "FORBIDDEN";
+}
 
 /** Prepare current facts through their worker owner; no stored identity becomes authority. */
 export async function prepareSessionsSendFollowup(params: {
@@ -52,6 +83,9 @@ export async function prepareSessionsSendFollowup(params: {
   let stopAccessWatch: (() => void) | undefined;
   let released = false;
   let observationReleased = false;
+  // Custody is admitted only once preparation is complete and ownership is returned.
+  let custodyAdmitted = false;
+  const denialPhase = (): FollowupAccessPhase => (custodyAdmitted ? "revocation" : "admission");
   let authorityReleased = true;
   let requesterAuthority: ReturnType<typeof captureRequesterFollowupAuthority>;
   const releaseResources = () => {
@@ -91,7 +125,12 @@ export async function prepareSessionsSendFollowup(params: {
         ? await prepareUserProfileRoleAuthority(actor.profileId)
         : undefined;
     if (actor.kind === "operator" && (!profile || profile.profileId !== actor.profileId)) {
-      throw new FollowupAccessChangedError("Followup requester profile is unavailable.");
+      throw new FollowupAccessChangedError(
+        "Followup requester profile is unavailable.",
+        denialPhase(),
+        "requester",
+        "FORBIDDEN",
+      );
     }
     assertInvocation?.();
     for (const target of [
@@ -113,15 +152,26 @@ export async function prepareSessionsSendFollowup(params: {
       }
       captured.assertCurrent();
       if (profile && !profile.isCurrent()) {
-        throw new FollowupAccessChangedError("Followup requester identity changed.");
+        throw new FollowupAccessChangedError(
+          "Followup requester identity changed.",
+          denialPhase(),
+          "requester",
+          "FORBIDDEN",
+        );
       }
       const currentConfig = getRuntimeConfig();
       // The prepared reader owns canonical routing, physical store and incarnation fencing.
-      for (const read of facts) {
+      for (const [index, read] of facts.entries()) {
+        const endpoint: FollowupAccessEndpoint = index === 0 ? "requester" : "child";
         const currentFacts = read.readCurrent(currentConfig);
         const current = currentFacts.target;
         if (!current?.entry || current.entry.archivedAt !== undefined) {
-          throw new FollowupAccessChangedError("Followup conversation was archived.");
+          throw new FollowupAccessChangedError(
+            "Followup conversation was archived.",
+            denialPhase(),
+            endpoint,
+            "INVALID_REQUEST",
+          );
         }
         const denied = authorizePreparedSessionMutation(
           {
@@ -146,7 +196,12 @@ export async function prepareSessionsSendFollowup(params: {
           },
         );
         if (denied) {
-          throw new FollowupAccessChangedError("Followup session access was revoked.");
+          throw new FollowupAccessChangedError(
+            "Followup session access was revoked.",
+            denialPhase(),
+            endpoint,
+            publicFollowupAccessCode(denied.code),
+          );
         }
       }
     };
@@ -191,6 +246,7 @@ export async function prepareSessionsSendFollowup(params: {
       // can finish first; release its readers only after both owners are done.
       authorityReleased = requesterAuthority === undefined;
     }
+    custodyAdmitted = true;
     return {
       runId: params.runId,
       requesterSessionKey: params.requesterSessionKey,

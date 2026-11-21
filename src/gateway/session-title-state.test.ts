@@ -25,9 +25,7 @@ it.each(["fulfilled", "rejected"])(
     expect(
       sessionTitleRequests.get({ ...target, storePath: "/another/store.sqlite" }),
     ).toBeUndefined();
-    expect(
-      sessionTitleRequests.get({ ...target, lifecycleRevision: "life-2" }),
-    ).toBeUndefined();
+    expect(sessionTitleRequests.get({ ...target, lifecycleRevision: "life-2" })).toBeUndefined();
     if (outcome === "rejected") {
       const rejected = expect(request).rejects.toThrow("write failed");
       generation.reject(new Error("write failed"));

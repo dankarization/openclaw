@@ -1,15 +1,30 @@
 import { AsyncWorkScope, getAsyncWorkSignal } from "openclaw/plugin-sdk/concurrency-runtime";
 import * as runtimeEnv from "openclaw/plugin-sdk/runtime-env";
-import { afterEach, expect, it, vi } from "vitest";
+import {
+  getSessionEntryByIdAsync,
+  upsertSessionEntry,
+} from "openclaw/plugin-sdk/session-store-runtime";
+import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import {
   createBot,
   createContext,
   describeTelegramDispatch,
-  dispatchWithContext,
+  dispatchWithContext as dispatchWithoutLabelDrain,
   dispatchReplyWithBufferedBlockDispatcher,
   generateTopicLabel,
   mockDefaultSessionEntry,
 } from "./bot-message-dispatch.test-harness.js";
+
+// Dispatch deliberately returns before detached naming. Own that phase explicitly
+// before replacing provider responses or inspecting its persisted effects.
+const dispatchWithContext = async (...args: Parameters<typeof dispatchWithoutLabelDrain>) => {
+  const result = await dispatchWithoutLabelDrain(...args);
+  const { waitForPendingTopicLabelsForTests } =
+    await import("./bot-message-dispatch-topic-label.js");
+  await waitForPendingTopicLabelsForTests();
+  return result;
+};
+
 import { useTelegramHttpFixture } from "./send.telegram-http.test-support.js";
 import {
   getTopicName,
@@ -27,8 +42,35 @@ const replyWith = (text: string) =>
     await dispatcherOptions.deliver({ text }, { kind: "final" });
     return { queuedFinal: true };
   });
+const persistedSessionByStore = new Map<string, string>();
+const seedSessionEntry = async (entry: Record<string, unknown>) => {
+  const context = createContext();
+  const previousSessionId = persistedSessionByStore.get(context.turn.storePath);
+  const previous = previousSessionId
+    ? await getSessionEntryByIdAsync({
+        agentId: context.route.agentId,
+        storePath: context.turn.storePath,
+        sessionId: previousSessionId,
+      })
+    : undefined;
+  const nextEntry = {
+    ...previous?.entry,
+    sessionId: String(entry.sessionId ?? previous?.entry.sessionId ?? "s1"),
+    updatedAt: Date.now(),
+    ...entry,
+  } as Parameters<typeof upsertSessionEntry>[0]["entry"];
+  persistedSessionByStore.set(context.turn.storePath, nextEntry.sessionId);
+  mockDefaultSessionEntry({ ...nextEntry });
+  await upsertSessionEntry({
+    agentId: context.route.agentId,
+    storePath: context.turn.storePath,
+    sessionKey: context.ctxPayload.SessionKey!,
+    entry: nextEntry,
+  });
+};
 
 describeTelegramDispatch("DM topic label recovery", () => {
+  beforeEach(() => persistedSessionByStore.clear());
   afterEach(() => vi.restoreAllMocks());
   const http = useTelegramHttpFixture();
   it("names from the first real message after a command, outside the closed turn scope", async () => {
@@ -41,12 +83,17 @@ describeTelegramDispatch("DM topic label recovery", () => {
     const bot = createBot();
     const edit = vi.spyOn(bot.api, "editForumTopic");
     const command = topicContext("/model", "New Thread", "default", { CommandSource: "text" });
+    await seedSessionEntry({ sessionId: "s1" });
     await dispatchWithContext({ context: command, bot, streamMode: "off" });
     expect(generateTopicLabel).not.toHaveBeenCalled();
     const turn = new AsyncWorkScope();
     const real = topicContext("/tmp/report.csv summarize", "New Thread");
-    await turn.track(() => dispatchWithContext({ context: real, bot, streamMode: "off" }));
+    await seedSessionEntry({ sessionId: "s1" });
+    await turn.track(() => dispatchWithoutLabelDrain({ context: real, bot, streamMode: "off" }));
     await turn.drain();
+    const { waitForPendingTopicLabelsForTests } =
+      await import("./bot-message-dispatch-topic-label.js");
+    await waitForPendingTopicLabelsForTests();
     await vi.waitFor(() => expect(edit).toHaveBeenCalledWith(123, 777, { name: "Invoice review" }));
   });
   it("preserves an explicit topic-edit after failed labeling without a service-message echo", async () => {
@@ -68,14 +115,22 @@ describeTelegramDispatch("DM topic label recovery", () => {
     const bot = createBot();
     const edit = vi.spyOn(bot.api, "editForumTopic");
     const context = () => topicContext("Review an invoice", "New Thread", "alerts");
+    await seedSessionEntry({ sessionId: "s1" });
     replyWith("Invoice details");
-    generateTopicLabel.mockResolvedValueOnce(null).mockResolvedValue("Invoice review");
+    const modelStarted = Promise.withResolvers<void>();
+    const manualEditFinished = Promise.withResolvers<void>();
+    generateTopicLabel.mockResolvedValueOnce(null).mockImplementationOnce(async () => {
+      modelStarted.resolve();
+      await manualEditFinished.promise;
+      return "Invoice review";
+    });
     await dispatchWithContext({ context: context(), cfg, bot, streamMode: "off" });
     await vi.waitFor(() => expect(generateTopicLabel).toHaveBeenCalledTimes(1));
-    mockDefaultSessionEntry({ sessionId: "s1", systemSent: true });
+    await seedSessionEntry({ sessionId: "s1", systemSent: true });
     const skipLog = vi.spyOn(runtimeEnv, "logVerbose");
     dispatchReplyWithBufferedBlockDispatcher.mockImplementationOnce(
       async ({ dispatcherOptions }) => {
+        await modelStarted.promise;
         const { handleTelegramAction } = await import("./action-runtime.js");
         await handleTelegramAction(
           {
@@ -87,6 +142,7 @@ describeTelegramDispatch("DM topic label recovery", () => {
           },
           cfg,
         );
+        manualEditFinished.resolve();
         await dispatcherOptions.deliver({ text: "Renamed the topic" }, { kind: "final" });
         return { queuedFinal: true };
       },
@@ -128,12 +184,13 @@ describeTelegramDispatch("DM topic label recovery", () => {
       );
       await updateTopicName(123, 777, { name: "New Thread" }, scope);
       const context = () => topicContext("Review an invoice", "New Thread");
+      await seedSessionEntry({ sessionId: "s1" });
       await dispatchWithContext({ context: context(), bot, streamMode: "off" });
       await vi.waitFor(() => expect(generateTopicLabel).toHaveBeenCalledTimes(1));
       if (failure === "Telegram error") {
         await vi.waitFor(() => expect(edit).toHaveBeenCalledTimes(1));
       }
-      mockDefaultSessionEntry({ sessionId: "s1", systemSent: true });
+      await seedSessionEntry({ sessionId: "s1", systemSent: true });
       await dispatchWithContext({ context: context(), bot, streamMode: "off" });
       await vi.waitFor(() => expect(generateTopicLabel).toHaveBeenCalledTimes(2));
       await vi.waitFor(async () =>

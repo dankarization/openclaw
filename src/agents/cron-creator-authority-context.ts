@@ -47,6 +47,7 @@ export function createCronCreatorAuthorityCapability(
   channelRequester?: CronAuthenticatedChannelRequester,
   requesterOwner?: CronCreatorAuthorityCapability["requesterOwner"],
   callerScopedCreation?: true,
+  personalReminder?: CronCreatorAuthorityCapability["personalReminder"],
 ): CronCreatorAuthorityCapability | undefined {
   const normalizedRunId = runId.trim();
   return normalizedRunId
@@ -58,6 +59,7 @@ export function createCronCreatorAuthorityCapability(
         channelRequester,
         requesterOwner,
         callerScopedCreation,
+        personalReminder,
       )
     : undefined;
 }
@@ -68,6 +70,21 @@ const activeCronCreatorAuthority = new AsyncContext<CronCreatorAuthorityRunScope
 const activeCronCreatorAuthorityResolver = new AsyncContext<CronCreatorAuthorityResolverScope>(
   Symbol("cronCreatorAuthorityResolver"),
 );
+
+/** Only the matching live source run can expose the bounded reminder facts to its tool. */
+export function bindPersonalReminderIdentity(runId: string | undefined) {
+  const scope = activeCronCreatorAuthority.getStore();
+  if (
+    !scope?.personalReminder ||
+    scope.runId !== runId ||
+    !scope.active ||
+    scope.signal.aborted ||
+    scope.isCurrent?.() === false
+  ) {
+    return undefined;
+  }
+  return scope.personalReminder;
+}
 
 /** Retain the Cron-only fence when tools materialize outside their creator scope. */
 export function bindActiveCronAuthorityCurrentness(

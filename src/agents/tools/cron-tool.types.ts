@@ -50,6 +50,7 @@ export type CronCreatorToolAuthoritySnapshot = Omit<
 };
 
 export type CronToolOptions = {
+  personalReminder?: import("../../gateway/cron-creator-authority-grant.types.js").PersonalReminderIdentity;
   /** A model-facing chat add must identify its slot before the scheduler can mutate. */
   requireCreationPlan?: boolean;
   agentSessionKey?: string;

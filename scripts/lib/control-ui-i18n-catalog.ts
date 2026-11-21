@@ -241,7 +241,10 @@ export function loadControlUiSourceCatalog(): TranslationMap {
   const dictationBefore = new Map<string, (keyof typeof dictationCopy)[]>([
     ["dictationDisconnected", ["dictationAudioUnsupported", "dictationBrowserAudioUnsupported"]],
     ["dictationInterruptedRecovery", ["dictationFailed"]],
-    ["dictationListening", ["dictationRetryRecording", "dictationDiscardRecording", "dictationRecordingKept"]],
+    [
+      "dictationListening",
+      ["dictationRetryRecording", "dictationDiscardRecording", "dictationRecordingKept"],
+    ],
     ["dictationStopAndKeep", ["dictationStarting"]],
   ]);
   const composer: TranslationMap = {};

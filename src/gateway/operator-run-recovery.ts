@@ -61,6 +61,7 @@ import {
   decodeQueuedOperatorRecoverySource,
   hasAutomationAdminDelegation,
   type OperatorRunRecoverySnapshot,
+  type RestartRecoveryOperatorSource,
 } from "./operator-run-recovery-source.codec.js";
 import { captureQueuedOperatorRecoverySource } from "./operator-run-recovery-source.js";
 import { getGatewayControlUiIngressHost } from "./remote-control-ui-ingress-host.js";
@@ -467,6 +468,28 @@ export async function restoreGatewayOperatorSource(params: {
     throw new Error("Operator continuation recovery source is unavailable.");
   }
   return restored;
+}
+
+/** Scheduled work retains the same source and re-admission owner as queued work. */
+export async function restorePersistedOperatorSource(params: {
+  source: RestartRecoveryOperatorSource;
+  target?: { agentId: string; sessionKey: string };
+  context: GatewayRequestContext;
+  assertCurrent: () => void;
+}): Promise<
+  Pick<
+    RestoredGatewayOperatorAuthority,
+    "authority" | "controlUiAdmin" | "automationAdmin" | "release"
+  >
+> {
+  const { source, ...owner } = params;
+  return source.kind === "channel"
+    ? restoreGatewayQueuedOperatorRecovery({
+        source: { kind: "channel", snapshot: source.snapshot },
+        context: owner.context,
+        assertCurrent: owner.assertCurrent,
+      })
+    : restoreGatewayOperatorSource({ ...owner, snapshot: source.snapshot });
 }
 
 /** A queued native launch reuses its original authenticated source, never profile attribution. */

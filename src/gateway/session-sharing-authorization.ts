@@ -93,6 +93,7 @@ export type SessionMutationAuthorizationParams = {
   }>;
   preparedTalkSessionTarget?: PreparedTalkSessionTarget;
   preparedProfiles?: PreparedSessionSharingProfiles;
+  nativeSourceSend?: (target: SessionSharingTarget) => boolean;
 };
 
 /** Keep source creation, incognito, visibility, and current sharing checks on one policy path. */
@@ -177,11 +178,15 @@ export function createSessionTargetPolicyAuthorizer(context: {
         });
     const canReadTarget =
       policy && (directRead ? policy.canReadDirectTarget : policy.canReadTarget);
+    // Source authority substitutes only the creator role for this action. It never
+    // replaces the agent, incognito, or final sharing-policy checks.
+    const nativeSourceSend =
+      target && !error && authorizesAgentRun && params.nativeSourceSend?.(target) === true;
     if (target && !error) {
       const visible = canReadTarget
         ? canReadTarget(target)
         : entryFilter?.(target.canonicalKey, target.entry, isMember) !== false;
-      if (!visible) {
+      if (!visible && !nativeSourceSend) {
         return hiddenSessionNotFound(target.canonicalKey);
       }
     }
@@ -205,16 +210,19 @@ export function createSessionTargetPolicyAuthorizer(context: {
           { cfg, client: params.client, target, ...targetOwnership },
           {
             value: policy.sessionCap,
-            role: policy.roleForTarget(target),
+            role: nativeSourceSend ? "owner" : policy.roleForTarget(target),
           },
         )
-      : authorizeSessionSharingTarget({
-          cfg,
-          client: params.client,
-          target,
-          ...targetOwnership,
-          isMember,
-        });
+      : authorizeSessionSharingTarget(
+          {
+            cfg,
+            client: params.client,
+            target,
+            ...targetOwnership,
+            isMember,
+          },
+          nativeSourceSend ? { value: sessionCap(cfg), role: "owner" } : undefined,
+        );
   };
 }
 

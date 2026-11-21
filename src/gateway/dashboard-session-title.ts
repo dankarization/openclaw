@@ -498,10 +498,7 @@ async function reassessDashboardTitle(
         : [],
     inputMessages: Array.isArray(state.inputMessages) ? state.inputMessages : [],
   };
-  if (
-    normalizedState.phase === "completed" ||
-    normalizedState.seenMessageIds.includes(messageId)
-  ) {
+  if (normalizedState.phase === "completed" || normalizedState.seenMessageIds.includes(messageId)) {
     return false;
   }
 

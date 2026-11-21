@@ -20,6 +20,7 @@ import type {
   CronCreatorAuthorityGrant,
   CronCreatorAuthorityRunScope,
   CronManagementEntitlement,
+  PersonalReminderIdentity,
 } from "./cron-creator-authority-grant.types.js";
 
 /** Resolve the deployment's automation scope when binding model tools or admitting RPCs. */
@@ -85,6 +86,7 @@ export function createCronCreatorAuthorityRunScope(
   channelRequester?: CronAuthenticatedChannelRequester,
   requesterOwner?: CronCreatorAuthorityRunScope["requesterOwner"],
   callerScopedCreation?: true,
+  personalReminder?: PersonalReminderIdentity,
 ): CronCreatorAuthorityRunScope {
   const abortController = new AbortController();
   const requester = normalizeCronAuthenticatedChannelRequester(channelRequester);
@@ -96,6 +98,7 @@ export function createCronCreatorAuthorityRunScope(
     ...(managementEntitlement ? { managementEntitlement } : {}),
     ...(requesterOwner ? { requesterOwner } : {}),
     ...(callerScopedCreation ? { callerScopedCreation } : {}),
+    ...(personalReminder ? { personalReminder: Object.freeze({ ...personalReminder }) } : {}),
     get controlUiAdmin(): true | undefined {
       return managementEntitlement?.source === "control-ui-admin" ? true : undefined;
     },
@@ -174,6 +177,14 @@ export function mintCronCreatorAuthorityGrant(
   ) {
     throw expiredManagementError();
   }
+  if (
+    scope.personalReminder &&
+    (management ||
+      !scope.callerScopedCreation ||
+      creatorProfileId !== scope.personalReminder.profileId)
+  ) {
+    throw new TypeError("Personal reminder requester identity is no longer current.");
+  }
   const token = randomBytes(32).toString("base64url");
   const normalizedRuntimeAuthority = runtimeAuthority
     ? cloneCronRuntimeAuthority(runtimeAuthority)
@@ -211,6 +222,7 @@ export function resolveCronCreatorAuthorityGrantProvenance(
       callerScopedCreation?: true;
       /** Host-captured causal human; never permission or model input. */
       creatorProfileId?: string;
+      personalReminder?: PersonalReminderIdentity;
       callerOrigin?: CronScheduledToolCallerOrigin;
       channelRequester?: CronAuthenticatedChannelRequester;
     }
@@ -238,6 +250,7 @@ export function resolveCronCreatorAuthorityGrantProvenance(
     capturesRuntimeAuthority: entry.capturesRuntimeAuthority,
     ...(scope.callerScopedCreation ? { callerScopedCreation: true as const } : {}),
     ...(entry.creatorProfileId ? { creatorProfileId: entry.creatorProfileId } : {}),
+    ...(scope.personalReminder ? { personalReminder: scope.personalReminder } : {}),
     ...(scope.callerOrigin.kind === "local" ||
     (scope.callerOrigin.kind === "external" &&
       scope.managementEntitlement?.source === "channel-owner")

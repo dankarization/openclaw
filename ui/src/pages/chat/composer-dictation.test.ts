@@ -823,9 +823,7 @@ describe("ComposerDictationOwner", () => {
     vi.stubGlobal("AudioContext", DeferredCloseAudioContext);
     let created = 0;
     request.mockImplementation(async (method) =>
-      method === "talk.session.create"
-        ? sessionResult("dictation-" + ++created)
-        : { ok: true },
+      method === "talk.session.create" ? sessionResult("dictation-" + ++created) : { ok: true },
     );
     const { controller, onCommit } = createHarness();
     try {
@@ -860,7 +858,8 @@ describe("ComposerDictationOwner", () => {
       expectClosed("dictation-2");
       expect(
         request.mock.calls.filter(
-          ([method, params]) => method === "talk.session.close" && params.sessionId === "dictation-1",
+          ([method, params]) =>
+            method === "talk.session.close" && params.sessionId === "dictation-1",
         ),
       ).toHaveLength(1);
       expect(onCommit).toHaveBeenCalledExactlyOnceWith("Recovered after shutdown", true);
@@ -891,7 +890,9 @@ describe("ComposerDictationOwner", () => {
     await expect(retried).resolves.toBe(true);
     await expect(finished).resolves.toBe(true);
     expect(getUserMedia).toHaveBeenCalledOnce();
-    expect(request.mock.calls.filter(([method]) => method === "talk.session.appendAudio")).toHaveLength(2);
+    expect(
+      request.mock.calls.filter(([method]) => method === "talk.session.appendAudio"),
+    ).toHaveLength(2);
     expect(onCommit).toHaveBeenCalledExactlyOnceWith("Recovered words", true);
     expect(controller.recovery).toBeUndefined();
   });

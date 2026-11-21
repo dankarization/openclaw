@@ -61,7 +61,9 @@ const buildModelsProviderDataHoisted = vi.hoisted(() =>
     modelCatalog: [],
   })),
 );
-const prepareSkillCommandsForAgentsHoisted = vi.hoisted(() => vi.fn(async () => []));
+const prepareSkillCommandsForAgentsHoisted = vi.hoisted(() =>
+  vi.fn<TelegramBotFixtureMocks["prepareSkillCommandsForAgents"]>(async () => []),
+);
 const createChannelMessageReplyPipelineHoisted = vi.hoisted(() =>
   vi.fn(() => ({
     responsePrefix: undefined,
@@ -120,7 +122,7 @@ const readChannelAllowFromStore = readChannelAllowFromStoreHoisted;
 const upsertChannelPairingRequest = upsertChannelPairingRequestHoisted;
 const enqueueSystemEvent = enqueueSystemEventHoisted;
 const buildModelsProviderData = buildModelsProviderDataHoisted;
-const prepareSkillCommandsForAgents = prepareSkillCommandsForAgentsHoisted;
+export const prepareSkillCommandsForAgents = prepareSkillCommandsForAgentsHoisted;
 const createChannelMessageReplyPipeline = createChannelMessageReplyPipelineHoisted;
 const wasSentByBot = wasSentByBotHoisted;
 export const appendAssistantMirrorMessageByIdentity = appendAssistantMirrorMessageByIdentityHoisted;
@@ -526,6 +528,9 @@ async function resetTelegramDispatchTestState() {
 }
 
 async function cleanupTelegramDispatchTestState() {
+  const { waitForPendingTopicLabelsForTests } =
+    await import("./bot-message-dispatch-topic-label.js");
+  await waitForPendingTopicLabelsForTests();
   clearTelegramRuntime();
   resetPluginStateStoreForTests();
   await testState.cleanup();

@@ -38,6 +38,7 @@ import {
 import type { CronCreatorAuthorityGrant } from "../cron-creator-authority-grant.types.js";
 import { bindGatewayDeviceRevocation } from "../device-revocation.js";
 import { assertHumanCronJobAccess, assertHumanCronExecutionAccess } from "./cron-human-owner.js";
+import { matchesPersonalReminderOwner } from "./cron-personal-reminder-guards.js";
 import type {
   GatewayClient,
   GatewayRequestContext,
@@ -175,7 +176,8 @@ export function resolveCronMutationCommitGuard(
     // The capability can expire, or the same id can acquire another owner while
     // this request waits for the cron lock. Re-read both at the commit owner.
     if (jobScope?.callerScope) {
-      const callerScope = readCronCallerScope(client);
+      consumedRequester?.assertCurrent();
+      const callerScope = consumedRequester ? jobScope.callerScope : readCronCallerScope(client);
       const job = context.cron.getJob(jobScope.jobId);
       if (
         !callerScope ||
@@ -206,6 +208,7 @@ export type CronCallerScope = {
   kind: "agentTool";
   /** Attribution from the existing live creator grant, not management entitlement. */
   creatorProfileId?: string;
+  personalReminder?: import("../cron-creator-authority-grant.types.js").PersonalReminderIdentity;
   agentId: string;
   sessionKey?: string;
   accountId: string;
@@ -242,6 +245,9 @@ export function readCronCallerScope(
         identity.operationalRunInstance.runId,
       )
     : undefined;
+  if (identity.cronCreatorAuthorityGrant && !grantProvenance) {
+    throw new TypeError("The automation requester grant is no longer active.");
+  }
   const requester = manageAll
     ? getCronManagementChannelRequester(identity)
     : grantProvenance?.channelRequester;
@@ -283,6 +289,9 @@ export function readCronCallerScope(
     kind: "agentTool",
     ...(grantProvenance?.creatorProfileId
       ? { creatorProfileId: grantProvenance.creatorProfileId }
+      : {}),
+    ...(grantProvenance?.personalReminder
+      ? { personalReminder: grantProvenance.personalReminder }
       : {}),
     agentId: normalizeAgentId(identity.agentId),
     sessionKey: identity.sessionKey?.trim() || undefined,
@@ -416,6 +425,12 @@ export function cronJobMatchesCallerScope(params: {
 }): boolean {
   if (!params.callerScope) {
     return true;
+  }
+  if (params.callerScope.personalReminder) {
+    return matchesPersonalReminderOwner(
+      params.job as CronStoredJob,
+      params.callerScope.personalReminder,
+    );
   }
   if (params.callerScope.manageAll) {
     params.callerScope.manageAll();

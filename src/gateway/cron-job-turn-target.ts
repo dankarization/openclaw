@@ -5,7 +5,7 @@ import { checkRequesterOwner } from "../cron/execution-context-admission.js";
 import { resolveScheduledRequester } from "../cron/execution-context.js";
 import type { CronStoredJob } from "../cron/types.js";
 import { operatorScopeSatisfied } from "../shared/operator-scope-compat.js";
-import { restoreGatewayOperatorSource } from "./operator-run-recovery.js";
+import { restorePersistedOperatorSource } from "./operator-run-recovery.js";
 import type { GatewayRequestContext } from "./server-methods/shared-types.js";
 
 /**
@@ -54,7 +54,7 @@ export async function captureCronJobTurnTarget(params: {
   // Parent-bound sources follow their chat by key; standalone sources retain device authority independently.
   const { source } = requester;
   const captured = job.operatorSource;
-  let operator: Awaited<ReturnType<typeof restoreGatewayOperatorSource>> | undefined;
+  let operator: Awaited<ReturnType<typeof restorePersistedOperatorSource>> | undefined;
   try {
     if (
       source.agentId !== agentId ||
@@ -62,8 +62,8 @@ export async function captureCronJobTurnTarget(params: {
     ) {
       throw new Error("Automation operator source names another conversation");
     }
-    operator = await restoreGatewayOperatorSource({
-      snapshot: source.snapshot,
+    operator = await restorePersistedOperatorSource({
+      source,
       target: source.kind === "gateway" ? undefined : { agentId, sessionKey },
       context,
       assertCurrent: () => {

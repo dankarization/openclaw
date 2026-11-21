@@ -1,5 +1,17 @@
 import type { CronScheduledToolCallerOrigin } from "../cron/scheduled-tool-policy.js";
 
+/** Private host-captured facts from the exact linked Telegram input. */
+export type PersonalReminderIdentity = Readonly<{
+  profileId: string;
+  agentId: string;
+  sessionKey: string;
+  sessionId: string;
+  lifecycleRevision?: string;
+  accountId: string;
+  to: string;
+  threadId?: string | number;
+}>;
+
 export type CronCreatorAuthorityGrant = Readonly<{
   runId: string;
   token: string;
@@ -33,6 +45,8 @@ export type CronCreatorAuthorityRunScope = {
   }>;
   /** Fresh admission only; never transferred with a management continuation. */
   readonly callerScopedCreation?: true;
+  /** Exact requester route; never confers automation management authority. */
+  readonly personalReminder?: PersonalReminderIdentity;
   /** @deprecated Read managementEntitlement. Harness source compatibility lasts through 2026-10-12. */
   readonly controlUiAdmin?: true;
   readonly isCurrent?: () => boolean;

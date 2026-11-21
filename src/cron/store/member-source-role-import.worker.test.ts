@@ -24,6 +24,7 @@ import { cronStoreKey } from "../store/key.js";
 import { claimCronRunReceiptForTest } from "../store/run-receipt-store.test-support.js";
 import { makeCronStreamSandboxTarget } from "../stream-sandbox.test-support.js";
 import type { CronStoredJob } from "../types.js";
+import { importLegacyCronMemberSources } from "./member-source-role-import.js";
 
 function legacyJob(id: string): CronStoredJob {
   const job = makeCronJob({ id, agentId: "main", createdAtMs: 1, updatedAtMs: 2 });
@@ -75,7 +76,11 @@ it("migrates shared source owners without SQL on the host, stale inventories, or
     staleSandbox.id = "sandbox-stale";
     staleSandbox.operatorSource!.executionRevision = "retained-stale-execution";
     const restricted = legacyJob("restricted");
-    restricted.operatorSource!.source.snapshot.rolePolicy = {
+    const restrictedSource = restricted.operatorSource!.source;
+    if (restrictedSource.kind === "channel") {
+      throw new Error("Expected an OpenClaw ID source");
+    }
+    restrictedSource.snapshot.rolePolicy = {
       ...memberRoleImport.policy,
       scopes: ["operator.read"],
     };
@@ -296,4 +301,25 @@ it("refuses stale preparation and leaves unsupported or malformed stored sources
       database.db.prepare("SELECT provision_source_json FROM worker_environments").get(),
     ).toEqual({ provision_source_json: '{"kind":"invalid"}' });
   });
+});
+
+it("does not import an OpenClaw ID role into a channel recovery source", () => {
+  const job = legacyJob("channel-source");
+  job.operatorSource = {
+    executionRevision: "channel-revision",
+    source: {
+      version: 1,
+      kind: "channel",
+      agentId: "main",
+      sessionKey: "agent:main:telegram:group:proof",
+      sourceRunId: "channel-turn",
+      snapshot: {
+        reference: { version: 1, id: "c083c5f9-1134-4412-bdd1-ea7f2c12c167" },
+        profileId: memberRoleImport.profileId,
+        scopes: ["operator.write"],
+      },
+    },
+  };
+  const original = structuredClone(job);
+  expect(importLegacyCronMemberSources(job, memberRoleImport)).toEqual(original);
 });

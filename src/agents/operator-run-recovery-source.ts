@@ -1,5 +1,6 @@
 import type { InternalSessionEntry } from "../config/sessions/types.js";
 import type { RestartRecoveryOperatorSource } from "../gateway/operator-run-recovery-source.codec.js";
+import { captureQueuedOperatorRecoverySource } from "../gateway/operator-run-recovery-source.js";
 import {
   isAcpSessionKey,
   isCronSessionKey,
@@ -7,7 +8,6 @@ import {
 } from "../routing/session-key.js";
 import { isAgentHarnessSessionKey } from "../sessions/agent-harness-session-key.js";
 import { freezeJsonSnapshot } from "../shared/immutable-data.js";
-import { intersectOperatorScopes } from "../shared/operator-scope-compat.js";
 import {
   assertAdmittedRunOperatorAuthority,
   type AdmittedRunOperatorAuthority,
@@ -42,19 +42,22 @@ export function captureScheduledOperatorSource(
     }
     return undefined;
   };
-  const snapshot = authority.recoverySnapshot;
-  if (!snapshot) {
+  const captured = captureQueuedOperatorRecoverySource(authority);
+  if (!captured || captured.kind === "unavailable") {
     return unavailable();
   }
   let source: RestartRecoveryOperatorSource;
   if (independent) {
+    if (captured.kind !== "gateway") {
+      return unavailable();
+    }
     // No conversation IDs or contents are needed to retain the authenticated device grant.
     source = {
       version: 1,
       kind: "gateway",
       agentId: params.agentId,
       sourceRunId: params.sourceRunId,
-      snapshot: { ...snapshot, scopes: intersectOperatorScopes(snapshot.scopes, authority.scopes) },
+      snapshot: captured.snapshot,
     };
   } else {
     if (
@@ -71,14 +74,17 @@ export function captureScheduledOperatorSource(
     ) {
       return undefined;
     }
-    source = {
-      version: 1,
+    const parent = {
+      version: 1 as const,
       agentId: params.agentId,
       // The conversation is linked by key, so its edits and resets keep the source.
       sessionKey,
       sourceRunId: params.sourceRunId,
-      snapshot: { ...snapshot, scopes: intersectOperatorScopes(snapshot.scopes, authority.scopes) },
     };
+    source =
+      captured.kind === "channel"
+        ? { ...parent, kind: "channel", snapshot: captured.snapshot }
+        : { ...parent, snapshot: captured.snapshot };
   }
   return Buffer.byteLength(JSON.stringify(source), "utf8") <= 65_536
     ? freezeJsonSnapshot(source)

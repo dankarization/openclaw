@@ -56,7 +56,9 @@ export function ActiveDictationStatus(props: {
               <span
                 class={[
                   "agent-chat__dictation-phase",
-                  { "agent-chat__dictation-phase--listening text-shimmer": current === "listening" },
+                  {
+                    "agent-chat__dictation-phase--listening text-shimmer": current === "listening",
+                  },
                 ]}
                 // Listening can last a while, so its shimmer sweeps slower than running work.
                 // Set here rather than in CSS: the shared stylesheet is at its size ceiling.
@@ -93,7 +95,9 @@ export function ActiveDictationStatus(props: {
             <button
               class="btn btn--sm"
               type="button"
-              disabled={!props.readDictation()?.canRetry || props.readDictation()?.recovery?.retrying}
+              disabled={
+                !props.readDictation()?.canRetry || props.readDictation()?.recovery?.retrying
+              }
               onClick={() => void props.readDictation()?.retry()}
             >
               {t("chat.composer.dictationRetryRecording")}

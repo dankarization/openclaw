@@ -1,5 +1,6 @@
 import { ownsStreamSource } from "../cron/stream-schedule.js";
 import type { CronStoredJob } from "../cron/types.js";
+import { gatewayOperatorSnapshot } from "./operator-run-recovery-source.codec.js";
 import type { RestoredGatewayOperatorAuthority } from "./operator-run-recovery.js";
 import type { GatewayRequestContext } from "./server-methods/types.js";
 
@@ -20,7 +21,7 @@ export async function prepareCronStreamSourceAuthority(params: {
   const snapshot = job.streamSandbox ? undefined : job.streamOperatorSource;
   if (
     !snapshot &&
-    (job.streamSandbox || !job.operatorSource?.source.snapshot.openclawIdPrincipal)
+    (job.streamSandbox || !gatewayOperatorSnapshot(job.operatorSource?.source)?.openclawIdPrincipal)
   ) {
     return { isCurrent: () => true, release: () => {} };
   }

@@ -29,6 +29,7 @@ import {
   withCronManagementGrant,
 } from "../cron-creator-authority-grant.js";
 import { retainCronControlSource } from "../cron-operator-source.js";
+import { gatewayOperatorSnapshot } from "../operator-run-recovery-source.codec.js";
 import type { OperatorRunRecoverySnapshot } from "../operator-run-recovery-source.codec.js";
 import { cronAddHandler } from "./cron-add.js";
 import { cronBindHandler } from "./cron-bind.js";
@@ -225,6 +226,15 @@ export const cronHandlers: GatewayRequestHandlers = {
     const validateUpdate = async (jobToUpdate: CronStoredJob) => {
       assertHumanCronJobAccess(client, jobToUpdate);
       assertHumanCronExecutionAccess(client, jobToUpdate, patch);
+      if (
+        patch.enabled === true &&
+        !jobToUpdate.operatorSource &&
+        client?.internal?.authenticatedControlUi === true
+      ) {
+        throw new TypeError(
+          "This legacy automation has no authenticated source. Recreate it from a fresh authenticated owner turn before enabling it.",
+        );
+      }
       assertOwnerSelectionCurrent?.();
       assertCronModelJobAllowed(client, cfg, jobToUpdate, patch);
       const nextJob = await assertValidCronUpdatePatch({
@@ -283,16 +293,10 @@ export const cronHandlers: GatewayRequestHandlers = {
       const nextSourceRevision = resolveCronOperatorExecutionRevision(nextJob);
       const sealed = currentJob.operatorSource;
       const sourceBound = Boolean(
-        client?.internal?.openclawIdPrincipal ||
-        sealed?.source.kind === "gateway" ||
-        sealed?.source.snapshot.openclawIdPrincipal ||
-        currentJob.streamOperatorSource,
+        client?.internal?.openclawIdPrincipal || sealed || currentJob.streamOperatorSource,
       );
       if (
         creatorScope ||
-        // Explicit UI enable also reauthorizes historical jobs that predate source capture.
-        // The capture owner still validates the live direct-device authority.
-        (!sealed && patch.enabled === true && client?.internal?.authenticatedControlUi === true) ||
         (sourceBound &&
           (requiresStreamExec ||
             patch.enabled === true ||
@@ -306,7 +310,7 @@ export const cronHandlers: GatewayRequestHandlers = {
           cfg,
           true,
         );
-        processSource = operatorCapture.operatorSource?.snapshot;
+        processSource = gatewayOperatorSnapshot(operatorCapture.operatorSource);
         operatorCapture = retainCronControlSource({
           job: currentJob,
           patch,
@@ -370,7 +374,7 @@ export const cronHandlers: GatewayRequestHandlers = {
         !currentJob.streamSandbox &&
         !streamExecPolicy?.sandboxContext &&
         (currentJob.streamOperatorSource ||
-          currentJob.operatorSource?.source.snapshot.openclawIdPrincipal ||
+          gatewayOperatorSnapshot(currentJob.operatorSource?.source)?.openclawIdPrincipal ||
           processSource?.openclawIdPrincipal)
       ) {
         if (!processSource) {
@@ -601,6 +605,18 @@ for (const [method, handler] of Object.entries(cronHandlers)) {
     const identity = args.client?.internal?.agentRuntimeIdentity;
     if (!identity) {
       return await handler(args);
+    }
+    const scope = readCronCallerScope(args.client);
+    if (
+      scope?.personalReminder &&
+      !["cron.list", "cron.get", "cron.add", "cron.remove"].includes(method)
+    ) {
+      respondInvalidCronParams(
+        args.respond,
+        method,
+        "Personal reminder authority does not permit this action.",
+      );
+      return;
     }
     const grant = identity.cronManagementGrant;
     let succeeded = false;

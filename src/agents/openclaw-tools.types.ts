@@ -172,7 +172,6 @@ export type OpenClawToolsOptions = {
   agentTo?: string;
   /** Thread/topic identifier for routing replies to the originating thread. */
   agentThreadId?: string | number;
-  webchatExternalDeliveryDisabled?: boolean;
   /** Message-only authority from a CLI grant; does not authorize plugin delivery. */
   messageToolTurnCapability?: { token: string; sessionKey: string };
   /** Private factory admission for a new scheduled message invocation. */
@@ -193,6 +192,7 @@ export type OpenClawToolsOptions = {
   /** Whether the tool profile exposes Gateway management actions beyond maintenance. */
   gatewayManagementActionsAllowed?: boolean;
   /** Effective caller tool surface to persist on isolated cron agentTurn jobs. */
+  personalReminder?: CronToolOptions["personalReminder"];
   cronCreatorToolAllowlist?: CronToolOptions["creatorToolAllowlist"];
   cronCreatorToolAllowlistCaptureRef?: CronToolOptions["creatorToolAllowlistCaptureRef"];
   resolveCronCreatorToolAuthority?: CronToolOptions["resolveCreatorToolAuthority"];

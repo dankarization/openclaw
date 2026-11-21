@@ -52,7 +52,10 @@ import { setCanonicalUserProfileRole } from "../../state/user-profile-writes.js"
 import { ensureProfileForEmail } from "../../state/user-profiles.js";
 import { createGatewaySchedulerClock } from "../../test-utils/gateway-scheduler-clock.js";
 import type { CronEvent } from "../service.js";
-import { resolveCronRequesterExecutionRevision } from "../service/jobs-tool-policy.js";
+import {
+  resolveCronOperatorExecutionRevision,
+  resolveCronRequesterExecutionRevision,
+} from "../service/jobs-tool-policy.js";
 import { onTimer } from "../service/timer.test-support.js";
 import { saveCronStore } from "../store.js";
 import { cronStoreKey } from "../store/key.js";
@@ -161,6 +164,7 @@ it.each([
   "session replaced",
   "queued owner payload edit",
   "queued manager rename",
+  "queued manager rename retains authorized continuation",
   "owner capture races manager payload",
   "recurring trigger reload",
 ] as const)("scheduled continuation preserves the %s boundary", async (scenario) => {
@@ -176,7 +180,8 @@ it.each([
   const roleRevoked = scenario === "role revoked" || scenario === "principal role revoked";
   const restarting = scenario === "restart";
   const ownerEdit = scenario === "queued owner payload edit";
-  const managerRename = scenario === "queued manager rename";
+  const managerRetained = scenario === "queued manager rename retains authorized continuation";
+  const managerRename = scenario === "queued manager rename" || managerRetained;
   const captureRace = scenario === "owner capture races manager payload";
   const queuedEdit = ownerEdit || managerRename || captureRace;
   const recurring = scenario === "recurring trigger reload";
@@ -317,7 +322,19 @@ it.each([
       isWebchatConnect: () => false,
       respond,
     });
-    expect(respond.mock.calls[0]?.[0]).toBe(true);
+    const [ok, , error] = expectDefined(respond.mock.calls[0], "manager update response");
+    expect(ok).toBe(false);
+    expect(String(error?.message)).toMatch(/source|authority|authenticated/i);
+    const unchanged = expectDefined((await fixture.read())[0], "unchanged manager target");
+    expect(unchanged.name).toBe(stored.name);
+    expect(unchanged.payload).toEqual(stored.payload);
+    expect(unchanged.operatorSource).toEqual(stored.operatorSource);
+    expect(resolveCronOperatorExecutionRevision(unchanged)).toBe(
+      resolveCronOperatorExecutionRevision(stored),
+    );
+    expect(unchanged.operatorSource?.executionRevision).toBe(
+      stored.operatorSource?.executionRevision,
+    );
   };
   try {
     const createRun = () =>
@@ -566,7 +583,11 @@ it.each([
   let nextCheckDefinition: string | undefined;
   runEmbeddedAgentMock.mockImplementation(async (params: RunEmbeddedAgentParams) => {
     entered++;
-    if (ownerEdit || recurring || managerRename || captureRace) {
+    if (managerRetained) {
+      expect(params.prompt).toContain("Finish authorized landing");
+      expect(params.prompt).toContain("Inspect and land the reviewed PR");
+      expect(params.prompt).not.toContain("Manager-authored instructions");
+    } else if (ownerEdit || recurring || managerRename || captureRace) {
       expect(params.prompt).toContain(
         ownerEdit
           ? "Land the refreshed reviewed PR"
@@ -744,21 +765,32 @@ it.each([
         });
         expect(execution.getJob(job.id)?.state.runningReceiptId).toBeUndefined();
         expect(entered).toBe(0);
-        if (managerRename) {
-          await managerUpdate({ name: "Manager-authored instructions" });
-        } else if (captureRace) {
-          const update = execution.updateWithPrecondition.bind(execution);
-          vi.spyOn(execution, "updateWithPrecondition").mockImplementationOnce(async (...args) => {
-            await managerUpdate({
-              payload: { kind: "agentTurn", message: "Manager replacement payload" },
-            });
-            return update(...args);
-          });
+        try {
+          if (managerRename) {
+            await managerUpdate({ name: "Manager-authored instructions" });
+          } else if (captureRace) {
+            const update = execution.updateWithPrecondition.bind(execution);
+            vi.spyOn(execution, "updateWithPrecondition").mockImplementationOnce(
+              async (...args) => {
+                await managerUpdate({
+                  payload: { kind: "agentTurn", message: "Manager replacement payload" },
+                });
+                return update(...args);
+              },
+            );
+          }
+          updateCreator.resolve();
+          await Promise.race([creatorUpdated.promise, expectDefined(creation, "creator turn")]);
+          expect(entered).toBe(0);
+          if ((managerRename || captureRace) && !managerRetained) {
+            // Verify denial produces no effects even after the admitted creator settles.
+            await setCanonicalUserProfileRole(profile.id, "blocked");
+          }
+        } finally {
+          // Failure inside the manager update or race hook must never strand the creator.
+          updateCreator.resolve();
+          releaseCreator.resolve();
         }
-        updateCreator.resolve();
-        await Promise.race([creatorUpdated.promise, expectDefined(creation, "creator turn")]);
-        expect(entered).toBe(0);
-        releaseCreator.resolve();
         await creation;
         original?.release();
         await creatorCron.waitForIdle();
@@ -782,6 +814,9 @@ it.each([
       const source = decodeGatewayOperatorRecoverySource(
         expectDefined(job.operatorSource, "captured operator source").source,
       );
+      if (source.kind === "channel") {
+        throw new Error("Expected Gateway recovery source for this test");
+      }
       await expect(
         restoreGatewayOperatorSource({
           snapshot: source.snapshot,
@@ -837,9 +872,25 @@ it.each([
       expect(modelAdmissions, "Refused authority must not reach model admission").toBe(0);
       return;
     }
-    if (managerRename || captureRace) {
+    if ((managerRename || captureRace) && !managerRetained) {
       expect(admittedOperator).toBe(false);
-      expect((await fixture.read())[0]?.operatorSource).toBeUndefined();
+      expect(entered).toBe(0);
+      expect(modelAdmissions).toBe(0);
+      expect(reads).toBe(0);
+      expect(writes).toEqual([]);
+      expect(results).toEqual([]);
+      expect(state.lastRunStatus, state.lastError).toBe("error");
+      expect(state.lastError).toMatch(/operator identity changed|authority|revok|role/i);
+      expect((await fixture.read())[0]?.operatorSource).toEqual(job.operatorSource);
+      return;
+    }
+    if (managerRetained) {
+      expect(admittedOperator).toBe(true);
+      const persisted = expectDefined((await fixture.read())[0], "retained continuation");
+      expect(persisted.operatorSource).toEqual(job.operatorSource);
+      expect(resolveCronOperatorExecutionRevision(persisted)).toBe(
+        resolveCronOperatorExecutionRevision(job),
+      );
     }
     if (queuedEdit || recurring) {
       expect(state.autoDisabled).toBeUndefined();
@@ -914,6 +965,7 @@ it.each([
         scenario === "session edited" ||
         scenario === "session replaced" ||
         ownerEdit ||
+        managerRetained ||
         recurring
       ) {
         expect(rejected).toBeUndefined();
@@ -953,6 +1005,7 @@ it.each([
       scenario !== "session edited" &&
       scenario !== "session replaced" &&
       !ownerEdit &&
+      !managerRetained &&
       !recurring &&
       scenario !== "role revoked during merge"
     ) {
@@ -968,6 +1021,9 @@ it.each([
         await execution.waitForIdle();
         const invalid = structuredClone(valid);
         const source = expectDefined(invalid.operatorSource, "stored operator source");
+        if (source.source.kind === "channel") {
+          throw new Error("Expected the fixture Gateway source");
+        }
         if (failure === "definition") {
           source.executionRevision = "invalid-definition";
         } else if (failure === "decode") {

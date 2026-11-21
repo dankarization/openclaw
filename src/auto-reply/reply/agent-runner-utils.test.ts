@@ -81,7 +81,9 @@ function buildExecution(params: Partial<Parameters<typeof buildEmbeddedRunExecut
 
 describe("agent-runner-utils", () => {
   it("carries explicit WebChat delivery opt-out into the embedded attempt", async () => {
-    const resolved = await buildExecution({ sessionCtx: { WebchatExternalDeliveryDisabled: true } });
+    const resolved = await buildExecution({
+      sessionCtx: { WebchatExternalDeliveryDisabled: true },
+    });
     expect(resolved.webchatExternalDeliveryDisabled).toBe(true);
   });
 

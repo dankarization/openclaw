@@ -45,6 +45,7 @@ import {
   type OpenClawIdTunnelPrincipal,
 } from "../openclaw-id/tunnel-principal.js";
 import { captureGatewayOperatorRunAuthority } from "../operator-run-authority.js";
+import { gatewayOperatorSnapshot } from "../operator-run-recovery-source.codec.js";
 import { hasGatewayAdminScope } from "../operator-scopes.js";
 import { dispatchGatewayRequestInProcess } from "../server-in-process-dispatch.js";
 import { createOperatorClient } from "../server-plugin-in-process-dispatch.test-support.js";
@@ -290,10 +291,44 @@ it.each([
                 expect(jobs[0]?.payload).not.toHaveProperty("toolsAllowIsDefault");
               }
               expect(jobs[0]?.operatorSource?.source.snapshot.scopes).toEqual([scope]);
-              if (ocid) {
-                expect(jobs[0]?.operatorSource?.source.snapshot.openclawIdPrincipal).toEqual(
-                  principal,
+              if (!ocid) {
+                // Exercise the actual creator-scoped cron.update handler on an old row that
+                // never held durable operator source authority.
+                const legacy = await cronService.add(
+                  {
+                    name: "Sourceless historical task",
+                    enabled: false,
+                    schedule: { kind: "every", everyMs: 60_000 },
+                    sessionTarget: "current",
+                    wakeMode: "next-heartbeat",
+                    payload: { ...timedPayload, kind: "agentTurn", toolsAllow: [] },
+                    delivery: { mode: "none" },
+                    owner: ownedJob.owner,
+                  },
+                  {
+                    createdActor: ownedJob.createdActor,
+                    sourceConversation: { sessionKey: SESSION, sessionId: "requester-session" },
+                    scheduledToolPolicy: {
+                      version: 1,
+                      ...ownedJob.scheduledToolPolicy,
+                      mode: "account",
+                    },
+                  },
                 );
+                expect(legacy.operatorSource).toBeUndefined();
+                await tools.invoke(AUTOMATIONS_TOOL_NAME, {
+                  action: "update",
+                  jobId: legacy.id,
+                  job: { schedule: { kind: "every", everyMs: 120_000 } },
+                });
+                const updated = (await fixture.read()).find((entry) => entry.id === legacy.id);
+                expect(updated?.schedule).toMatchObject({ kind: "every", everyMs: 120_000 });
+                expect(updated?.operatorSource).toBeUndefined();
+              }
+              if (ocid) {
+                expect(
+                  gatewayOperatorSnapshot(jobs[0]?.operatorSource?.source)?.openclawIdPrincipal,
+                ).toEqual(principal);
               }
             }),
             original.authority,

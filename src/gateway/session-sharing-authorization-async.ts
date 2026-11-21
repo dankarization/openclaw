@@ -44,6 +44,7 @@ import {
 import type { GatewayClient, GatewayRequestContext } from "./server-methods/shared-types.js";
 import { resolveTelegramSessionGroup } from "./session-channel-group.js";
 import { prepareTelegramSessionReads } from "./session-channel-read.js";
+import { prepareNativeTelegramSourceSend } from "./session-message-source-authorization.js";
 import { sessionMethodDatabaseAdmission, isSessionTargetMethod } from "./session-method-policy.js";
 import { SessionMutationAuthorizationChangedError } from "./session-mutation-authorization-error.js";
 import { restoreSessionOperatorSource } from "./session-operator-sources.js";
@@ -402,6 +403,8 @@ export async function resolveSessionMutationAuthorizationAsync(
     isAbortRequestText(chatMessage.message);
   using phases = observeDiagnosticsTimelinePhases("sessionAuthority.profiles");
   const preparedProfiles = await prepareSessionSharingProfiles(params.client);
+  const nativeSourceSend = await prepareNativeTelegramSourceSend(params);
+  params.assertInvocationCurrent?.();
   phases.mark("sessionAuthority.targets");
   const reads: Array<{ release: () => void }> = [];
   const creationReleases: Array<() => void> = [];
@@ -537,6 +540,7 @@ export async function resolveSessionMutationAuthorizationAsync(
       return resolveSessionMutationAuthorization({
         ...params,
         preparedProfiles,
+        nativeSourceSend,
         preparedTargets,
         sessionRowRead,
       });

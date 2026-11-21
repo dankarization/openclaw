@@ -32,7 +32,10 @@ import { createTestGatewayScheduler } from "../../test-utils/gateway-scheduler-c
 import { withOpenClawTestState } from "../../test-utils/openclaw-test-state.js";
 import { createAgentRuntimeApprovalAuthorityValidator } from "../agent-runtime-approval-authority.js";
 import type { AgentRuntimeIdentity } from "../agent-runtime-identity-token.js";
-import { revokeCronCreatorAuthorityRunScope } from "../cron-creator-authority-grant.js";
+import {
+  mintCronCreatorAuthorityGrant,
+  revokeCronCreatorAuthorityRunScope,
+} from "../cron-creator-authority-grant.js";
 import { createDirectChatContext } from "../server-chat.agent-events.test-helpers.js";
 import { handleGatewayRequest } from "../server-methods.js";
 import { createSyntheticPluginRuntimeClient } from "../server-plugin-runtime-client.js";
@@ -441,6 +444,27 @@ describe("Gateway automation policy", () => {
   );
 });
 
+it("refuses Control UI admin enable of a sourceless legacy job without changing it", async () => {
+  await withCron(async ({ cron, invoke, readJobs }) => {
+    const legacy = await cron.add({ ...jobInput, name: "Legacy source-free job", enabled: false });
+    expect(legacy.operatorSource).toBeUndefined();
+    const before = (await readJobs()).jobs.find((job) => job.id === legacy.id);
+    const admin = createSyntheticPluginRuntimeClient({ scopes: ["operator.admin"] });
+    admin.internal = { ...admin.internal, authenticatedControlUi: true };
+    const response = await invoke(
+      "cron.update",
+      { id: legacy.id, patch: { enabled: true } },
+      undefined,
+      undefined,
+      admin,
+    );
+    expectDenied(response, "Recreate it from a fresh authenticated owner turn");
+    expect((await readJobs()).jobs.find((job) => job.id === legacy.id)).toEqual(before);
+    expect(cron.getJob(legacy.id)?.operatorSource).toBeUndefined();
+    expect(cron.getJob(legacy.id)?.enabled).toBe(false);
+  });
+});
+
 it("allows only the current human owner or admin to edit and transfer an automation", async () => {
   await withOpenClawTestState(
     { scenario: "minimal", prepareProfileCatalog: true },
@@ -501,4 +525,118 @@ it("allows only the current human owner or admin to edit and transfer an automat
       }
     },
   );
+});
+
+it("limits real Gateway personal reminder reads and removal to the original profile in the same topic", async () => {
+  await withCron(async ({ cron, invoke, readJobs }) => {
+    const sessionKey = "agent:main:main";
+    const origin = {
+      profileId: "alice",
+      agentId: "main",
+      sessionKey,
+      sessionId: "session-1",
+      accountId: "default",
+      to: "group-1",
+      threadId: "topic-1",
+    };
+    const add = (profileId: string, legacy = false) =>
+      cron.add(
+        {
+          ...jobInput,
+          name: `reminder-${profileId}`,
+          enabled: true,
+          deleteAfterRun: true,
+          sessionTarget: "current",
+          sessionKey,
+          schedule: { kind: "at", at: "2030-01-01T00:00:00Z" },
+          owner: { sessionKey, agentId: "main", accountId: "default" },
+          payload: { kind: "agentTurn", message: "remember", toolsAllow: [] },
+          delivery: {
+            mode: "announce",
+            channel: "telegram",
+            to: "group-1",
+            accountId: "default",
+            threadId: "topic-1",
+          },
+        },
+        {
+          createdActor: { type: "human", source: "profile", id: profileId },
+          ...(!legacy
+            ? {
+                sourceConversation: { sessionKey, sessionId: "session-1" },
+                operatorSource: {
+                  kind: "channel" as const,
+                  version: 1 as const,
+                  agentId: "main",
+                  sessionKey,
+                  sourceRunId: `source-${profileId}`,
+                  snapshot: {
+                    profileId,
+                    scopes: ["operator.cron"],
+                    reference: { version: 1 as const, id: `link-${profileId}` },
+                  },
+                },
+              }
+            : {}),
+          scheduledToolPolicy: createAccountCronScheduledToolPolicy({
+            ownerSessionKey: sessionKey,
+            ownerAccountId: "default",
+          }),
+        },
+      );
+    const alice = await add("alice");
+    const bob = await add("bob");
+    const aliceLegacy = await add("alice", true);
+    await withModelTurn("channel-owner", async (identity) => {
+      const scope = expectDefined(
+        createCronCreatorAuthorityCapability(
+          identity.operationalRunInstance.runId,
+          { kind: "external", channel: "telegram" },
+          undefined,
+          () => true,
+          { version: 1, channel: "telegram", accountId: "default", senderId: "alice-telegram" },
+          undefined,
+          true,
+          origin,
+        ),
+        "personal reminder scope",
+      );
+      const call = (method: string, params: Record<string, unknown>) =>
+        invoke(method, params, {
+          ...identity,
+          turnSourceChannel: "telegram",
+          turnSourceAccountId: "default",
+          cronCreatorAuthorityGrant: mintCronCreatorAuthorityGrant(
+            scope,
+            undefined,
+            undefined,
+            undefined,
+            "requester",
+            undefined,
+            "alice",
+          ),
+        });
+      try {
+        const listing = await call("cron.list", { includeDisabled: true });
+        expect(listing[0]).toBe(true);
+        expect(listing[1]).toMatchObject({
+          jobs: expect.arrayContaining([
+            expect.objectContaining({ id: alice.id }),
+            expect.objectContaining({ id: aliceLegacy.id }),
+          ]),
+        });
+        expect(JSON.stringify(listing[1])).not.toContain(bob.id);
+        expect((await call("cron.get", { id: bob.id }))[0]).toBe(false);
+        expect((await call("cron.remove", { id: bob.id }))[0]).toBe(false);
+        expect((await call("cron.update", { id: alice.id, patch: { enabled: false } }))[0]).toBe(
+          false,
+        );
+        expect((await call("cron.remove", { id: alice.id }))[0]).toBe(true);
+        expect((await call("cron.remove", { id: aliceLegacy.id }))[0]).toBe(true);
+        expect((await readJobs()).jobs.map((job) => job.id)).toContain(bob.id);
+      } finally {
+        revokeCronCreatorAuthorityRunScope(scope);
+      }
+    });
+  });
 });

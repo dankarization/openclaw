@@ -21,17 +21,15 @@ export function importLegacyCronMemberSources(
   if (job.operatorSource) {
     try {
       const source = decodeGatewayOperatorRecoverySource(job.operatorSource.source);
-      const snapshot = isDeepStrictEqual(source, job.operatorSource.source)
-        ? importLegacyMemberSnapshot(job.operatorSource.source.snapshot, input)
-        : job.operatorSource.source.snapshot;
-      if (snapshot !== job.operatorSource.source.snapshot) {
-        next = {
-          ...next,
-          operatorSource: {
-            ...job.operatorSource,
-            source: { ...job.operatorSource.source, snapshot },
-          },
-        };
+      // A channel reference is not an OpenClaw ID snapshot and cannot acquire its role.
+      if (source.kind !== "channel" && isDeepStrictEqual(source, job.operatorSource.source)) {
+        const snapshot = importLegacyMemberSnapshot(source.snapshot, input);
+        if (snapshot !== source.snapshot) {
+          next = {
+            ...next,
+            operatorSource: { ...job.operatorSource, source: { ...source, snapshot } },
+          };
+        }
       }
     } catch {
       // Malformed authority remains unavailable, not repaired from fresh admission.

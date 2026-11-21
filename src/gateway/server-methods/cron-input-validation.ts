@@ -59,6 +59,7 @@ import { isUserModelAuthProfileId } from "../../state/user-model-account-id.js";
 import { readGatewayDeviceSourceAuthority } from "../device-revocation.js";
 import type { UserModelAccountSelection } from "../model-account-authority.js";
 import { captureGatewayOperatorRunAuthority } from "../operator-run-authority.js";
+import { gatewayOperatorSnapshot } from "../operator-run-recovery-source.codec.js";
 import { resolveOperatorSessionCreation } from "../session-creation-provenance.js";
 import { loadGatewaySessionEntryReadOnlyInWorker } from "../session-utils-store-worker.js";
 import type { CronCallerScope } from "./cron-caller-scope.js";
@@ -414,7 +415,7 @@ export async function captureCronCreatorSession(
     inheritedAuthority?.openclawIdPrincipal ||
     caller.client?.internal?.openclawIdPrincipal ||
     job.operatorSource?.source.kind === "gateway" ||
-    job.operatorSource?.source.snapshot.openclawIdPrincipal ||
+    gatewayOperatorSnapshot(job.operatorSource?.source)?.openclawIdPrincipal ||
     job.streamOperatorSource,
   );
   let captured: Awaited<ReturnType<typeof captureGatewayOperatorRunAuthority>>;

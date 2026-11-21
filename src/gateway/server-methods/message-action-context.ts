@@ -63,6 +63,9 @@ export function createMessageActionRuntimeAuthority(
     "client" | "sessionMutationCommitGuard"
   > & {
     request: Pick<MessageActionParams, "action" | "accountId" | "params">;
+    sessionMutationAuthorization?: Parameters<
+      GatewayRequestHandlers["message.action"]
+    >[0]["sessionMutationAuthorization"];
     authorization?: MessageActionAuthorization;
     assertClientUploadAllowed?: () => void;
   },
@@ -88,11 +91,16 @@ export function createMessageActionRuntimeAuthority(
     assertReadCurrent || assertScheduledWriteCurrent
       ? params.authorization?.scheduled?.policy
       : undefined;
+  const assertSessionCurrent =
+    params.request.action === "send"
+      ? params.sessionMutationAuthorization?.assertCurrent
+      : undefined;
   const assertAdmissionCurrent =
-    assertTurnCurrent || assertActionCurrent || assertDeliveryCurrent
+    assertTurnCurrent || assertActionCurrent || assertDeliveryCurrent || assertSessionCurrent
       ? () => {
           assertTurnCurrent?.();
           params.sessionMutationCommitGuard?.();
+          assertSessionCurrent?.();
           assertActionCurrent?.();
           assertDeliveryCurrent?.();
         }

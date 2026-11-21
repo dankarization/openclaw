@@ -46,9 +46,7 @@ it("requests private inbound thumbnail tickets with each image's own message sco
     const url = new URL(String(input), window.location.href);
     requests.push({ url, authorization: new Headers(init?.headers).get("Authorization") });
     const messageId = url.searchParams.get("messageId");
-    return messageId
-      ? ticketResponse(`ticket-${messageId}`)
-      : new Response(null, { status: 403 });
+    return messageId ? ticketResponse(`ticket-${messageId}`) : new Response(null, { status: 403 });
   });
   vi.stubGlobal("fetch", fetchMock);
   const onOpenImage = vi.fn<(item: ImageLightboxItem) => void>();
@@ -73,7 +71,9 @@ it("requests private inbound thumbnail tickets with each image's own message sco
   const previews = await Promise.all(gallery.thumbnails!.slice(1).map((item) => item.load()));
   expect(requests).toHaveLength(3);
   expect(requests.map(({ url }) => url.searchParams.get("messageId"))).toEqual([
-    "private-one", "private-two", null,
+    "private-one",
+    "private-two",
+    null,
   ]);
   for (const { url, authorization } of requests) {
     expect(url.pathname).toBe("/__openclaw__/assistant-media");

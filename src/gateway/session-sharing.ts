@@ -202,6 +202,16 @@ export function resolveSessionMutationAuthorization(request: SessionMutationAuth
             "projection" in resolved ? resolved.projection : undefined,
           ),
         ) !== false
+      ) &&
+      !(
+        params.nativeSourceSend?.(target) === true &&
+        !authorizeTargetPolicy(
+          targetRef,
+          target,
+          getPolicyConfig(),
+          preparedPolicy(getPolicyConfig()),
+          "projection" in resolved ? resolved.projection : undefined,
+        )
       )
     ) {
       return { error: hiddenSessionNotFound(targetRef.sessionKey) };

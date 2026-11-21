@@ -493,9 +493,11 @@ it.each(["ocid", "paired device"])(
                 : { device: { deviceId: device.deviceId } }),
             },
           });
+          const operatorSource = stored.operatorSource?.source;
+          assert(operatorSource?.kind === "gateway");
           const restore = () =>
             restoreGatewayOperatorSource({
-              snapshot: stored.operatorSource!.source.snapshot,
+              snapshot: operatorSource.snapshot,
               context,
               assertCurrent: () => {},
             });

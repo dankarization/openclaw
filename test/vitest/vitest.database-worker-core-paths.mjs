@@ -1,5 +1,16 @@
 // These consumers need the host-owned SQLite broker, which runs in forked processes.
 export const databaseWorkerCoreTestFiles = [
+  // Personal reminder and channel custody fixtures run with the SQLite broker.
+  "src/agents/tools/cron-tool.personal-reminder.test.ts",
+  "src/auto-reply/reply/personal-reminder-origin.test.ts",
+  "src/cron/store/personal-reminder-mutation.test.ts",
+  "src/gateway/cron-personal-reminder-grant.test.ts",
+  "src/gateway/server-methods/cron-personal-reminder-guards.test.ts",
+  "src/gateway/tool-resolution.personal-reminder.test.ts",
+  "src/gateway/server-methods/cron.gateway-policy.integration.test.ts",
+  "src/cron/isolated-agent/run.operator-continuation.test.ts",
+  "src/gateway/operator-run-recovery.channel.test.ts",
+  "src/gateway/server-methods/send.telegram-member-source.integration.test.ts",
   "src/agents/subagents/registry/subagent-registry-expiry-notice-retry.test.ts",
   "src/agents/subagents/registry/subagent-registry-notice-receipt-retry.test.ts",
   "src/sessions/session-controller-model.test.ts",
@@ -180,6 +191,7 @@ export const databaseWorkerCoreTestFiles = [
   "src/state/openclaw-state-db.integrity-lease.test.ts",
   "src/state/openclaw-agent-db-registry-listing.settled.test.ts",
   "src/state/openclaw-state-lease-renewal.worker.test.ts",
+  "src/state/state-upgrade.large-agent-db.test.ts",
   "src/state/openclaw-state-db-schema-version.test.ts",
   "src/state/openclaw-agent-db.lease-owner.test.ts",
   "src/state/openclaw-agent-db.open-timing.test.ts",

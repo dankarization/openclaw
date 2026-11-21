@@ -514,6 +514,7 @@ export const databaseWorkerExtensionTestFiles = [
   "extensions/telegram/src/bot-native-command-login.test.ts",
   "extensions/telegram/src/bot.callback-retry.test.ts",
   "extensions/telegram/src/bot-message-dispatch.topic-label-recovery.test.ts",
+  "extensions/telegram/src/bot-message-dispatch.topic-label.test.ts",
   "extensions/telegram/src/bot.create-telegram-bot.native-pipeline.test.ts",
   "extensions/telegram/src/bot.create-telegram-bot.channel-post-media.test.ts",
   "extensions/telegram/src/bot.create-telegram-bot.disabled-bindings.test.ts",

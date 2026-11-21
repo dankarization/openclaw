@@ -128,12 +128,22 @@ it.each(["compaction", "reset"] as const)(
           req: { type: "req", id: "reset", method: "sessions.reset" },
           isWebchatConnect: () => false,
         });
+        const resetEntry = read(requesterKey);
+        expect(resetEntry?.sessionId).toBe("original-requester");
+        expect(resetEntry?.lifecycleRevision).toEqual(expect.any(String));
+        expect(resetEntry?.lifecycleRevision).not.toBe("original-lifecycle");
         expect(respond).toHaveBeenCalledWith(
           true,
-          expect.objectContaining({ ok: true }),
+          expect.objectContaining({
+            ok: true,
+            key: requesterKey,
+            entry: expect.objectContaining({
+              sessionId: resetEntry?.sessionId,
+              lifecycleRevision: resetEntry?.lifecycleRevision,
+            }),
+          }),
           undefined,
         );
-        expect(read(requesterKey)?.sessionId).not.toBe("original-requester");
         expect(subagentRuns.get(runId)?.requesterSettleWake).toBeUndefined();
       }
       const result = await mutateRequesterSettleWakeBatch(

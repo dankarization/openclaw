@@ -19,6 +19,7 @@ import type { CronDeliveryPreview, CronJobCreate } from "../../cron/types.js";
 import { validateScheduleTimestamp } from "../../cron/validate-timestamp.js";
 import { racePromiseWithAbortSignal } from "../../infra/abort-signal.js";
 import { formatErrorMessage } from "../../infra/errors.js";
+import { gatewayOperatorSnapshot } from "../operator-run-recovery-source.codec.js";
 import {
   applyCronCreateCallerScopeDefault,
   assertCronModelJobAllowed,
@@ -39,6 +40,7 @@ import {
   assertCronDoesNotTargetAgentHarness,
 } from "./cron-input-validation.js";
 import { respondInvalidCronParams, respondRefusedCronAgent } from "./cron-job-access.js";
+import { matchesPersonalReminderCreate } from "./cron-personal-reminder-guards.js";
 import { withCronStreamExecApproval } from "./cron-stream-approval.js";
 import type { GatewayRequestHandler } from "./types.js";
 import { assertValidParams } from "./validation.js";
@@ -78,6 +80,17 @@ export const cronAddHandler: GatewayRequestHandler = async ({
   const callerScope = readCronCallerScope(client);
   // SAFETY: cron.add validates this shape; createJob normalizes its nullable selectors.
   const jobCreate = applyCronCreateCallerScopeDefault(candidate as CronJobCreate, callerScope);
+  if (
+    callerScope?.personalReminder &&
+    !matchesPersonalReminderCreate(jobCreate, callerScope.personalReminder)
+  ) {
+    respondInvalidCronParams(
+      respond,
+      "cron.add",
+      "Personal reminders require a one-shot, tool-free job on the original Telegram route.",
+    );
+    return;
+  }
   const cfg = context.getRuntimeConfig();
   const creator = await prepareCronCreatorSession({
     context,
@@ -186,6 +199,25 @@ export const cronAddHandler: GatewayRequestHandler = async ({
       cfg,
       runtimeAuthority !== undefined,
     );
+    const reminder = callerScope?.personalReminder;
+    if (reminder) {
+      const source = creatorOptions.operatorSource;
+      if (
+        creator.session?.entry.sessionId !== reminder.sessionId ||
+        creator.session?.entry.lifecycleRevision !== reminder.lifecycleRevision ||
+        creator.session?.sessionKey !== reminder.sessionKey ||
+        source?.kind !== "channel" ||
+        source.snapshot.profileId !== reminder.profileId ||
+        source.sessionKey !== reminder.sessionKey ||
+        source.agentId !== reminder.agentId ||
+        callerScope?.creatorProfileId !== reminder.profileId
+      ) {
+        throw new TypeError(
+          "Personal reminder requires its current linked source and original session.",
+        );
+      }
+      creatorOptions.createdActor = { type: "human", source: "profile", id: reminder.profileId };
+    }
     await assertCronDoesNotTargetAgentHarness(jobCreate, cfg);
     await assertValidCronCreateDelivery(
       cfg,
@@ -281,14 +313,19 @@ export const cronAddHandler: GatewayRequestHandler = async ({
           streamSandbox,
           ...(jobCreate.schedule.kind === "stream" &&
           !streamSandbox &&
-          creatorOptions?.operatorSource?.snapshot.openclawIdPrincipal
-            ? { streamOperatorSource: creatorOptions.operatorSource.snapshot }
+          gatewayOperatorSnapshot(creatorOptions?.operatorSource)?.openclawIdPrincipal
+            ? {
+                streamOperatorSource: gatewayOperatorSnapshot(creatorOptions?.operatorSource),
+              }
             : {}),
           execPolicy,
           sessionEntryCurrent: creator.sessionEntryCurrent,
 
           enabledExplicit,
           ...creatorOptions,
+          ...(callerScope?.personalReminder
+            ? { requiredPersonalReminder: callerScope.personalReminder }
+            : {}),
           ...(commandCreation.creation
             ? {
                 pluginCommand: commandCreation.creation.envelope,

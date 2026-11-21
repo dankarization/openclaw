@@ -70,6 +70,12 @@ const operatorRunRecoverySnapshotSchema = z.discriminatedUnion("sourceIngress", 
   handshakeRecoverySnapshotSchema,
   principalRecoverySnapshotSchema,
 ]);
+const channelSnapshotSchema = z.strictObject({
+  reference: userChannelAuthorizationReferenceSchema,
+  profileId: boundedString,
+  scopes: handshakeRecoverySnapshotSchema.shape.scopes,
+  modelPolicy: handshakeRecoverySnapshotSchema.shape.modelPolicy,
+});
 const parentSourceSchema = z.strictObject({
   kind: z.undefined().optional(),
   version: z.literal(1),
@@ -85,6 +91,7 @@ const parentSourceSchema = z.strictObject({
 // Existing parent-bound sources retain their stored shape. Device-backed jobs need no parent.
 const sourceSchema = z.union([
   parentSourceSchema,
+  parentSourceSchema.extend({ kind: z.literal("channel"), snapshot: channelSnapshotSchema }),
   z.strictObject({
     version: z.literal(1),
     kind: z.literal("gateway"),
@@ -94,12 +101,6 @@ const sourceSchema = z.union([
   }),
 ]);
 
-const channelSnapshotSchema = z.strictObject({
-  reference: userChannelAuthorizationReferenceSchema,
-  profileId: boundedString,
-  scopes: handshakeRecoverySnapshotSchema.shape.scopes,
-  modelPolicy: handshakeRecoverySnapshotSchema.shape.modelPolicy,
-});
 const recoveryUnavailableReasonSchema = z.enum([
   "remote-ingress-no-source",
   "unauthenticated",
@@ -143,6 +144,13 @@ export type OperatorRunRecoverySnapshot = z.infer<typeof operatorRunRecoverySnap
 
 /** Private input custody; copied attribution or another session cannot authorize recovery. */
 export type RestartRecoveryOperatorSource = z.infer<typeof sourceSchema>;
+
+/** Native-process grants require a Gateway source, never a channel caller source. */
+export function gatewayOperatorSnapshot(
+  source: RestartRecoveryOperatorSource | undefined,
+): OperatorRunRecoverySnapshot | undefined {
+  return source?.kind === "channel" ? undefined : source?.snapshot;
+}
 
 export function decodeGatewayOperatorRecoverySource(value: unknown): RestartRecoveryOperatorSource {
   const json = JSON.stringify(value);

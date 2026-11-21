@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import { isRuntimeToolAllowed } from "../../agents/tool-policy-match.js";
+import { gatewayOperatorSnapshot } from "../../gateway/operator-run-recovery-source.codec.js";
 import { tryResolveCronJobEffectiveAgentId } from "../agent-id.js";
 import { resolveCronJobConfigRevision } from "../config-revision.js";
 import { resolveCronRunAdmissionSource } from "../run-authority.js";
@@ -139,18 +140,23 @@ export function reconcileCronOperatorSource(params: {
     source &&
     (captured || previous?.executionRevision === executionRevision) &&
     (job.payload.kind === "agentTurn" ||
-      (source.snapshot.openclawIdPrincipal !== undefined &&
+      (gatewayOperatorSnapshot(source)?.openclawIdPrincipal !== undefined &&
         (job.payload.kind === "script" || job.schedule.kind === "stream"))) &&
     job.owner?.sessionKey === source.sessionKey &&
     ((job.scheduledToolPolicy?.mode === "account" &&
       job.scheduledToolPolicy.ownerSessionKey === source.sessionKey) ||
-      (source.snapshot.openclawIdPrincipal !== undefined &&
+      (gatewayOperatorSnapshot(source)?.openclawIdPrincipal !== undefined &&
         job.schedule.kind === "stream" &&
         job.payload.kind === "command")) &&
     tryResolveCronJobEffectiveAgentId(job, params.defaultAgentId) === source.agentId &&
     isCronOperatorSourceParent(job, source.sessionKey)
   ) {
     job.operatorSource = { source, executionRevision };
+  } else if (previous) {
+    // A failed rebind must never turn a source-bound job into a legacy sourceless job.
+    throw new TypeError(
+      "This automation cannot retain its authenticated source for the requested definition.",
+    );
   } else {
     delete job.operatorSource;
   }

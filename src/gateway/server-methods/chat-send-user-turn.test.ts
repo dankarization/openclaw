@@ -79,9 +79,18 @@ function requesterProfile(text: string) {
 describe("prepareChatSendUserTurn", () => {
   it.each([false, true, undefined])("preserves explicit delivery opt-out %s", (deliver) => {
     const prepared = prepareTurn({
-      request: { p: { sessionKey: "agent:main:main", message: "hello", idempotencyKey: "turn-1", ...(deliver === undefined ? {} : { deliver }) } },
+      request: {
+        p: {
+          sessionKey: "agent:main:main",
+          message: "hello",
+          idempotencyKey: "turn-1",
+          ...(deliver === undefined ? {} : { deliver }),
+        },
+      },
     });
-    expect(finalizeInboundContext(prepared.ctx).WebchatExternalDeliveryDisabled).toBe(deliver === false ? true : undefined);
+    expect(finalizeInboundContext(prepared.ctx).WebchatExternalDeliveryDisabled).toBe(
+      deliver === false ? true : undefined,
+    );
   });
 
   it.each([

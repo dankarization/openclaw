@@ -12,9 +12,12 @@ export function resolveSessionTitleSource(
   skillCommands: SkillCommandSpec[] = [],
 ): string | null {
   const text = stripInboundMetadata(message).trim();
-  const source = text.startsWith("/")
-    ? resolveSkillCommandInvocation({ commandBodyNormalized: text, skillCommands })?.args?.trim()
-    : text;
+  // An absolute path with another slash is task data, not a slash-command token.
+  const absolutePathTask = /^\/[^\s]*\//u.test(text);
+  const source =
+    text.startsWith("/") && !absolutePathTask
+      ? resolveSkillCommandInvocation({ commandBodyNormalized: text, skillCommands })?.args?.trim()
+      : text;
   if (
     !source ||
     Object.values(INTERNAL_WAKE_TRANSCRIPT_PROMPTS).some((prompt) => source === prompt)

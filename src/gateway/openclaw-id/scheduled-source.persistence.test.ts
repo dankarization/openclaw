@@ -11,6 +11,7 @@ import { setRuntimeConfigSnapshot } from "../../config/runtime-snapshot.js";
 import { replaceSessionEntry } from "../../config/sessions/session-accessor.js";
 import { admitScheduledOccurrence } from "../../cron/execution-context-admission.js";
 import { readScheduledSenderBit } from "../../cron/execution-context-registry.js";
+import { createAccountCronScheduledToolPolicy } from "../../cron/scheduled-tool-policy.js";
 import { CronService } from "../../cron/service.js";
 import { resolveCronOperatorExecutionRevision } from "../../cron/service/jobs-tool-policy.js";
 import { createCronScriptRuntime } from "../../cron/trigger-script.js";
@@ -24,6 +25,7 @@ import { createTestGatewayScheduler } from "../../test-utils/gateway-scheduler-c
 import { withOpenClawTestState } from "../../test-utils/openclaw-test-state.js";
 import { captureGatewayAuthPolicy } from "../auth-policy.js";
 import { retainCronControlSource } from "../cron-operator-source.js";
+import { gatewayOperatorSnapshot } from "../operator-run-recovery-source.codec.js";
 import { restoreGatewayOperatorSource } from "../operator-run-recovery.js";
 import { recoveryFixture } from "../operator-run-recovery.test-support.js";
 import { dispatchGatewayRequestInProcess } from "../server-in-process-dispatch.js";
@@ -275,9 +277,10 @@ it.each([
               },
             ),
           ).resolves.toMatchObject({ id: job.id });
-          expect(cron.getJob(job.id)?.operatorSource?.source.snapshot.openclawIdPrincipal).toEqual(
-            fixture.snapshot.openclawIdPrincipal,
-          );
+          expect(
+            gatewayOperatorSnapshot(cron.getJob(job.id)?.operatorSource?.source)
+              ?.openclawIdPrincipal,
+          ).toEqual(fixture.snapshot.openclawIdPrincipal);
           expect(cron.getJob(job.id)?.schedule).toMatchObject({
             kind: "every",
             everyMs: 7_200_000,
@@ -542,7 +545,7 @@ it("keeps owner-only standing within the retained scope and fences control edits
         context,
       });
       expect(control.operatorSource?.snapshot.scopes).not.toContain("operator.admin");
-      expect(control.operatorSource?.snapshot.controlUiAdmin).toBe(false);
+      expect(gatewayOperatorSnapshot(control.operatorSource)?.controlUiAdmin).toBe(false);
       expect(() => control.assertOperatorSourceCurrent?.()).not.toThrow();
       // A concurrent same-requester edit narrows the standing source before this control commits.
       await cron.update(
@@ -554,6 +557,207 @@ it("keeps owner-only standing within the retained scope and fences control edits
         },
       );
       expect(() => control.assertOperatorSourceCurrent?.()).toThrow("standing scope changed");
+
+      const sessionKey = "agent:main:telegram:group:proof:topic:99";
+      const channelSource = {
+        version: 1 as const,
+        kind: "channel" as const,
+        agentId: "main",
+        sessionKey,
+        sessionId: "channel-parent",
+        sourceRunId: "channel-turn",
+        snapshot: {
+          reference: { version: 1 as const, id: "c083c5f9-1134-4412-bdd1-ea7f2c12c167" },
+          profileId: "channel-member",
+          scopes: ["operator.write"],
+        },
+      };
+      const legacyInput = {
+        name: "legacy source control",
+        enabled: false,
+        schedule: { kind: "every" as const, everyMs: 3_600_000 },
+        sessionTarget: "current" as const,
+        wakeMode: "next-heartbeat" as const,
+        owner: { agentId: "main", sessionKey, accountId: "default" },
+        payload: { kind: "agentTurn" as const, message: "legacy task", toolsAllow: [] },
+      };
+      const legacyPolicy = createAccountCronScheduledToolPolicy({
+        ownerSessionKey: sessionKey,
+        ownerAccountId: "default",
+      });
+      const legacyJob = await cron.add(legacyInput, {
+        sourceConversation: { sessionKey, sessionId: "channel-parent" },
+        scheduledToolPolicy: legacyPolicy,
+      });
+      const legacyTiming = { schedule: { kind: "every" as const, everyMs: 7_200_000 } };
+      const legacyCapture = {
+        operatorSource: channelSource,
+        assertOperatorSourceCurrent: () => {},
+      };
+      const noBootstrap = retainCronControlSource({
+        job: legacyJob,
+        patch: legacyTiming,
+        capture: legacyCapture,
+        context,
+      });
+      expect(noBootstrap.operatorSource).toBeUndefined();
+      await cron.update(legacyJob.id, legacyTiming, {
+        commitGuard: noBootstrap.assertOperatorSourceCurrent,
+      });
+      expect(cron.getJob(legacyJob.id)?.operatorSource).toBeUndefined();
+      const enableControl = retainCronControlSource({
+        job: cron.getJob(legacyJob.id)!,
+        patch: { enabled: true },
+        capture: legacyCapture,
+        context,
+      });
+      expect(enableControl.operatorSource).toBeUndefined();
+      const executableReauthorization = retainCronControlSource({
+        job: cron.getJob(legacyJob.id)!,
+        patch: { payload: { kind: "agentTurn", message: "authorized change" } },
+        capture: legacyCapture,
+        context,
+      });
+      expect(executableReauthorization.operatorSource).toEqual(channelSource);
+
+      const historicalSource = {
+        version: 1 as const,
+        agentId: "main",
+        sessionKey,
+        sessionId: "channel-parent",
+        sourceRunId: "old-gateway-turn",
+        snapshot: narrow.snapshot,
+      };
+      const historicalJob = await cron.add(
+        { ...legacyInput, name: "historical gateway source" },
+        {
+          sourceConversation: { sessionKey, sessionId: "channel-parent" },
+          scheduledToolPolicy: legacyPolicy,
+          operatorSource: historicalSource,
+        },
+      );
+      const historicalControl = retainCronControlSource({
+        job: historicalJob,
+        patch: legacyTiming,
+        capture: legacyCapture,
+        context,
+      });
+      expect(historicalControl.operatorSource).toEqual(historicalSource);
+      await cron.update(historicalJob.id, legacyTiming, {
+        operatorSource: historicalControl.operatorSource,
+        operatorSourceExecutionRevision: resolveCronOperatorExecutionRevision({
+          ...historicalJob,
+          ...legacyTiming,
+        }),
+        commitGuard: historicalControl.assertOperatorSourceCurrent,
+      });
+      const historicalAfter = cron.getJob(historicalJob.id)!;
+      expect(historicalAfter.operatorSource?.source).toEqual(historicalSource);
+      expect(historicalAfter.operatorSource?.executionRevision).toBe(
+        resolveCronOperatorExecutionRevision(historicalAfter),
+      );
+      await expect(
+        cron.update(historicalJob.id, {
+          sessionTarget: "isolated",
+          sessionKey: "agent:main:main",
+        }),
+      ).rejects.toThrow();
+      expect(cron.getJob(historicalJob.id)?.operatorSource).toEqual(historicalAfter.operatorSource);
+
+      const channelJob = await cron.add(
+        {
+          name: "channel standing ceiling",
+          enabled: false,
+          schedule: { kind: "every", everyMs: 3_600_000 },
+          sessionTarget: "current",
+          wakeMode: "next-heartbeat",
+          owner: { agentId: "main", sessionKey, accountId: "default" },
+          payload: { kind: "agentTurn", message: "member task", toolsAllow: [] },
+        },
+        {
+          operatorSource: channelSource,
+          sourceConversation: { sessionKey, sessionId: "channel-parent" },
+          scheduledToolPolicy: createAccountCronScheduledToolPolicy({
+            ownerSessionKey: sessionKey,
+            ownerAccountId: "default",
+          }),
+        },
+      );
+      const administrativeCapture = {
+        operatorSource: source({ ...handshake, controlUiAdmin: true }),
+        assertOperatorSourceCurrent: () => {},
+      };
+      expect(() =>
+        retainCronControlSource({
+          job: {
+            ...channelJob,
+            operatorSource: { ...channelJob.operatorSource!, executionRevision: "stale" },
+          },
+          patch: { enabled: true },
+          capture: administrativeCapture,
+          context,
+        }),
+      ).toThrow("no longer matches");
+      const timing = { schedule: { kind: "every" as const, everyMs: 7_200_000 } };
+      const retained = retainCronControlSource({
+        job: channelJob,
+        patch: timing,
+        capture: administrativeCapture,
+        context,
+      });
+      expect(retained.operatorSource).toEqual(channelSource);
+      expect(gatewayOperatorSnapshot(retained.operatorSource)).toBeUndefined();
+      await cron.update(channelJob.id, timing, {
+        operatorSource: retained.operatorSource,
+        operatorSourceExecutionRevision: resolveCronOperatorExecutionRevision({
+          ...channelJob,
+          ...timing,
+        }),
+        commitGuard: retained.assertOperatorSourceCurrent,
+      });
+      expect(cron.getJob(channelJob.id)?.operatorSource?.source).toEqual(channelSource);
+      const current = cron.getJob(channelJob.id)!;
+      const secondTiming = { schedule: { kind: "every" as const, everyMs: 10_800_000 } };
+      const withoutFreshCapture = retainCronControlSource({
+        job: current,
+        patch: secondTiming,
+        capture: {},
+        context,
+      });
+      expect(withoutFreshCapture.operatorSource).toEqual(channelSource);
+      await cron.update(channelJob.id, secondTiming, {
+        operatorSource: withoutFreshCapture.operatorSource,
+        operatorSourceExecutionRevision: resolveCronOperatorExecutionRevision({
+          ...current,
+          ...secondTiming,
+        }),
+        commitGuard: withoutFreshCapture.assertOperatorSourceCurrent,
+      });
+      const afterTiming = cron.getJob(channelJob.id)!;
+      expect(afterTiming.operatorSource?.source).toEqual(channelSource);
+      expect(afterTiming.operatorSource?.executionRevision).toBe(
+        resolveCronOperatorExecutionRevision(afterTiming),
+      );
+      await expect(
+        cron.update(channelJob.id, { sessionTarget: "isolated", sessionKey: "agent:main:main" }),
+      ).rejects.toThrow();
+      expect(cron.getJob(channelJob.id)?.operatorSource).toEqual(afterTiming.operatorSource);
+      expect(() =>
+        retainCronControlSource({
+          job: afterTiming,
+          patch: { payload: { kind: "agentTurn", message: "replacement" } },
+          capture: {},
+          context,
+        }),
+      ).toThrow("authenticated source authority");
+      expect(() =>
+        retainCronControlSource({
+          job: cron.getJob(channelJob.id)!,
+          patch: { payload: { kind: "agentTurn", message: "admin replacement" } },
+          capture: administrativeCapture,
+          context,
+        }),
+      ).toThrow("original requester");
     } finally {
       cron.stop();
       setOpenClawIdTunnelPrincipalLookup(undefined);

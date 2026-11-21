@@ -4,6 +4,8 @@ import {
   sessionCreatorProfileId,
   sessionIsolationProfileId,
 } from "../../config/sessions/session-entry-provenance.js";
+import { gatewayOperatorSnapshot } from "../../gateway/operator-run-recovery-source.codec.js";
+import { matchesPersonalReminderStoredSource } from "../../gateway/server-methods/cron-personal-reminder-guards.js";
 import { resolveCronJobEffectiveAgentId } from "../agent-id.js";
 import { assertCronBindApplies } from "../bind-parent.js";
 import { retireTransferredCronAuthority } from "../human-owner.js";
@@ -343,6 +345,14 @@ export function planCronJobMutation(
           : options.operatorSourceExecutionRevision,
       defaultAgentId,
     });
+    if (
+      options.requiredPersonalReminder &&
+      (mutation.kind !== "add" ||
+        previousJob ||
+        !matchesPersonalReminderStoredSource(nextJob, options.requiredPersonalReminder))
+    ) {
+      throw new TypeError("Personal reminder source was not retained by the canonical mutation.");
+    }
     if (previousJob && nextJob.ownerProfileId !== previousJob.ownerProfileId) {
       retireTransferredCronAuthority(nextJob);
     }
@@ -352,8 +362,8 @@ export function planCronJobMutation(
       nextJob.schedule.kind === "stream" &&
       !nextJob.streamSandbox &&
       !nextJob.streamOperatorSource &&
-      previousJob?.operatorSource?.source.snapshot.openclawIdPrincipal &&
-      !nextJob.operatorSource?.source.snapshot.openclawIdPrincipal
+      gatewayOperatorSnapshot(previousJob?.operatorSource?.source)?.openclawIdPrincipal &&
+      !gatewayOperatorSnapshot(nextJob.operatorSource?.source)?.openclawIdPrincipal
     ) {
       throw new TypeError(
         "Re-enable this stream from an authenticated turn before editing its source.",

@@ -16,6 +16,8 @@ export type CronAddOptions = {
   pluginCommand?: CronStoredJob["pluginCommand"];
   /** Captured source digest of the admitting plugin instance; enables restart continuity. */
   pluginCommandSourceDigest?: string;
+  /** Internal fresh linked requester contract; checked again by the mutation owner. */
+  requiredPersonalReminder?: import("../../gateway/cron-creator-authority-grant.types.js").PersonalReminderIdentity;
   operatorSource?: NonNullable<CronStoredJob["operatorSource"]>["source"];
   operatorSourceExecutionRevision?: string;
   /** Null authorizes a native CLI account transition on explicit updates only. */

@@ -18,7 +18,10 @@ import {
   getInProcessGatewayToolContext,
   runWithGatewayToolCleanupContext,
 } from "./in-process-gateway.js";
-import { prepareSessionsSendFollowup } from "./sessions-send-followup-custody.js";
+import {
+  prepareSessionsSendFollowup,
+  readFollowupAccessDenial,
+} from "./sessions-send-followup-custody.js";
 import { startSessionsSendReplyFlow } from "./sessions-send-reply-flow.js";
 import {
   startSessionsSendAgentRun,
@@ -156,30 +159,53 @@ export async function dispatchSessionsSendFollowup(
     options.requesterSessionKey === params.sessionStoreTarget.canonicalKey &&
     options.requesterAgentId === params.sendParams.agentId &&
     getInProcessGatewayToolContext()?.lifecycleRuntime !== undefined;
-  const request =
-    !("ok" in active) &&
-    (registryTurn ||
-      ownSessionCompletion ||
-      (replyContext.replyMode === "one-way" && options.ownChild)) &&
-    sameRequester
-      ? await prepareSessionsSendFollowup({
-          runId: params.runId,
-          requesterTurnRunId: options.requesterTurnRunId,
-          withRequesterAuthority: options.withRequesterAuthority,
-          requesterAgentId: options.requesterAgentId,
-          requesterSessionKey: options.requesterSessionKey,
-          targetAgentId: params.sendParams.agentId,
-          targetSessionKey: params.sessionStoreTarget.canonicalKey,
-        })
-      : undefined;
+  let request: Awaited<ReturnType<typeof prepareSessionsSendFollowup>>;
+  try {
+    request =
+      !("ok" in active) &&
+      (registryTurn ||
+        ownSessionCompletion ||
+        (replyContext.replyMode === "one-way" && options.ownChild)) &&
+      sameRequester
+        ? await prepareSessionsSendFollowup({
+            runId: params.runId,
+            requesterTurnRunId: options.requesterTurnRunId,
+            withRequesterAuthority: options.withRequesterAuthority,
+            requesterAgentId: options.requesterAgentId,
+            requesterSessionKey: options.requesterSessionKey,
+            targetAgentId: params.sendParams.agentId,
+            targetSessionKey: params.sessionStoreTarget.canonicalKey,
+          })
+        : undefined;
+  } catch (error) {
+    const denial = readFollowupAccessDenial(error);
+    if (!denial || denial.followupAccess.phase !== "admission") throw error;
+    // No target run was started and the custody owner already released its resources.
+    return {
+      start: {
+        ok: false as const,
+        selfHeld: undefined,
+        result: jsonResult({ status: "error", ...denial }),
+      },
+      completion: undefined,
+      registryCompletion: false,
+      watchField: {},
+    };
+  }
+  let custodyDenial: ReturnType<typeof readFollowupAccessDenial>;
   const assertCurrent = () => {
     assertCallerCurrent?.();
-    request?.custody.assertCurrent();
+    try {
+      request?.custody.assertCurrent();
+    } catch (error) {
+      custodyDenial = readFollowupAccessDenial(error);
+      throw error;
+    }
   };
   const admission = registryTurn
     ? openChildFollowupAdmission(assertCurrent, params.assertDispatchCurrent)
     : undefined;
-  const { start, completion } =
+  const { start: initialStart, completion } =
     "ok" in active
       ? { start: active, completion: undefined }
       : await startSessionsSendFollowup(
@@ -193,6 +219,25 @@ export async function dispatchSessionsSendFollowup(
           },
           replyContext,
         );
+  let start = initialStart;
+  const denial = custodyDenial ?? readFollowupAccessDenial(request?.custody.signal.reason);
+  const startDetails: Record<string, unknown> | undefined = start.ok
+    ? undefined
+    : { ...start.result.details };
+  if (
+    registryTurn &&
+    !start.ok &&
+    !start.selfHeld &&
+    startDetails?.sentBeforeError !== true &&
+    denial?.followupAccess.phase === "revocation"
+  ) {
+    // Only a known pre-acceptance custody refusal is safe to normalize. Never turn an
+    // uncertain/accepted start into a retryable refusal or expose the session key.
+    start = {
+      ...start,
+      result: jsonResult({ status: "error", ...denial }),
+    };
+  }
   try {
     if (start.ok && registryTurn) {
       const { registerSubagentRun, adoptSubagentRunForRequesterTurn } =

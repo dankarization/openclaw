@@ -24,6 +24,7 @@ import { isRecord } from "../../utils.js";
 import { resolveSessionAgentId } from "../agent-scope.js";
 import {
   bindCronManagementGrant,
+  bindPersonalReminderIdentity,
   bindCronRequesterGrant,
 } from "../cron-creator-authority-context.js";
 import { CRON_TOOL_DISPLAY_SUMMARY } from "../tool-description-presets.js";
@@ -147,6 +148,7 @@ export function createCronTool(opts?: CronToolOptions): AnyAgentTool {
   const assertStreamConfigCurrent = captureCronStreamPolicyConfigCurrentness(opts);
   const managementAuthority = bindCronManagementGrant(opts?.runId, config);
   const requesterAuthority = bindCronRequesterGrant(opts?.runId);
+  const personalReminder = bindPersonalReminderIdentity(opts?.runId) ?? opts?.personalReminder;
   const allowCommandJobs = config?.tools?.gatewayPolicy?.automations?.allowCommandJobs !== false;
   const automation = createCronAutomationActions(opts);
   const creationPlans = createCronCreationPlans(opts?.requireCreationPlan);
@@ -195,6 +197,9 @@ export function createCronTool(opts?: CronToolOptions): AnyAgentTool {
         throw new Error(
           "This turn can only list, get, update, run, remove, or bind automations. Use the Automations page for other actions.",
         );
+      }
+      if (personalReminder && !["plan", "list", "get", "add", "remove"].includes(action)) {
+        throw new Error("Personal reminders allow only list, get, add, and remove.");
       }
       assertCronSelfRemoveScope(opts, action, params);
       if (action === "plan") {
@@ -287,6 +292,7 @@ export function createCronTool(opts?: CronToolOptions): AnyAgentTool {
         const callGateway = createCronToolGatewayCaller({
           managementAuthority,
           requesterAuthority,
+          personalReminder: Boolean(personalReminder),
           operationSignal,
           readStreamExecPolicy: () => streamExecPolicy,
           assertCurrent: assertCurrentRun,
@@ -448,7 +454,46 @@ export function createCronTool(opts?: CronToolOptions): AnyAgentTool {
               ) {
                 delete job.enabled;
               }
-              applyCronToolDefaults(job, runtimeConfig.cron?.defaultTools, params.toolsAllowMode);
+              if (personalReminder) {
+                const payload = isRecord(job.payload) ? job.payload : undefined;
+                const schedule = isRecord(job.schedule) ? job.schedule : undefined;
+                const delivery = isRecord(job.delivery) ? job.delivery : {};
+                if (
+                  !payload ||
+                  payload.kind !== "agentTurn" ||
+                  schedule?.kind !== "at" ||
+                  (canonicalJob.agentId !== undefined &&
+                    canonicalJob.agentId !== personalReminder.agentId) ||
+                  (canonicalJob.sessionKey !== undefined &&
+                    canonicalJob.sessionKey !== personalReminder.sessionKey) ||
+                  (canonicalJob.sessionTarget !== undefined &&
+                    canonicalJob.sessionTarget !== "current") ||
+                  (payload.toolsAllow !== undefined &&
+                    (!Array.isArray(payload.toolsAllow) || payload.toolsAllow.length !== 0))
+                ) {
+                  throw new Error(
+                    "Personal reminders require a one-shot, tool-free original conversation.",
+                  );
+                }
+                payload.toolsAllow = [];
+                job.agentId = personalReminder.agentId;
+                job.sessionKey = personalReminder.sessionKey;
+                job.sessionTarget = "current";
+                job.deleteAfterRun ??= true;
+                job.delivery = {
+                  mode: "announce",
+                  channel: "telegram",
+                  to: personalReminder.to,
+                  accountId: personalReminder.accountId,
+                  threadId: personalReminder.threadId,
+                  ...delivery,
+                };
+              }
+              applyCronToolDefaults(
+                job,
+                runtimeConfig.cron?.defaultTools,
+                personalReminder ? "exact" : params.toolsAllowMode,
+              );
               const requiresCreatorAuthority = cronCreateRequiresCreatorAuthority(
                 job,
                 opts?.creatorToolAllowlist,

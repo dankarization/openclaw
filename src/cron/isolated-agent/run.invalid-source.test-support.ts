@@ -83,7 +83,7 @@ export function memberSourceCase(name: (typeof memberSourceCases)[number]) {
       }
     },
   );
-  const operatorSource: CronStoredJob["operatorSource"] = {
+  const operatorSource = {
     executionRevision: "member-source",
     source: {
       version: 1,
@@ -110,7 +110,7 @@ export function memberSourceCase(name: (typeof memberSourceCases)[number]) {
         sourceIngress: "control-ui",
       },
     },
-  };
+  } satisfies NonNullable<CronStoredJob["operatorSource"]>;
   return {
     cfg,
     operatorSource,

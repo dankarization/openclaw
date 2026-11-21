@@ -84,6 +84,7 @@ export const sendHandlers: GatewayRequestHandlers = {
     client,
     signal,
     sessionMutationCommitGuard,
+    sessionMutationAuthorization,
   }) => {
     if (!assertValidParams(request, validateMessageActionParams, "message.action", respond)) {
       return;
@@ -107,6 +108,7 @@ export const sendHandlers: GatewayRequestHandlers = {
     const messageAuthority = createMessageActionRuntimeAuthority({
       client,
       sessionMutationCommitGuard,
+      sessionMutationAuthorization,
       request,
       authorization: trustedContext.messageActionAuthorization,
       assertClientUploadAllowed,

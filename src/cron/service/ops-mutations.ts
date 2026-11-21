@@ -145,6 +145,7 @@ export async function add(
         inferenceBinding: opts?.inferenceBinding,
         sourceConversation: opts?.sourceConversation,
         operatorSource: opts?.operatorSource,
+        requiredPersonalReminder: opts?.requiredPersonalReminder,
         skillLibrarySelections: opts?.skillLibrarySelections,
         scheduledToolPolicy: opts?.scheduledToolPolicy,
         toolsAllowProvenance: opts?.toolsAllowProvenance,

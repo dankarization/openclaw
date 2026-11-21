@@ -63,7 +63,10 @@ function formatDictationError(error: unknown): string {
 export class ComposerDictationCommits {
   private readonly sessions = new Set<ComposerDictationSession>();
   private tail: Promise<unknown> = Promise.resolve();
-  private readonly recoveryWaiters = new Map<ComposerDictationSession, (text: string | null) => void>();
+  private readonly recoveryWaiters = new Map<
+    ComposerDictationSession,
+    (text: string | null) => void
+  >();
   private readonly recoveryResults = new Map<ComposerDictationSession, string | null>();
   // Consumers place delivered and preview transcripts in their drafts.
   readonly place = placeComposerDictation;
@@ -106,8 +109,8 @@ export class ComposerDictationCommits {
         if (!this.sessions.has(session)) {
           return false;
         }
-        const transcript = initialTranscript ||
-          (session.hasRecording ? await this.waitForRecovery(session) : "");
+        const transcript =
+          initialTranscript || (session.hasRecording ? await this.waitForRecovery(session) : "");
         const owned = this.sessions.delete(session);
         this.recoveryWaiters.delete(session);
         this.recoveryResults.delete(session);

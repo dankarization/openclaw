@@ -19,10 +19,11 @@ import { isSameOpenClawIdTunnelPrincipal } from "./openclaw-id/tunnel-principal.
 import { sourceRolePolicy } from "./operator-role-source-policy.js";
 import {
   hasAutomationAdminDelegation,
+  gatewayOperatorSnapshot,
   decodeGatewayOperatorRecoverySource,
+  type RestartRecoveryOperatorSource,
 } from "./operator-run-recovery-source.codec.js";
-import type { RestartRecoveryOperatorSource } from "./operator-run-recovery-source.codec.js";
-import { restoreGatewayOperatorSource } from "./operator-run-recovery.js";
+import { restorePersistedOperatorSource } from "./operator-run-recovery.js";
 import type { GatewayRequestContext } from "./server-methods/types.js";
 
 /** Re-admit a job's captured parent-conversation source, never a session owner or ambient scheduler. */
@@ -38,7 +39,7 @@ export async function restoreCronOperatorSource(params: {
   if (!params.job.operatorSource) {
     return undefined;
   }
-  let operator: Awaited<ReturnType<typeof restoreGatewayOperatorSource>> | undefined;
+  let operator: Awaited<ReturnType<typeof restorePersistedOperatorSource>> | undefined;
   try {
     const captured = params.job.operatorSource;
     const source = decodeGatewayOperatorRecoverySource(captured.source);
@@ -76,10 +77,11 @@ export async function restoreCronOperatorSource(params: {
           source.agentId ||
         (target && target.agentId !== source.agentId) ||
         (source.kind !== "gateway" &&
-          ((current.payload.kind !== "agentTurn" && !source.snapshot.openclawIdPrincipal) ||
+          ((current.payload.kind !== "agentTurn" &&
+            !gatewayOperatorSnapshot(source)?.openclawIdPrincipal) ||
             !(
               (policy?.mode === "account" && policy.ownerSessionKey === source.sessionKey) ||
-              (source.snapshot.openclawIdPrincipal &&
+              (gatewayOperatorSnapshot(source)?.openclawIdPrincipal &&
                 current.schedule.kind === "stream" &&
                 current.payload.kind === "command")
             ) ||
@@ -93,8 +95,8 @@ export async function restoreCronOperatorSource(params: {
       }
     };
     assertCurrent();
-    operator = await restoreGatewayOperatorSource({
-      snapshot: source.snapshot,
+    operator = await restorePersistedOperatorSource({
+      source,
       target,
       context,
       assertCurrent,
@@ -156,16 +158,9 @@ export function retainCronControlSource<T extends CronSourceCapture>(params: {
   patch: CronJobPatch;
   capture: T;
   context: GatewayRequestContext;
-}): T {
+}): Omit<T, "operatorSource"> & CronSourceCapture {
   const previous = params.job.operatorSource;
   const fresh = params.capture.operatorSource;
-  if (
-    !previous ||
-    !fresh ||
-    (previous.source.kind !== "gateway" && !previous.source.snapshot.openclawIdPrincipal)
-  ) {
-    return params.capture;
-  }
   // A stream's schedule is its process definition, not timing; enabling it remains a control.
   const processDefinition =
     params.patch.schedule !== undefined &&
@@ -175,54 +170,99 @@ export function retainCronControlSource<T extends CronSourceCapture>(params: {
     Object.keys(params.patch).every((key) =>
       ["schedule", "enabled", "description", "displayName"].includes(key),
     );
-  const sameRequester = previous.source.snapshot.profileId === fresh.snapshot.profileId;
-  // Devices share their account's profile, so only the exact device listing that holds the
-  // grant may refresh it; another device or a reapproval of the same one keeps the original.
-  const sameDevice = isSameOpenClawIdTunnelPrincipal(
-    previous.source.snapshot.openclawIdPrincipal,
-    fresh.snapshot.openclawIdPrincipal,
-  );
-  const samePolicy = isDeepStrictEqual(
-    sourceRolePolicy(previous.source.snapshot.rolePolicy),
-    sourceRolePolicy(fresh.snapshot.rolePolicy),
-  );
-  if (sameRequester && !controlOnly) {
-    // Changing what runs authorizes the new task under the editing device, as recreating it would.
-    return params.capture;
-  }
-  if (sameRequester && sameDevice && samePolicy) {
-    // A fresh connection may have broader invocation scopes; a timing edit does not grant them.
-    const scopes = intersectOperatorScopes(fresh.snapshot.scopes, previous.source.snapshot.scopes);
+  if (!previous) {
+    if (!controlOnly) {
+      return params.capture;
+    }
+    // A timing edit of a source-free legacy job cannot attach editor authority.
     return {
       ...params.capture,
-      operatorSource: freezeJsonSnapshot({
-        ...fresh,
-        snapshot: {
-          ...fresh.snapshot,
-          scopes,
-          ...(fresh.snapshot.sourceIngress !== "principal"
-            ? {
-                automationAdmin:
-                  hasAutomationAdminDelegation(previous.source.snapshot) &&
-                  hasAutomationAdminDelegation(fresh.snapshot) &&
-                  operatorScopeSatisfied("operator.admin", scopes),
-              }
-            : {}),
-          controlUiAdmin:
-            previous.source.snapshot.controlUiAdmin &&
-            fresh.snapshot.controlUiAdmin &&
-            operatorScopeSatisfied("operator.admin", scopes),
-        },
-      }),
+      operatorSource: undefined,
+      assertOperatorSourceCurrent: () => {
+        params.capture.assertOperatorSourceCurrent?.();
+        if (params.context.cron.getJob(params.job.id)?.operatorSource !== undefined) {
+          throw new Error("Original automation source changed during the control edit.");
+        }
+      },
+    };
+  }
+  if (
+    controlOnly &&
+    previous.executionRevision !== resolveCronOperatorExecutionRevision(params.job)
+  ) {
+    throw new TypeError("This automation's authenticated source no longer matches its definition.");
+  }
+  if (!fresh) {
+    if (!controlOnly) {
+      throw new TypeError(
+        "Changing this automation requires current authenticated source authority.",
+      );
+    }
+    // An admin control must preserve the original grant, never replace it with ambient authority.
+    return {
+      ...params.capture,
+      operatorSource: previous.source,
       assertOperatorSourceCurrent: () => {
         params.capture.assertOperatorSourceCurrent?.();
         if (
           !isDeepStrictEqual(params.context.cron.getJob(params.job.id)?.operatorSource, previous)
         ) {
-          throw new Error("The automation's standing scope changed during the control edit.");
+          throw new Error("The automation's original source changed during the control edit.");
         }
       },
     };
+  }
+  const sameRequester = previous.source.snapshot.profileId === fresh.snapshot.profileId;
+  if (sameRequester && !controlOnly) {
+    // An executable edit explicitly reauthorizes the task under its creator's current source.
+    return params.capture;
+  }
+  if (previous.source.kind !== "channel" && fresh.kind !== "channel") {
+    // A channel reference is retained for controls, never refreshed from an editing admin.
+    const sameDevice = isSameOpenClawIdTunnelPrincipal(
+      previous.source.snapshot.openclawIdPrincipal,
+      fresh.snapshot.openclawIdPrincipal,
+    );
+    const samePolicy = isDeepStrictEqual(
+      sourceRolePolicy(previous.source.snapshot.rolePolicy),
+      sourceRolePolicy(fresh.snapshot.rolePolicy),
+    );
+    if (sameRequester && sameDevice && samePolicy) {
+      const scopes = intersectOperatorScopes(
+        fresh.snapshot.scopes,
+        previous.source.snapshot.scopes,
+      );
+      return {
+        ...params.capture,
+        operatorSource: freezeJsonSnapshot({
+          ...fresh,
+          snapshot: {
+            ...fresh.snapshot,
+            scopes,
+            ...(fresh.snapshot.sourceIngress !== "principal"
+              ? {
+                  automationAdmin:
+                    hasAutomationAdminDelegation(previous.source.snapshot) &&
+                    hasAutomationAdminDelegation(fresh.snapshot) &&
+                    operatorScopeSatisfied("operator.admin", scopes),
+                }
+              : {}),
+            controlUiAdmin:
+              previous.source.snapshot.controlUiAdmin &&
+              fresh.snapshot.controlUiAdmin &&
+              operatorScopeSatisfied("operator.admin", scopes),
+          },
+        }),
+        assertOperatorSourceCurrent: () => {
+          params.capture.assertOperatorSourceCurrent?.();
+          if (
+            !isDeepStrictEqual(params.context.cron.getJob(params.job.id)?.operatorSource, previous)
+          ) {
+            throw new Error("The automation's standing scope changed during the control edit.");
+          }
+        },
+      };
+    }
   }
   if (!controlOnly) {
     throw new TypeError(
