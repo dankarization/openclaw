@@ -305,16 +305,6 @@ export function controlUiStableChunkName(id: string): string | undefined {
     case "packages/markdown-core/src/ir-metadata.ts":
       // Text annotations also serve plain-text consumers without loading the parser.
       return "deferred-ui-support";
-    case "ui/src/pages/chat/components/chat-image-preview-size.ts":
-    case "ui/src/pages/chat/components/chat-image-rendition.ts":
-    case "ui/src/pages/chat/components/chat-message-image-open.ts":
-    case "ui/src/pages/chat/components/chat-message-images-solid.tsx":
-    case "ui/src/pages/chat/components/chat-image-actions.tsx":
-    case "ui/src/pages/chat/components/chat-message-local-media.ts":
-    case "ui/src/pages/chat/components/chat-message-attachment-availability.ts":
-    case "ui/src/pages/chat/components/chat-media-playback.ts":
-    case "ui/src/pages/chat/components/chat-message-image-loading.ts":
-      return "chat-message-media-runtime";
     case "ui/src/pages/chat/chat-provider-review-controller.tsx":
       return "chat-provider-review";
     // Keep optional compression groups separate from code evaluated by text-only Chat.
