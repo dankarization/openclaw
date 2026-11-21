@@ -85,6 +85,7 @@ import {
   isSessionStatusModelPatchOrigin,
 } from "./session-model-patch-origin.js";
 import { invalidSessionRequest as invalid } from "./session-request-error.js";
+import { projectSessionPatchAccess } from "./sessions-patch-access.js";
 import { validateSessionPatchAdmission } from "./sessions-patch-admission.js";
 import { applySessionContextWindowPatch } from "./sessions-patch-context-window.js";
 import {
@@ -97,6 +98,7 @@ import { applySessionsPatchSubagentPolicy } from "./sessions-patch-subagent-poli
 type SessionPatchProjectionParams = {
   cfg: OpenClawConfig;
   creation?: { via: SessionCreatedVia; actor?: SessionEntry["createdActor"] };
+  attendedProfileOperator?: boolean;
   existingEntry?: SessionEntry;
   isLabelInUse: (label: string) => boolean;
   storeKey: string;
@@ -284,6 +286,7 @@ function* projectSessionPatchSteps(
     ...(params.preparedSessionRoot ? { sessionRoot: params.preparedSessionRoot } : {}),
     // Stamp only genuinely new rows; existing placeholder aliases must not be restamped.
     ...(creation && params.existingEntry === undefined ? buildSessionCreationStamp(creation) : {}),
+    ...projectSessionPatchAccess(params),
   };
   if (existing && !existing.sessionId) {
     delete next.label;

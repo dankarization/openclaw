@@ -9,6 +9,7 @@ it.each(["fulfilled", "rejected"])(
       storePath: "/synthetic/sessions.sqlite",
       sessionKey: "agent:main:dashboard:title",
       sessionId: outcome,
+      lifecycleRevision: "life-1",
     };
     const generation = createDeferredCore<boolean>();
     const states: boolean[] = [];
@@ -23,6 +24,9 @@ it.each(["fulfilled", "rejected"])(
     ).toBeUndefined();
     expect(
       sessionTitleRequests.get({ ...target, storePath: "/another/store.sqlite" }),
+    ).toBeUndefined();
+    expect(
+      sessionTitleRequests.get({ ...target, lifecycleRevision: "life-2" }),
     ).toBeUndefined();
     if (outcome === "rejected") {
       const rejected = expect(request).rejects.toThrow("write failed");

@@ -209,6 +209,12 @@ function handleSessionsChangedEvent(
     visibleSessionMatches(state, event.key, event.agentId ?? undefined),
   );
   const source = asNullableRecord(payload);
+  if (source?.reason === "profile-identity") {
+    // Links and profile labels can change without a transcript append. Reuse the
+    // admitted history owner: it retires stale publication and coalesces events.
+    refreshChatEventHistory(state, presented, true);
+    return true;
+  }
   const resetsSession = source?.reason === "reset" || source?.phase === "reset";
   if (event && (resetsSession || source?.reason === "new")) {
     state.retireSessionCompanion?.(event.key, event.agentId);

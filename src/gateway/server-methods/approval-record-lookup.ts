@@ -23,7 +23,7 @@ import {
   type SessionFactsRead,
 } from "../session-sharing-preparation.js";
 import { prepareProjectedSessionSharing } from "../session-sharing-read.js";
-import { createSessionListEntryFilter, type prepareSessionSharing } from "../session-sharing.js";
+import { prepareSessionSharing } from "../session-sharing.js";
 import { resolveSessionStoreIdentity } from "../session-store-key.js";
 import type { ApprovalRequestAuthority } from "./approval-request-authority.js";
 import type { GatewayClient, RespondFn } from "./types.js";
@@ -70,9 +70,9 @@ function canReadApprovalSession(params: ApprovalSessionAccessParams): boolean {
   if (cap !== "none" && cap !== "invited") {
     return true;
   }
-  const visibilityFilter = params.prepared
-    ? params.prepared.sharing.entryFilter
-    : createSessionListEntryFilter({ client: params.client, cfg: params.cfg });
+  const sharing =
+    params.prepared?.sharing ?? prepareSessionSharing({ client: params.client, cfg: params.cfg });
+  const visibilityFilter = sharing.entryFilter;
   if (!visibilityFilter) {
     return true;
   }
@@ -87,11 +87,11 @@ function canReadApprovalSession(params: ApprovalSessionAccessParams): boolean {
     target &&
     (params.prepared
       ? params.prepared.sharing.canReadTarget(target)
-      : createSessionListEntryFilter({
-          client: params.client,
-          cfg: params.cfg,
-          membership: facts?.membership,
-        })?.(target.storeKey, target.entry) !== false),
+      : visibilityFilter(
+          target.storeKey,
+          target.entry,
+          Boolean(sharing.identity && facts?.membership.has(sharing.identity.id)),
+        ) !== false),
   );
 }
 

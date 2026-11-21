@@ -326,6 +326,7 @@ export type MsgContext = Partial<CanonicalInboundText> & {
     via: import("../config/sessions/session-entry-provenance.js").SessionCreatedVia;
     actor?: import("../config/sessions/session-entry-provenance.js").SessionCreatedActor;
     sandbox?: "required";
+    attendedProfileOperator?: boolean;
   };
   SenderUsername?: string;
   SenderTag?: string;
@@ -360,6 +361,8 @@ export type MsgContext = Partial<CanonicalInboundText> & {
   WasMentioned?: boolean;
   /** Effective channel-owned mention policy before any plugin-binding bypass. */
   GroupRequireMention?: boolean;
+  /** Channel-resolved per-turn restriction on audio transcript echo. */
+  AudioTranscriptEchoEnabled?: boolean;
   /** True when this turn explicitly mentioned the current bot target. */
   ExplicitlyMentionedBot?: boolean;
   /** Provider-native explicit user mention ids present on this turn. */
@@ -426,6 +429,8 @@ export type MsgContext = Partial<CanonicalInboundText> & {
    * OriginatingChannel/OriginatingTo, rather than inheriting stale session route metadata.
    */
   ExplicitDeliverRoute?: boolean;
+  /** Explicit chat.send opt-out from external source delivery. */
+  WebchatExternalDeliveryDisabled?: boolean;
   /**
    * Internal proof that the channel ingress owner admitted this sender/event.
    * Correlation interceptors must fail closed when this proof is absent.

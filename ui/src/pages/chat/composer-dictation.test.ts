@@ -808,6 +808,200 @@ describe("ComposerDictationOwner", () => {
     unsubscribe();
   });
 
+  it("joins the failed attempt shutdown before opening a retry relay", async () => {
+    const audioCloseStarted = createDeferred<void>();
+    const releaseAudioClose = createDeferred<void>();
+    class DeferredCloseAudioContext extends MockAudioContext {
+      constructor() {
+        super();
+        this.close.mockImplementation(async () => {
+          audioCloseStarted.resolve();
+          await releaseAudioClose.promise;
+        });
+      }
+    }
+    vi.stubGlobal("AudioContext", DeferredCloseAudioContext);
+    let created = 0;
+    request.mockImplementation(async (method) =>
+      method === "talk.session.create"
+        ? sessionResult("dictation-" + ++created)
+        : { ok: true },
+    );
+    const { controller, onCommit } = createHarness();
+    try {
+      await startDirect(controller);
+      captureAudio();
+      const finishing = controller.finishActive();
+      await audioCloseStarted.promise;
+      emit({ type: "error", message: "Transcription unavailable" });
+      await waitForFast(() => expect(controller.recovery).toBeDefined());
+
+      const retrying = controller.retry();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(controller.recovery?.retrying).toBe(true);
+      expect(created).toBe(1);
+      expect(request.mock.calls.map(([method]) => method)).not.toContain("talk.session.close");
+
+      releaseAudioClose.resolve();
+      await waitForFast(() => expectClosed("dictation-1"));
+      await waitForFast(() => expectAppended("dictation-2"));
+      transcript("Recovered after shutdown", "dictation-2");
+      emit({ transcriptionSessionId: "dictation-2", type: "close", reason: "completed" });
+
+      await expect(retrying).resolves.toBe(true);
+      await expect(finishing).resolves.toBe(true);
+      const methods = request.mock.calls.map(([method, params]) =>
+        method === "talk.session.close" ? "close:" + params.sessionId : method,
+      );
+      const firstClose = methods.indexOf("close:dictation-1");
+      const retryCreate = methods.indexOf("talk.session.create", firstClose + 1);
+      expect(firstClose).toBeGreaterThanOrEqual(0);
+      expect(retryCreate).toBeGreaterThan(firstClose);
+      expectClosed("dictation-2");
+      expect(
+        request.mock.calls.filter(
+          ([method, params]) => method === "talk.session.close" && params.sessionId === "dictation-1",
+        ),
+      ).toHaveLength(1);
+      expect(onCommit).toHaveBeenCalledExactlyOnceWith("Recovered after shutdown", true);
+    } finally {
+      releaseAudioClose.resolve();
+    }
+  });
+
+  it("retries a failed transcript from memory without reopening the microphone", async () => {
+    let created = 0;
+    request.mockImplementation(async (method) =>
+      method === "talk.session.create" ? sessionResult("dictation-" + ++created) : { ok: true },
+    );
+    const { controller, onCommit } = createHarness();
+    await startDirect(controller);
+    captureAudio();
+    const finished = controller.finishActive();
+    await vi.advanceTimersByTimeAsync(0);
+    emit({ type: "error", message: "Transcription unavailable" });
+    await waitForFast(() => expect(controller.recovery).toBeDefined());
+
+    const retried = controller.retry();
+    await waitForFast(() => expect(created).toBe(2));
+    await waitForFast(() => expectAppended("dictation-2"));
+    transcript("Recovered words", "dictation-2");
+    emit({ transcriptionSessionId: "dictation-2", type: "close", reason: "completed" });
+
+    await expect(retried).resolves.toBe(true);
+    await expect(finished).resolves.toBe(true);
+    expect(getUserMedia).toHaveBeenCalledOnce();
+    expect(request.mock.calls.filter(([method]) => method === "talk.session.appendAudio")).toHaveLength(2);
+    expect(onCommit).toHaveBeenCalledExactlyOnceWith("Recovered words", true);
+    expect(controller.recovery).toBeUndefined();
+  });
+
+  it("keeps later recordings behind an earlier recovery until it is discarded", async () => {
+    let created = 0;
+    request.mockImplementation(async (method) =>
+      method === "talk.session.create" ? sessionResult("dictation-" + ++created) : { ok: true },
+    );
+    const { controller, onCommit } = createHarness();
+    await startDirect(controller);
+    captureAudio();
+    const earlier = controller.finishActive();
+    await vi.advanceTimersByTimeAsync(0);
+    emit({ type: "error", message: "Transcription unavailable" });
+    await waitForFast(() => expect(controller.recovery).toBeDefined());
+
+    await startDirect(controller);
+    captureAudio();
+    const later = controller.finishActive();
+    await vi.advanceTimersByTimeAsync(0);
+    transcript("Later words", "dictation-2");
+    emit({ transcriptionSessionId: "dictation-2", type: "close", reason: "completed" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(onCommit).not.toHaveBeenCalled();
+
+    expect(controller.discardRecovery()).toBe(true);
+    await expect(earlier).resolves.toBe(false);
+    await expect(later).resolves.toBe(true);
+    expect(onCommit).toHaveBeenCalledExactlyOnceWith("Later words", true);
+  });
+
+  it("waits to retry an earlier recovery until the newer capture stops", async () => {
+    let created = 0;
+    request.mockImplementation(async (method) =>
+      method === "talk.session.create" ? sessionResult("dictation-" + ++created) : { ok: true },
+    );
+    const { controller, onCommit } = createHarness();
+    await startDirect(controller);
+    captureAudio();
+    const earlier = controller.finishActive();
+    await vi.advanceTimersByTimeAsync(0);
+    emit({ type: "error", message: "Transcription unavailable" });
+    await waitForFast(() => expect(controller.recovery).toBeDefined());
+
+    await startDirect(controller);
+    expect(controller.canRetry).toBe(false);
+    await expect(controller.retry()).resolves.toBe(false);
+    captureAudio();
+    const later = controller.finishActive();
+    await vi.advanceTimersByTimeAsync(0);
+    transcript("Later words", "dictation-2");
+    emit({ transcriptionSessionId: "dictation-2", type: "close", reason: "completed" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(controller.canRetry).toBe(true);
+    expect(onCommit).not.toHaveBeenCalled();
+
+    expect(controller.discardRecovery()).toBe(true);
+    await expect(earlier).resolves.toBe(false);
+    await expect(later).resolves.toBe(true);
+    expect(onCommit).toHaveBeenCalledExactlyOnceWith("Later words", true);
+  });
+
+  it("keeps a recoverable recording when shared playback supersedes its retry", async () => {
+    let created = 0;
+    request.mockImplementation(async (method) =>
+      method === "talk.session.create" ? sessionResult("dictation-" + ++created) : { ok: true },
+    );
+    const { controller, options, onCommit } = createHarness();
+    await startDirect(controller);
+    captureAudio();
+    const finished = controller.finishActive();
+    await vi.advanceTimersByTimeAsync(0);
+    emit({ type: "error", message: "Transcription unavailable" });
+    await waitForFast(() => expect(controller.recovery).toBeDefined());
+
+    const retried = controller.retry();
+    await waitForFast(() => expectAppended("dictation-2"));
+    const otherPlayback = new GatewaySpeechPlayback();
+    otherPlayback.prepare(options.client ?? undefined);
+    await expect(retried).resolves.toBe(false);
+    expect(controller.recovery).toBeDefined();
+    expectClosed("dictation-2", true);
+    transcript("Late canceled words", "dictation-2");
+    emit({ transcriptionSessionId: "dictation-2", type: "close", reason: "completed" });
+    expect(onCommit).not.toHaveBeenCalled();
+    expect(controller.recovery).toBeDefined();
+    expect(controller.discardRecovery()).toBe(true);
+    await expect(finished).resolves.toBe(false);
+    otherPlayback.stop();
+  });
+
+  it("keeps a stopped recovery when shared playback starts before retry", async () => {
+    const { controller, options } = createHarness();
+    await startDirect(controller);
+    captureAudio();
+    const finished = controller.finishActive();
+    await vi.advanceTimersByTimeAsync(0);
+    emit({ type: "error", message: "Transcription unavailable" });
+    await waitForFast(() => expect(controller.recovery).toBeDefined());
+
+    const otherPlayback = new GatewaySpeechPlayback();
+    otherPlayback.prepare(options.client ?? undefined);
+    expect(controller.recovery).toBeDefined();
+    expect(controller.canRetry).toBe(true);
+    expect(controller.discardRecovery()).toBe(true);
+    await expect(finished).resolves.toBe(false);
+    otherPlayback.stop();
+  });
+
   it("opens the microphone only after the Gateway admits the session", async () => {
     const created = createDeferred<ReturnType<typeof sessionResult>>();
     recordRequests(() => created.promise);

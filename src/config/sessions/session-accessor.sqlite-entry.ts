@@ -10,6 +10,9 @@ import {
 } from "../../state/openclaw-agent-db.js";
 import type { AgentDatabaseExecutionFileIdentity } from "../../state/openclaw-agent-execution-contract.js";
 import { captureOpenClawAgentDatabaseExecution } from "../../state/openclaw-agent-execution.js";
+import { getRuntimeConfigSnapshot } from "../runtime-snapshot.js";
+import { inboundCreationVisibility } from "./creation-inbound-visibility.js";
+import { resolveSessionCreationVisibility } from "./creation-visibility.js";
 import { prepareSessionMetaPatch } from "./metadata.js";
 import type {
   RecordInboundSessionMetaParams,
@@ -627,10 +630,14 @@ export async function recordInboundSessionMeta(
 ): Promise<SessionEntry | null> {
   normalizeInternalTurnContext(input.ctx);
   const metadata = prepareSessionMetaPatch(input);
+  const cfg = input.cfg ?? getRuntimeConfigSnapshot() ?? {};
   return await applySessionEntryOperation(
     { sessionKey: input.sessionKey, storePath: input.storePath },
     {
       kind: "inbound-metadata",
+      defaultVisibility: resolveSessionCreationVisibility(cfg, input.sessionKey).visibility,
+      defaultAccess: inboundCreationVisibility(cfg, input.sessionKey, input.ctx.SessionCreation)
+        .access,
       sessionKey: input.sessionKey,
       metadata,
       creation: buildInboundSessionCreationStamp(input.ctx),
@@ -682,6 +689,7 @@ export async function updateSessionLastRouteInScope(
     normalizeInternalTurnContext(params.ctx);
   }
   const createIfMissing = params.createIfMissing ?? true;
+  const cfg = params.cfg ?? getRuntimeConfigSnapshot() ?? {};
   const { source, ...routeGuard } = params.workerGuard ?? {};
   const commitGuard = sessionEntryCommitGuardOptions(
     source
@@ -692,6 +700,9 @@ export async function updateSessionLastRouteInScope(
     scope,
     {
       kind: "last-route",
+      defaultVisibility: resolveSessionCreationVisibility(cfg, scope.sessionKey).visibility,
+      defaultAccess: inboundCreationVisibility(cfg, scope.sessionKey, params.ctx?.SessionCreation)
+        .access,
       route: {
         channel: params.channel,
         to: params.to,

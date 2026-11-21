@@ -228,3 +228,124 @@ it("waits for raw history settlement and coalesces custody events into one fresh
     await Promise.all([initial, fresh]);
   }
 });
+
+it("refreshes linked author presentation after global profile events without a new message", async () => {
+  const host = pageHost(makeChatHost({ sessionKey: selected, requestHandlers: {} }));
+  onTestFinished(() => host.sessions.dispose());
+  const source = {
+    senderIdentity: {
+      type: "observation",
+      pluginId: "telegram",
+      accountId: "qa",
+      id: "101",
+      senderKind: "human",
+    },
+  };
+  const linked = (name: string): ChatHistoryResult => ({
+    messages: [
+      {
+        role: "user",
+        content: "Same existing message",
+        __openclaw: { ...source, senderDisplayProfileId: "linked-person", senderDisplayName: name },
+      },
+    ],
+    sessionId: "current-session",
+  });
+  host.request.mockImplementation(async (method) =>
+    method === "chat.history" ? linked("Initial label") : {},
+  );
+  await loadChatHistory(host, { deferBranches: true });
+  const stale = createDeferred<ChatHistoryResult>();
+  const replacementStarted = createDeferred();
+  const fresh = createDeferred<ChatHistoryResult>();
+  let reads = 0;
+  host.request.mockImplementation((method) => {
+    if (method !== "chat.history") return Promise.resolve({});
+    reads += 1;
+    if (reads === 1) return stale.promise;
+    replacementStarted.resolve();
+    return fresh.promise;
+  });
+  const initial = loadChatHistory(host, { deferBranches: true });
+  for (let index = 0; index < 3; index += 1) {
+    handlePageGatewayEvent(
+      host,
+      { type: "event", event: "sessions.changed", payload: { reason: "profile-identity" } },
+      () => false,
+    );
+  }
+  const refreshing = loadChatHistory(host, { deferBranches: true });
+  try {
+    expect(reads).toBe(1);
+    stale.resolve(linked("Retired label must not publish"));
+    await replacementStarted.promise;
+    expect(reads).toBe(2);
+    expect(JSON.stringify(host.chatMessages)).not.toContain("Retired label must not publish");
+    fresh.resolve({
+      messages: [{ role: "user", content: "Same existing message", __openclaw: source }],
+      sessionId: "current-session",
+    });
+    await Promise.all([initial, refreshing]);
+    expect(reads).toBe(2);
+    expect(host.chatMessages).toEqual([
+      { role: "user", content: "Same existing message", __openclaw: source },
+    ]);
+    expect(host.sessionKey).toBe(selected);
+    expect(host.request.mock.calls.every(([method]) => method === "chat.history")).toBe(true);
+  } finally {
+    stale.resolve(linked("Cleanup"));
+    fresh.resolve({ messages: [], sessionId: "current-session" });
+  }
+});
+
+it.each(["rename", "unlink"])(
+  "refreshes an idle visible author display after %s",
+  async (change) => {
+    const source = {
+      senderIdentity: {
+        type: "observation",
+        pluginId: "telegram",
+        accountId: "qa",
+        id: "101",
+        senderKind: "human",
+      },
+    };
+    const metadata = (label?: string) => ({
+      ...source,
+      ...(label ? { senderDisplayProfileId: "linked-person", senderDisplayName: label } : {}),
+    });
+    let current = metadata("Initial linked label");
+    let reads = 0;
+    const host = pageHost(
+      makeChatHost({
+        sessionKey: selected,
+        requestHandlers: {
+          "chat.history": () => {
+            reads += 1;
+            return {
+              messages: [{ role: "user", content: "Unchanged transcript", __openclaw: current }],
+              sessionId: "current-session",
+            };
+          },
+        },
+      }),
+    );
+    onTestFinished(() => host.sessions.dispose());
+    await loadChatHistory(host, { deferBranches: true });
+    expect(reads).toBe(1);
+    current = metadata(change === "rename" ? "Updated linked label" : undefined);
+    handlePageGatewayEvent(
+      host,
+      { type: "event", event: "sessions.changed", payload: { reason: "profile-identity" } },
+      () => true,
+    );
+    // No manual history call or transcript event: the identity event must own this read.
+    await vi.waitFor(() => {
+      expect(reads).toBe(2);
+      expect(host.chatMessages).toEqual([
+        { role: "user", content: "Unchanged transcript", __openclaw: current },
+      ]);
+    });
+    expect(host.sessionKey).toBe(selected);
+  },
+);

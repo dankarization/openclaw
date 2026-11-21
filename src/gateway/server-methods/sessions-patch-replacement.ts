@@ -64,6 +64,9 @@ export function prepareSessionPatchReplacement(params: {
   return {
     replacement: {
       entry: params.projectedEntry,
+      accessMutation:
+        JSON.stringify(params.existingEntry?.access) !==
+        JSON.stringify(params.projectedEntry.access),
       previousSessionKeys,
       sessionKey: params.primaryKey,
     },

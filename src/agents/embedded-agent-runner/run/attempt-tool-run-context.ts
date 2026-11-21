@@ -20,6 +20,7 @@ type AttemptToolRunFacts = Pick<
   | "agentAccountId"
   | "messageTo"
   | "messageThreadId"
+  | "webchatExternalDeliveryDisabled"
   | "chatId"
   | "messageActionTurnCapability"
   | "groupId"
@@ -97,6 +98,7 @@ export function buildEmbeddedAttemptToolRunContext(
     agentAccountId: params.agentAccountId,
     messageTo: params.messageTo,
     messageThreadId: params.messageThreadId,
+    webchatExternalDeliveryDisabled: params.webchatExternalDeliveryDisabled,
     nativeChannelId: params.chatId,
     messageActionTurnCapability: params.messageActionTurnCapability,
     groupId: params.groupId,

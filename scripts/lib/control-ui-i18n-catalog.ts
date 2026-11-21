@@ -237,6 +237,20 @@ export function loadControlUiSourceCatalog(): TranslationMap {
   // Keep canonical translation order when summary copy moves out of the lazy CI catalog.
   const { automationNoChecks, ...pullRequests } = registerGitHubEnglish.catalog.chat.pullRequests;
   const { automationRetry, ...ciPullRequests } = registerChatCiEnglish.catalog.chat.pullRequests;
+  const dictationCopy = registerChatDictationEnglish.catalog.chat.composer;
+  const dictationBefore = new Map<string, (keyof typeof dictationCopy)[]>([
+    ["dictationDisconnected", ["dictationAudioUnsupported", "dictationBrowserAudioUnsupported"]],
+    ["dictationInterruptedRecovery", ["dictationFailed"]],
+    ["dictationListening", ["dictationRetryRecording", "dictationDiscardRecording", "dictationRecordingKept"]],
+    ["dictationStopAndKeep", ["dictationStarting"]],
+  ]);
+  const composer: TranslationMap = {};
+  for (const [key, value] of Object.entries(registerChatComposerEnglish.catalog.chat.composer)) {
+    for (const moved of dictationBefore.get(key) ?? []) {
+      composer[moved] = dictationCopy[moved];
+    }
+    composer[key] = value;
+  }
   const agentChip: TranslationMap = {};
   for (const [key, value] of Object.entries(en.agentChip)) {
     agentChip[key] = value;
@@ -659,14 +673,14 @@ export function loadControlUiSourceCatalog(): TranslationMap {
     registerSecretsStoreEnglish.catalog,
     registerBrowserEnglish.catalog,
     registerChatCameraEnglish.catalog,
-    registerChatDictationEnglish.catalog,
+    { chat: { dictation: registerChatDictationEnglish.catalog.chat.dictation } },
     { chat: { pullRequests: { ...ciPullRequests, automationNoChecks, automationRetry } } },
     registerChatCommandResultsEnglish.catalog,
     {
       chat: {
         ...registerChatComposerEnglish.catalog.chat,
         composer: {
-          ...registerChatComposerEnglish.catalog.chat.composer,
+          ...composer,
           ...registerChatWorktreeEnglish.catalog.chat.composer,
           menu: registerChatComposerMenuEnglish.catalog.chat.composer.menu,
         },

@@ -86,6 +86,12 @@ async function openDictation(
         type: "close",
         reason: "completed",
       }),
+    fail: () =>
+      gateway.emitGatewayEvent("talk.event", {
+        transcriptionSessionId: sessionId,
+        type: "error",
+        message: "Transcription unavailable",
+      }),
   };
 }
 
@@ -108,6 +114,69 @@ const expectDraft = async (textarea: Locator, value: string) => {
 };
 
 suite.define(() => {
+  it("shows the kept-recording Retry and Discard alert after an empty finalization", () =>
+    suite.withPage(
+      {
+        permissions: ["microphone"],
+        viewport: { width: 1056, height: 740 },
+        colorScheme: "dark",
+        reducedMotion: "reduce",
+      },
+      async ({ page }) => {
+        const { gateway, textarea, admit, fail } = await openDictation(page);
+        await textarea.waitFor();
+        await button(page, "Start voice input", true).hover();
+        await page.mouse.down();
+        await gateway.waitForRequest("talk.session.create");
+        await admit();
+        await page.waitForFunction(() => {
+          const state = (
+            window as Window & {
+              openclawTalkE2eState?: {
+                inputProcessor?: {
+                  onaudioprocess?: (event: {
+                    inputBuffer: { getChannelData: () => Float32Array };
+                  }) => void;
+                };
+              };
+            }
+          ).openclawTalkE2eState;
+          return state?.inputProcessor?.onaudioprocess != null;
+        });
+        await page.evaluate(() => {
+          const state = (
+            window as Window & {
+              openclawTalkE2eState?: {
+                inputProcessor?: {
+                  onaudioprocess?: (event: {
+                    inputBuffer: { getChannelData: () => Float32Array };
+                  }) => void;
+                };
+              };
+            }
+          ).openclawTalkE2eState;
+          state?.inputProcessor?.onaudioprocess?.({
+            inputBuffer: { getChannelData: () => new Float32Array(4096).fill(0.25) },
+          });
+        });
+        await page.locator(".agent-chat__dictation-phase--listening").waitFor();
+        await captureComposer(page, "dictation-recovery-before-error.png");
+
+        await page.mouse.up();
+        await button(page, "Stop and keep text", true).click();
+        await gateway.waitForRequest("talk.session.close");
+        await fail();
+        const retry = button(page, "Retry recording", true);
+        const discard = button(page, "Discard recording", true);
+        await retry.waitFor();
+        await discard.waitFor();
+        await captureComposer(page, "dictation-recovery-after-error.png");
+
+        await discard.click();
+        await retry.waitFor({ state: "detached" });
+      },
+    ));
+
   it("dictates for a session-only guest without reading operator configuration", () =>
     suite.withPage({ permissions: ["microphone"] }, async ({ page }) => {
       const { gateway, textarea, admit, emit, close } = await openDictation(page, {

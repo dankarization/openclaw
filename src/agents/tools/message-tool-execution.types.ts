@@ -29,6 +29,7 @@ export type MessageToolOptions = {
   currentChannelProvider?: string;
   currentThreadTs?: string;
   agentThreadId?: string | number;
+  webchatExternalDeliveryDisabled?: boolean;
   currentMessageId?: string | number;
   currentInboundAudio?: boolean;
   hasCurrentInboundAudio?: () => boolean;

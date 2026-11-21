@@ -1,4 +1,5 @@
 // Provides SQLite transaction helpers with nested savepoints.
+import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { setTimeout as sleep } from "node:timers/promises";
 import { isMainThread, threadId } from "node:worker_threads";
@@ -194,6 +195,11 @@ function beginImmediateTransaction(
 
 type SqliteTransactionStep = "begin" | "commit";
 type SqliteTransactionMode = "deferred" | "immediate";
+type SqliteTransactionDiagnostics = {
+  transactionId: string;
+  prepareCommitMs: number;
+  nativeCommitMs: number;
+};
 
 function slowBusyWaitThresholdMs(options: SqliteTransactionOptions | undefined): number {
   if (options?.busyTimeoutMs === undefined || options.busyTimeoutMs <= 0) {
@@ -232,6 +238,7 @@ function logTransactionStep(
     holderAtWaitStart?: ReturnType<typeof readSqliteTransactionWriter>;
     options?: SqliteTransactionOptions;
     step: SqliteTransactionStep;
+    transactionId: string;
   },
   failure?: { error: unknown },
 ): void {
@@ -259,6 +266,7 @@ function logTransactionStep(
         ...(sqlitePrimaryCode !== undefined ? { sqlitePrimaryCode } : {}),
         step: params.step,
         threadId,
+        transactionId: params.transactionId,
         ...(params.beginAdmission ? { beginAdmission: { ...params.beginAdmission } } : {}),
       },
     );
@@ -269,6 +277,7 @@ function logTransactionStep(
 
 function execTimedTransactionStep(params: {
   db: DatabaseSync;
+  diagnostics: SqliteTransactionDiagnostics;
   options?: SqliteTransactionOptions;
   sql: string;
   step: SqliteTransactionStep;
@@ -281,28 +290,27 @@ function execTimedTransactionStep(params: {
   const holderAtWaitStart = beginAdmission
     ? readSqliteTransactionWriter(params.db, startedAt)
     : undefined;
+  let failure: { error: unknown } | undefined;
+  let elapsedMs: number;
   try {
     if (beginAdmission) {
       beginImmediateTransaction(params.db, beginAdmission);
     } else {
       params.db.exec(params.sql);
     }
-    const elapsedMs = Date.now() - startedAt;
-    logTransactionStep({
-      beginAdmission,
-      db: params.db,
-      elapsedMs,
-      holderAtWaitStart,
-      options: params.options,
-      step: params.step,
-    });
-    return elapsedMs;
   } catch (error) {
-    const elapsedMs = Date.now() - startedAt;
+    failure = { error };
+    throw error;
+  } finally {
+    elapsedMs = Date.now() - startedAt;
+    if (params.step === "commit") {
+      params.diagnostics.nativeCommitMs += elapsedMs;
+    }
     if (
-      isSqliteLockError(error) &&
-      shouldReportSqliteLockFailure(params.db) &&
-      !(params.step === "begin" && params.options?.beginLockFailureReporting === "suppress")
+      !failure ||
+      (isSqliteLockError(failure.error) &&
+        shouldReportSqliteLockFailure(params.db) &&
+        !(params.step === "begin" && params.options?.beginLockFailureReporting === "suppress"))
     ) {
       logTransactionStep(
         {
@@ -312,12 +320,13 @@ function execTimedTransactionStep(params: {
           holderAtWaitStart,
           options: params.options,
           step: params.step,
+          transactionId: params.diagnostics.transactionId,
         },
-        { error },
+        failure,
       );
     }
-    throw error;
   }
+  return elapsedMs;
 }
 
 function discardUnsafeConnection(db: TransactionDatabase, error: unknown): void {
@@ -400,8 +409,14 @@ function runSqliteTransactionSync<T>(
 
   const timing = currentSqliteOperationTiming();
   const prepareMs = timing ? Date.now() - timing.preparedAtMs : undefined;
+  const diagnostics: SqliteTransactionDiagnostics = {
+    transactionId: randomUUID(),
+    prepareCommitMs: 0,
+    nativeCommitMs: 0,
+  };
   const beginMs = execTimedTransactionStep({
     db,
+    diagnostics,
     options,
     sql: mode === "immediate" ? "BEGIN IMMEDIATE" : "BEGIN",
     step: "begin",
@@ -409,7 +424,7 @@ function runSqliteTransactionSync<T>(
   if (timing) {
     timing.transactions.count += 1;
   }
-  return settleSqliteTransactionSync(db, operation, mode, beginMs, prepareMs, options);
+  return settleSqliteTransactionSync(db, operation, mode, beginMs, prepareMs, options, diagnostics);
 }
 
 /** Settle a reservation acquired by the closed, multi-database worker fence. */
@@ -425,7 +440,21 @@ export function runSqliteReservedTransactionSync<T, CommitResult = void>(
   if (isMainThread || !db.isTransaction) {
     throw new Error("SQLite reserved settlement requires a worker-owned transaction");
   }
-  return settleSqliteTransactionSync(db, operation, "immediate", 0, undefined, options, true);
+  const diagnostics: SqliteTransactionDiagnostics = {
+    transactionId: randomUUID(),
+    prepareCommitMs: 0,
+    nativeCommitMs: 0,
+  };
+  return settleSqliteTransactionSync(
+    db,
+    operation,
+    "immediate",
+    0,
+    undefined,
+    options,
+    diagnostics,
+    true,
+  );
 }
 
 function settleSqliteTransactionSync<T>(
@@ -435,6 +464,7 @@ function settleSqliteTransactionSync<T>(
   beginMs: number,
   prepareMs: number | undefined,
   options: SqliteTransactionOptions | undefined,
+  diagnostics: SqliteTransactionDiagnostics,
   reservedSourceFence = false,
 ): T {
   const timing = currentSqliteOperationTiming();
@@ -454,8 +484,12 @@ function settleSqliteTransactionSync<T>(
     const startedAt = Date.now();
     const databaseAdmissionWaitBeforeCommit = timing?.databaseAdmissionWaitMs ?? 0;
     try {
-      prepareSqliteTransactionCommit(db);
-      execTimedTransactionStep({ db, options, sql: "COMMIT", step: "commit" });
+      try {
+        prepareSqliteTransactionCommit(db);
+      } finally {
+        diagnostics.prepareCommitMs += Date.now() - startedAt;
+      }
+      execTimedTransactionStep({ db, diagnostics, options, sql: "COMMIT", step: "commit" });
     } finally {
       // Schema publication can exchange metadata during COMMIT; count that wait only once.
       commitMs +=
@@ -521,6 +555,7 @@ function settleSqliteTransactionSync<T>(
           mode,
           pid: process.pid,
           threadId,
+          transactionId: diagnostics.transactionId,
           ...transactionDiagnosticLabels(db, options),
           ...(timing?.holdContext || (hydration && timing?.hydrationActiveEvents !== undefined)
             ? { context: readSqliteOperationHoldContext(options?.diagnosticContext, hydration) }
@@ -547,6 +582,8 @@ function settleSqliteTransactionSync<T>(
             hostAdmissionWaitMs,
             databaseAdmissionWaitMs,
             commitMs,
+            prepareCommitMs: diagnostics.prepareCommitMs,
+            nativeCommitMs: diagnostics.nativeCommitMs,
           },
           ...(statementTiming ? { statementTiming: statementTiming.summarize() } : {}),
           thresholdMs: options?.slowTransactionHoldMs ?? DEFAULT_SLOW_TRANSACTION_HOLD_MS,

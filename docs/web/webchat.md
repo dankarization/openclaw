@@ -13,6 +13,7 @@ Status: the macOS/iOS SwiftUI chat UI talks directly to the Gateway WebSocket. N
 - A native chat UI for the gateway.
 - Uses the same sessions and routing rules as other channels.
 - Replies always go back to WebChat.
+- When a Telegram conversation is open in WebChat, an implicit message-tool reply is recorded in WebChat and sent to the conversation’s saved Telegram topic. An explicit `chat.send` request with `deliver: false` keeps the reply in WebChat. Explicit message-tool destinations use their selected route.
 - History is always fetched from the gateway (no local file watching). If the gateway is unreachable, WebChat is read-only.
 
 ## Quick start

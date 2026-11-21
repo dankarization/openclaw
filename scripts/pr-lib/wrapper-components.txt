@@ -749,6 +749,7 @@ src/config/redact-snapshot.raw.ts
 src/config/redact-snapshot.secret-ref.ts
 src/config/redact-snapshot.ts
 src/config/repository-branch-prefix.ts
+src/config/read-dependencies.ts
 src/config/resolution-facts.ts
 src/config/runtime-config-capture-state.ts
 src/config/runtime-config-publication.ts
@@ -1670,6 +1671,7 @@ src/plugins/compat/workspace-mutation-guard.ts
 src/plugins/config-activation-shared.ts
 src/plugins/config-contract-matches.ts
 src/plugins/config-normalization-shared.ts
+src/plugins/config-policy-quarantine.ts
 src/plugins/config-policy.ts
 src/plugins/config-state.ts
 src/plugins/control-plane-workspace.ts

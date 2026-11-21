@@ -145,6 +145,9 @@ export function ChatDetailsSubagents(props: ChatDetailsSubagentsProps) {
               }
             >
               <span class="session-run-spinner" aria-hidden="true" />
+              <span class="chat-details-subagents__count">
+                {workingCount()} {props.workingLabel}
+              </span>
             </span>
           </Show>
         }

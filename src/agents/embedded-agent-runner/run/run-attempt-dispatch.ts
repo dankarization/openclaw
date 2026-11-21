@@ -425,6 +425,7 @@ export async function prepareAndDispatchEmbeddedRunAttempt(
     conversationRoutePeerId: params.conversationRoutePeerId,
     messageTo: params.messageTo,
     messageThreadId: params.messageThreadId,
+    webchatExternalDeliveryDisabled: params.webchatExternalDeliveryDisabled,
     conversationToolPolicy: params.conversationToolPolicy,
     messageActionTurnCapability: params.messageActionTurnCapability,
     groupId: params.groupId,

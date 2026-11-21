@@ -91,7 +91,6 @@ export async function requestChatSend(
         ...(params.appContext ? { appContext: params.appContext } : {}),
         ...(params.mentions?.length ? { mentions: params.mentions } : {}),
         ...(params.intent ? { intent: params.intent } : {}),
-        deliver: false,
         ...(params.replyToId ? { replyToId: params.replyToId } : {}),
         ...(params.queueMode ? { queueMode: params.queueMode } : {}),
         ...(params.expectedLeafEntryId !== undefined

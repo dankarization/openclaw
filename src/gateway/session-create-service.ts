@@ -94,6 +94,11 @@ import type {
   GatewaySessionCommitResult,
   PreparedGatewaySessionLifecycle,
 } from "./session-create-service.types.js";
+import { prepareSessionCreationSharing } from "./session-create-sharing.js";
+import {
+  authorizeSessionSourceCreation,
+  guardSessionSourceCreation,
+} from "./session-create-source-access.js";
 import {
   readRequestedSessionCreateTarget,
   readSessionCreateTarget,
@@ -101,6 +106,7 @@ import {
   validateSessionCreateIncognitoTarget,
 } from "./session-create-target.js";
 import { resolveSessionCreateVisibility } from "./session-create-visibility.js";
+import { resolveSessionForkParentError } from "./session-fork-access.js";
 import {
   prepareGatewaySessionLifecycleTargets,
   projectPreparedSessionWorkspace,
@@ -110,7 +116,7 @@ import {
   rollbackGatewaySessionPreparation,
 } from "./session-lifecycle-preparation.js";
 import { loadSessionLifecycleRuntime } from "./session-lifecycle-runtime-loader.js";
-import { resolvePluginSessionOwnershipError } from "./session-plugin-ownership.js";
+import { SessionMutationAuthorizationChangedError } from "./session-mutation-authorization-error.js";
 import { prepareSessionPublicShareGrant } from "./session-publication-grant.js";
 import * as sessionAgent from "./session-request-agent.js";
 import {
@@ -130,7 +136,6 @@ export class SessionCreationNotCommittedError extends Error {
     super("session creation failed before write admission", { cause });
   }
 }
-
 export async function createGatewaySession(
   params: CreateGatewaySessionParams,
 ): Promise<CreateGatewaySessionResult> {
@@ -160,7 +165,6 @@ export async function createGatewaySession(
     throw error;
   }
 }
-
 async function createGatewaySessionInScope(
   params: CreateGatewaySessionParams,
   agentId: string,
@@ -181,17 +185,24 @@ async function createGatewaySessionInScope(
   // Fresh account authority covers title generation and resource preparation,
   // not just the final row. An inherited parent pin is not a new selection.
   let validateRuntimeSelection: (() => ErrorShape | undefined) | undefined;
-  let validateVisibility: (() => ErrorShape | undefined) | undefined;
+  let validateCreationSharing: (() => ErrorShape | undefined) | undefined;
   let releaseRuntimeSelection: (() => void) | undefined;
-  const commitGuard = resolveSessionCreationCommitGuard(params, {
+  const baseCommitGuard = resolveSessionCreationCommitGuard(params, {
     readOperatorAuthority: () => operatorAuthority,
     assertPreparedTargetCurrent: () => assertPreparedTargetCurrent?.(),
     validateSelection: () => validateRuntimeSelection?.(),
     isCreationCommitted: () => createdTargetCommitted,
     assertPermissionDefaultCurrent: () => assertPermissionDefaultCurrent?.(),
-    validateVisibility: () => validateVisibility?.(),
+    validateVisibility: () => validateCreationSharing?.(),
   });
-  commitGuard?.();
+  const commitGuard = () => {
+    baseCommitGuard?.();
+    const error = !createdTargetCommitted && validateCreationSharing?.();
+    if (error) {
+      throw new SessionMutationAuthorizationChangedError(error);
+    }
+  };
+  commitGuard();
   const displayName = truncateUtf16Safe(params.displayName?.trim() ?? "", 500).trimEnd();
   const label = normalizeOptionalString(params.label);
   const requestedKey = normalizeOptionalString(params.key);
@@ -456,14 +467,13 @@ async function createGatewaySessionInScope(
         );
       }
       currentParentSessionEntry = currentParentEntry;
-      const parentOwnershipError = resolvePluginSessionOwnershipError({
-        action: params.fork === true ? "fork" : "link",
-        entry: currentParentEntry,
-        key: canonicalParentSessionKey,
-        pluginOwnerId: params.authorizedPluginId,
-      });
-      if (parentOwnershipError) {
-        return { ok: false, error: parentOwnershipError };
+      const parentError = resolveSessionForkParentError(
+        params,
+        canonicalParentSessionKey,
+        currentParentEntry,
+      );
+      if (parentError) {
+        return { ok: false, error: parentError };
       }
       if (
         (params.emitCommandHooks === true || params.fork === true) &&
@@ -657,15 +667,17 @@ async function createGatewaySessionInScope(
         // This callback owns generated and explicit keys alike; no existing row
         // is the canonical signal that this request will actually create one.
         if (!existingEntry) {
-          const creationError = authorizeGatewaySessionCreation({
-            cfg: params.cfg,
-            agentId: target.agentId,
-            ...(operatorAuthority
-              ? { authority: operatorAuthority }
-              : params.operatorRoleActor
-                ? { actor: params.operatorRoleActor }
-                : { profileId: params.requestingOperatorProfileId }),
-          });
+          const creationError =
+            authorizeSessionSourceCreation(params, target.canonicalKey) ??
+            authorizeGatewaySessionCreation({
+              cfg: params.cfg,
+              agentId: target.agentId,
+              ...(operatorAuthority
+                ? { authority: operatorAuthority }
+                : params.operatorRoleActor
+                  ? { actor: params.operatorRoleActor }
+                  : { profileId: params.requestingOperatorProfileId }),
+            });
           if (creationError) {
             return { ok: false, error: creationError };
           }
@@ -688,24 +700,17 @@ async function createGatewaySessionInScope(
         if (freshSessionError) {
           return freshSessionError;
         }
-        const visibility = resolveSessionCreateVisibility(
+        const sharing = prepareSessionCreationSharing({
           params,
+          sessionKey: target.canonicalKey,
           existingEntry,
-          currentParentSessionEntry,
-        );
-        if (!visibility.ok) {
-          return visibility;
+          parentEntry: currentParentSessionEntry,
+        });
+        if (!sharing.ok) {
+          return sharing;
         }
-        if (!existingEntry && visibility.value) {
-          validateVisibility = () => {
-            const current = resolveSessionCreateVisibility(
-              params,
-              undefined,
-              currentParentSessionEntry,
-            );
-            return current.ok ? undefined : current.error;
-          };
-        }
+        const { visibility, creationAccess } = sharing;
+        validateCreationSharing = sharing.validate;
         // Adoption of an existing key must not stamp provenance or emit a
         // `created` event; only a genuinely new row is a node creation.
         createdNewEntry = existingEntry === undefined;
@@ -806,6 +811,7 @@ async function createGatewaySessionInScope(
             ? buildSessionCreationStamp({ ...creation, sandbox: creationSandbox, incognito })
             : {}),
           ...(createdNewEntry && inheritedSpawnOwner ? { owner: inheritedSpawnOwner } : {}),
+          ...(createdNewEntry && creationAccess ? { access: creationAccess } : {}),
           ...(visibility.value && createdNewEntry ? { visibility: visibility.value } : {}),
           ...projectPreparedSessionWorkspace(existingEntry, {
             projectId,
@@ -995,7 +1001,12 @@ async function createGatewaySessionInScope(
               requireWriteSuccess: true,
             }
           : {}),
-        commitGuard,
+        commitGuard: guardSessionSourceCreation(
+          params,
+          target.canonicalKey,
+          () => createdNewEntry,
+          commitGuard,
+        ),
         followRegistration,
         ...(bindPreparedCreation || params.bindSharingCreation
           ? {

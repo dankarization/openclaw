@@ -27,6 +27,7 @@ export const SESSION_ENTRY_PRIVATE_CLEAR_PATCH = {
   scheduledMemoryParent: undefined,
   sessionDiffBaselineCapture: undefined,
   transcriptByteCompactionLatch: undefined,
+  conversationLabelRefinement: undefined,
 } satisfies Partial<InternalSessionEntry>;
 
 const PRIVATE_SESSION_ENTRY_KEYS = [
@@ -34,6 +35,7 @@ const PRIVATE_SESSION_ENTRY_KEYS = [
   "inheritedGitContributorProfileIds",
   "profileInvolvement",
   "cliHistoryBoundary",
+  "conversationLabelRefinement",
   "publicShare",
   "activeWriterRunId",
   "lastRunId",

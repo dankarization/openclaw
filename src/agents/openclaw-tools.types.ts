@@ -172,6 +172,7 @@ export type OpenClawToolsOptions = {
   agentTo?: string;
   /** Thread/topic identifier for routing replies to the originating thread. */
   agentThreadId?: string | number;
+  webchatExternalDeliveryDisabled?: boolean;
   /** Message-only authority from a CLI grant; does not authorize plugin delivery. */
   messageToolTurnCapability?: { token: string; sessionKey: string };
   /** Private factory admission for a new scheduled message invocation. */

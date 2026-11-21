@@ -44,6 +44,7 @@ export type OpenClawCodingToolsOptions = {
   toolPolicyMessageProvider?: string;
   messageTo?: string;
   messageThreadId?: string | number;
+  webchatExternalDeliveryDisabled?: boolean;
   sandbox?: SandboxContext | null;
   sessionKey?: string;
   requesterThinkingLevel?: ThinkLevel;

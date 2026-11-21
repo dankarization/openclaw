@@ -11,6 +11,7 @@ import { resolvePreparedSandboxRuntimeStatus } from "../agents/sandbox/runtime-s
 import { resolveSessionPermissionCoreToolPolicy } from "../agents/session-permission-exec-mode.js";
 import { resolveEffectiveToolFsWorkspaceOnly } from "../agents/tool-fs-policy.js";
 import { getRuntimeConfig } from "../config/io.js";
+import { canReadSessionAccess } from "../config/sessions/session-access.js";
 import { captureSessionEntryMetadataRead } from "../config/sessions/session-entry-source-authority.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { FsSafeError } from "../infra/fs-safe.js";
@@ -27,7 +28,10 @@ import {
   prepareOpenClawIdTunnelPrincipal,
 } from "./openclaw-id/tunnel-principal.js";
 import { isNamedOperatorRoleEnforcementEnabled } from "./operator-role-enforcement.js";
+import { prepareTelegramSessionEntryRead } from "./session-channel-read.js";
+import { prepareSessionCreatorProfile } from "./session-creator.js";
 import { resolveRequestedSessionAgentId } from "./session-request-agent.js";
+import { canReadChannelSession } from "./session-sharing-read.js";
 import { prepareSessionSharingRead } from "./session-sharing-target-read.js";
 import { createProfileSessionEntryFilter } from "./session-sharing.js";
 import type { GatewaySessionEntryRead } from "./session-utils.js";
@@ -50,7 +54,7 @@ export function assertAssistantMediaPolicyCurrent(
   policy.assertCurrent?.();
   // Ordinary session activity changes the global access epoch without revoking media tickets.
   const current = resolvePreparedAssistantMediaPolicy(
-    { ...selection, reader: policy.reader },
+    { ...selection, reader: policy.reader, channelRead: policy.channelRead },
     policy.readSession(),
     policy.readSession,
     policy.assertCurrent,
@@ -136,6 +140,7 @@ type AssistantMediaPolicyParams = {
   agentId?: string;
   requestAuth?: AuthorizedControlUiReadRequest;
   reader?: AssistantMediaReader;
+  channelRead?: Parameters<typeof canReadChannelSession>[0]["channelRead"];
 };
 type AssistantMediaSessionRead = Pick<
   GatewaySessionEntryRead,
@@ -242,6 +247,25 @@ async function resolveAssistantMediaSessionPolicy(params: AssistantMediaPolicyPa
       }
     }
     policy = resolvePreparedAssistantMediaPolicy(params, loaded, readSession, assertCurrent);
+    const profileId =
+      params.requestAuth?.authenticatedUserProfile?.profileId ?? params.reader?.profileId;
+    if (!policy && loaded?.entry && profileId) {
+      const channelRead = await prepareTelegramSessionEntryRead({
+        cfg: loaded.cfg,
+        getConfig: getRuntimeConfig,
+        profileId,
+        key: loaded.canonicalKey,
+        entry: loaded.entry,
+      });
+      assertCurrent?.();
+      loaded = readSession();
+      policy = resolvePreparedAssistantMediaPolicy(
+        { ...params, channelRead },
+        loaded,
+        readSession,
+        assertCurrent,
+      );
+    }
     return policy && { ...policy, releaseSession };
   } finally {
     if (!policy) {
@@ -319,22 +343,38 @@ function resolvePreparedAssistantMediaPolicy(
     if (!auth.operatorScopes.includes("operator.admin")) {
       const profileId = auth.authenticatedUserProfile?.profileId;
       if (profileId && profileId !== GATEWAY_OWNER_PROFILE_ID) {
-        // Match artifact reads: named people cannot read incognito; named roles
-        // additionally apply the session catalog's creator/visibility ceiling.
+        // Keep roleless standalone reads of legacy rows; explicit ACL and
+        // named-role reads still use the live confidential visibility policy.
         if (entry.incognito || isIncognitoSessionKey(loaded.canonicalKey)) {
           return undefined;
         }
         if (
-          (auth.operatorRolePolicy || messageId) &&
+          (!standaloneRead || config.gateway?.roles || entry.access !== undefined) &&
           !createProfileSessionEntryFilter({
             profileId,
             sessionCap: auth.operatorRolePolicy?.sessions.others,
             membership: loaded.membership,
-          })(loaded.canonicalKey, entry)
+            cfg: config,
+          })(loaded.canonicalKey, entry) &&
+          !(
+            params.channelRead &&
+            canReadChannelSession({
+              cfg: config,
+              key: loaded.canonicalKey,
+              entry,
+              isCreator: prepareSessionCreatorProfile(profileId),
+              scopes: auth.operatorScopes,
+              channelRead: params.channelRead,
+            })
+          )
         ) {
           return undefined;
         }
-      } else if (!profileId && isNamedOperatorRoleEnforcementEnabled(config)) {
+      } else if (
+        !profileId &&
+        (isNamedOperatorRoleEnforcementEnabled(config) ||
+          !canReadSessionAccess(config, loaded.canonicalKey, entry, () => false))
+      ) {
         return undefined;
       }
     }
@@ -389,6 +429,7 @@ function resolvePreparedAssistantMediaPolicy(
     localRoots,
     workspaceOnly,
     reader,
+    channelRead: params.channelRead,
     canAllow: auth.operatorScopes.includes("operator.admin"),
   };
 }

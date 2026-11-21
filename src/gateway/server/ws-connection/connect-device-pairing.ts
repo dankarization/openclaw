@@ -198,6 +198,8 @@ export async function authorizeGatewayConnectDevice(
     roleConfiguredHumanOperator &&
     configSnapshot.gateway?.roles?.default &&
     !sharedSecretOwner &&
+    authMethod !== "device-token" &&
+    authMethod !== "bootstrap-token" &&
     !authResult.user?.trim() &&
     state.remoteIngressPrincipal?.operatorRoleActor.kind !== "operator"
   ) {

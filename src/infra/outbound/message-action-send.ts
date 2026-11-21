@@ -694,6 +694,7 @@ export async function executeMessageSend(ctx: ResolvedActionContext): Promise<Me
   if (
     !dryRun &&
     !input.gatewayOwnedDelivery &&
+    !input.webchatSourceReply &&
     send.deliveredPayloads?.length &&
     delivery?.status === "settled" &&
     !delivery.partialDelivery

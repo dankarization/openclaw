@@ -97,11 +97,21 @@ describe("canonical session numeric metadata", () => {
 
   it("keeps a graceful resume marker private and scoped to its current incarnation", () => {
     const resumeAfterRestart = {};
+    const conversationLabelRefinement = {
+      sessionId: "session",
+      lifecycleRevision: "incarnation",
+      managedTitle: "Generated title",
+      phase: "countdown" as const,
+      remainingMessages: 4,
+      seenMessageIds: ["turn-1"],
+      inputMessages: ["approved input"],
+    };
     const entry = admitCanonicalSessionEntry({
       sessionId: "session",
       lifecycleRevision: "incarnation",
       updatedAt: 1,
       resumeAfterRestart,
+      conversationLabelRefinement,
       lifecycleRestartScope: "token-a",
       mainRestartRecovery: { cycleId: "upgrade", revision: 1, executionIdentity: "retired" },
       restartRecoveryOperatorSource: { snapshot: { obsolete: true } },
@@ -112,16 +122,19 @@ describe("canonical session numeric metadata", () => {
       lifecycleRevision: "incarnation",
       updatedAt: 1,
       resumeAfterRestart,
+      conversationLabelRefinement,
       lifecycleRestartScope: "token-a",
       mainRestartRecovery: { cycleId: "upgrade" },
     });
     const publicEntry = projectPublicSessionEntry(entry);
     expect(publicEntry).not.toHaveProperty("resumeAfterRestart");
+    expect(publicEntry).not.toHaveProperty("conversationLabelRefinement");
     expect(publicEntry).not.toHaveProperty("lifecycleRestartScope");
     expect(publicEntry).not.toHaveProperty("mainRestartRecovery");
     expect(preserveGenerationPrivateFields(entry, { label: "Renamed" })).toMatchObject({
       label: "Renamed",
       resumeAfterRestart,
+      conversationLabelRefinement,
       lifecycleRestartScope: "token-a",
     });
     for (const next of [

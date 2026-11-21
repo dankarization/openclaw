@@ -64,6 +64,7 @@ import {
   resolveAttachmentMediaPolicy,
   resolveExtraActionMediaSourceParamKeysAsync,
 } from "./message-action-params.js";
+import { hasAcceptedMessageActionResult } from "./message-action-result-acceptance.js";
 import { prepareMessageRoute, resolveMessageTarget } from "./message-action-routing.js";
 import { withSendNormalization } from "./message-action-send-payload.js";
 import { buildMessagePayload, executeMessageSend } from "./message-action-send.js";
@@ -525,7 +526,7 @@ async function handleInternalSourceReplySendAction(
 
 export async function runMessageAction(input: MessageActionInput): Promise<MessageActionResult> {
   throwIfAborted(input.abortSignal);
-  const cfg = input.cfg;
+  let cfg = input.cfg;
   let params = { ...input.params };
   const resolvedAgentId =
     input.agentId ??
@@ -552,7 +553,30 @@ export async function runMessageAction(input: MessageActionInput): Promise<Messa
   if (action === "send" && hasPollCreationParams(params)) {
     throw new Error('Poll fields require action "poll"; use action "poll" instead of "send".');
   }
-  if (await shouldUseInternalSourceReplySink(input, params)) {
+  if (input.webchatLocalOnly) {
+    return handleInternalSourceReplySendAction(
+      { ...input, agentId: resolvedAgentId, sourceReplyFinal: false },
+      params,
+    );
+  }
+  let localSourceResult: MessageActionResult | undefined;
+  if (input.webchatSourceReply) {
+    const sourceTurnId = input.messageActionAuthorization?.toolContext?.currentSourceTurnId;
+    const idempotencyKey = normalizeOptionalString(params.idempotencyKey);
+    const transcriptKey =
+      input.sourceReplyFinal === true && idempotencyKey && sourceTurnId
+        ? `${idempotencyKey}:terminal-receipt:${sourceTurnId}`
+        : idempotencyKey;
+    localSourceResult = await handleInternalSourceReplySendAction(
+      { ...input, agentId: resolvedAgentId, sourceReplyFinal: false },
+      transcriptKey ? { ...params, idempotencyKey: transcriptKey } : params,
+    );
+    if (input.resolveExternalConfig) {
+      cfg = await input.resolveExternalConfig();
+      input = { ...input, cfg };
+    }
+  }
+  if (!input.webchatSourceReply && (await shouldUseInternalSourceReplySink(input, params))) {
     return handleInternalSourceReplySendAction({ ...input, agentId: resolvedAgentId }, params);
   }
   if (params.clawhub !== undefined) {
@@ -712,7 +736,25 @@ export async function runMessageAction(input: MessageActionInput): Promise<Messa
         }
       }
       if (action === "send") {
-        return executeMessageSend(context);
+        const result = await executeMessageSend(context);
+        if (!localSourceResult || !hasAcceptedMessageActionResult(result)) {
+          return result;
+        }
+        const localDetails = asOptionalRecord(getToolResult(localSourceResult)?.details);
+        const externalResult = getToolResult(result) ?? jsonResult(result.payload);
+        return {
+          ...result,
+          toolResult: {
+            ...externalResult,
+            details: {
+              ...asOptionalRecord(externalResult.details),
+              sourceReplySink: localDetails?.sourceReplySink,
+              sourceReply: localDetails?.sourceReply,
+              sourceReplyTranscriptOwner: localDetails?.sourceReplyTranscriptOwner,
+              idempotencyKey: localDetails?.idempotencyKey,
+            },
+          },
+        };
       }
       if (action === "poll") {
         return executeMessagePoll(context);

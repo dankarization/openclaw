@@ -77,6 +77,13 @@ function requesterProfile(text: string) {
 }
 
 describe("prepareChatSendUserTurn", () => {
+  it.each([false, true, undefined])("preserves explicit delivery opt-out %s", (deliver) => {
+    const prepared = prepareTurn({
+      request: { p: { sessionKey: "agent:main:main", message: "hello", idempotencyKey: "turn-1", ...(deliver === undefined ? {} : { deliver }) } },
+    });
+    expect(finalizeInboundContext(prepared.ctx).WebchatExternalDeliveryDisabled).toBe(deliver === false ? true : undefined);
+  });
+
   it.each([
     { id: GATEWAY_CLIENT_IDS.CONTROL_UI, mode: GATEWAY_CLIENT_MODES.UI },
     { id: GATEWAY_CLIENT_IDS.WEBCHAT_UI, mode: GATEWAY_CLIENT_MODES.WEBCHAT },

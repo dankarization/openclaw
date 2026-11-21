@@ -1,12 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ModelProviderConfig } from "../config/types.models.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import type { PluginMetadataSnapshot } from "../plugins/plugin-metadata-snapshot.types.js";
 import { createPluginMetadataSnapshotFixture } from "../plugins/plugin-metadata.test-support.js";
+import * as providerPolicy from "../plugins/provider-policy-surface.js";
 import { resolveEmbeddedRuntimeModelPolicy } from "./embedded-agent-runner/run/setup.js";
 import { modelDefinition } from "./model-auth.fixtures.test-support.js";
 import { providerConfig } from "./model-catalog-fixtures.test-support.js";
 import type { ModelCatalogEntry } from "./model-catalog.types.js";
+import { createModelVisibilityPolicy } from "./model-visibility-policy.js";
 import { prepareModelCatalogPublication } from "./prepared-model-runtime.catalog-publication.js";
 import { prepareCapturedRuntimeFacts } from "./prepared-model-runtime.configured-catalog.js";
 import {
@@ -297,6 +299,91 @@ describe("configured catalog authority", () => {
     });
     if (custom) {
       expect(rows[0]!.inference).not.toHaveProperty("decision");
+    }
+  });
+  it.each([
+    { declaredChat: true, configuredChat: undefined, trustedRoute: true, allowed: true },
+    { declaredChat: false, configuredChat: undefined, trustedRoute: true, allowed: false },
+    { declaredChat: true, configuredChat: false, trustedRoute: true, allowed: false },
+    { declaredChat: true, configuredChat: undefined, trustedRoute: false, allowed: false },
+  ])("uses route-owned chat facts without promoting unsupported routes (%j)", (scenario) => {
+    const inference = {
+      chat: scenario.declaredChat,
+      decision: { protocol: "fixture", input: ["text" as const] },
+    };
+    const metadata = createPluginMetadataSnapshotFixture({
+      plugins: [
+        {
+          id: "fixture",
+          providers: ["fixture"],
+          modelCatalog: {
+            providers: {
+              fixture: {
+                api: "openai-responses",
+                baseUrl: "https://catalog.fixture.invalid/v1",
+                models: [{ id: "dual", name: "Dual", inference }],
+              },
+            },
+          },
+        },
+      ],
+    });
+    const config: OpenClawConfig = {
+      agents: { defaults: { modelPolicy: { allow: ["fixture/dual"] } } },
+      models: {
+        providers: {
+          fixture: {
+            api: "openai-responses",
+            baseUrl: "https://catalog.fixture.invalid/v1",
+            models: [
+              modelDefinition("dual", {
+                api: "openai-chatgpt-responses",
+                baseUrl: "https://native.fixture.invalid/codex",
+                ...(scenario.configuredChat === false ? { inference: { chat: false } } : {}),
+              }),
+            ],
+          },
+        },
+      },
+    };
+    const loadPolicy = vi
+      .spyOn(providerPolicy, "resolveDirectBundledProviderPolicySurface")
+      .mockReturnValue({
+        resolveModelRoutes: () => ({
+          kind: "routes",
+          routes: [
+            {
+              api: "openai-chatgpt-responses",
+              baseUrl: scenario.trustedRoute
+                ? "https://native.fixture.invalid/codex"
+                : "https://other.fixture.invalid/codex",
+              authRequirement: "subscription",
+              requestTransportOverrides: "none",
+              inference: { chat: true },
+            },
+          ],
+        }),
+      });
+    try {
+      const registry = ModelRegistry.create(AuthStorage.inMemory({}), "captured:route-chat", {
+        config,
+        includePluginCatalogs: false,
+        pluginMetadataSnapshot: metadata,
+      });
+      const catalog = captureRegistry(registry, config, metadata).modelCatalog.entries;
+      const row = catalog.find((entry) => entry.provider === "fixture" && entry.id === "dual");
+      expect(row).toBeDefined();
+      expect(row?.inference?.chat === true).toBe(scenario.allowed);
+      expect(row?.inference ?? {}).not.toHaveProperty("decision");
+      const policy = createModelVisibilityPolicy({
+        cfg: config,
+        catalog,
+        defaultProvider: "fixture",
+        agentId: "main",
+      });
+      expect(policy.allows({ provider: "fixture", model: "dual" })).toBe(scenario.allowed);
+    } finally {
+      loadPolicy.mockRestore();
     }
   });
 });

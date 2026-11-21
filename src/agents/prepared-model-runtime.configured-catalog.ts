@@ -1,6 +1,14 @@
 import type { ModelCatalogRef } from "@openclaw/model-catalog-core/model-catalog-refs";
+import {
+  findConfiguredProviderModel,
+  resolveMergedModelProviderConfig,
+} from "../config/model-provider-config.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import type { PluginMetadataSnapshot } from "../plugins/plugin-metadata-snapshot.types.js";
+import {
+  createProviderModelRoutesResolver,
+  resolveProviderModelPolicySurface,
+} from "../plugins/provider-model-routes.js";
 import { groupPluginRecords as groupRecords } from "../plugins/record-groups.js";
 import { dedupeByKey, indexFirstByKey } from "../shared/dedupe-by-key.js";
 import { modelCatalogRowToEntry } from "./model-catalog-entry.js";
@@ -107,15 +115,63 @@ export function prepareCapturedRuntimeFacts(
     manifestCatalog.filter((entry) => entry.inference !== undefined),
     keyOf,
   );
+  const routeResolvers = new Map<string, ReturnType<typeof createProviderModelRoutesResolver>>();
   const entries = dedupeByKey(
     [
       ...facts.modelCatalog.entries.map((entry) => {
         const declared = declaredByIdentity.get(keyOf(entry));
         // Configured membership must retain the exact route's inference contract.
         // Route changes clear its capabilities without promoting typed rows to chat.
-        return declared
-          ? { ...entry, inference: overlayCatalogMetadata(declared, entry).inference }
-          : entry;
+        if (!declared) {
+          return entry;
+        }
+        const inference =
+          overlayCatalogMetadata(declared, entry).inference ??
+          (!modelTransportRoutesMatch(declared, entry) ? { chat: false } : undefined);
+        if (
+          inference?.chat === true ||
+          declared.inference?.chat !== true ||
+          !entry.api ||
+          !entry.baseUrl ||
+          modelTransportRoutesMatch(declared, entry)
+        ) {
+          return { ...entry, inference };
+        }
+        const config = params.agentFacts.input.config;
+        const authored = findConfiguredProviderModel(
+          resolveMergedModelProviderConfig(config, entry.provider),
+          entry.provider,
+          entry.id,
+        );
+        if (authored?.inference?.chat === false) {
+          return { ...entry, inference };
+        }
+        // A provider can independently attest chat on this exact route; do not
+        // transfer the manifest's Decision capability or override an explicit veto.
+        let resolveRoute = routeResolvers.get(entry.provider);
+        if (!resolveRoute) {
+          resolveRoute = createProviderModelRoutesResolver({
+            provider: entry.provider,
+            config,
+            env: params.agentFacts.input.env,
+            surface: resolveProviderModelPolicySurface(
+              entry.provider,
+              params.workspaceFacts.pluginMetadataSnapshot,
+            ),
+          });
+          routeResolvers.set(entry.provider, resolveRoute);
+        }
+        const route = resolveRoute({
+          modelId: entry.id,
+          observedRoutes: [{ api: entry.api, baseUrl: entry.baseUrl }],
+        });
+        const supported =
+          route?.kind === "routes" &&
+          route.routes.some(
+            (candidate) =>
+              candidate.inference?.chat === true && modelTransportRoutesMatch(candidate, entry),
+          );
+        return { ...entry, inference: supported ? { chat: true } : inference };
       }),
       // Typed-only rows have no conversational registry Model. Carry their canonical
       // manifest facts into the same prepared generation instead of inventing chat defaults.

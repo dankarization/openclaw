@@ -675,6 +675,10 @@ export const gatewayMethodsTestInclude = [
 ];
 // Gateway server tests that need private process state or a private module graph.
 export const gatewayServerIsolatedTestFiles = [
+  // This real Gateway test substitutes the Telegram network boundary.
+  "src/gateway/server.chat-webchat-telegram-receipt.integration.test.ts",
+  // Real Gateway and linked identity state require the host broker.
+  "src/gateway/gateway.linked-channel-display.e2e.test.ts",
   // Real provider and subagent lifecycle registrations must survive the whole scenario.
   "src/gateway/gateway.prompt-cache.test.ts",
   "src/gateway/gateway-plugin-notice.prompt-cache.test.ts",

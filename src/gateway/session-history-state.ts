@@ -23,6 +23,10 @@ import {
   createSubagentCoordinationHistoryProjection,
   projectForwardedMessages,
 } from "./chat-display-projection.history.js";
+import {
+  prepareLinkedChannelSenderDisplay,
+  type LinkedChannelSenderDisplayResolver,
+} from "./chat-display-projection.linked-sender-preparation.js";
 import { resolveCurrentUserProfileDisplay } from "./current-user-profile-display.js";
 import {
   createPreparedSessionHistorySubagentProjection,
@@ -57,6 +61,7 @@ export async function readSessionHistorySnapshotAsync(
       readers: createSessionActorTranscriptReader(memory),
       readOnly: true,
       resolveCurrentUserProfileDisplay,
+      prepareLinkedChannelDisplay: prepareLinkedChannelSenderDisplay,
       resolveCronJobName: () => undefined,
     });
     const resolveCronJobName = await prepareForwardedMessageCronJobNameResolver(
@@ -74,6 +79,7 @@ export async function readSessionHistorySnapshotAsync(
     const snapshot = await readSessionHistorySnapshotKernel(params, {
       readers: sessionTranscriptReaders,
       resolveCurrentUserProfileDisplay,
+      prepareLinkedChannelDisplay: prepareLinkedChannelSenderDisplay,
       // Match the worker projection: install current names on the completed page below.
       resolveCronJobName: () => undefined,
     });
@@ -216,6 +222,7 @@ export class SessionHistorySseState {
       ...this.sentHistory.messages,
       message,
     ]);
+    const resolveLinkedChannelSenderDisplay = await prepareLinkedChannelSenderDisplay([message]);
     // The stream queue retains ordering; its publisher reauthorizes before applying this transition.
     return () => {
       memory?.assertCurrent();
@@ -224,6 +231,7 @@ export class SessionHistorySseState {
         messageSeq,
         subagentCoordination,
         resolveCronJobName,
+        resolveLinkedChannelSenderDisplay,
       );
     };
   }
@@ -233,6 +241,7 @@ export class SessionHistorySseState {
     messageSeq: number,
     subagentCoordination: SubagentCoordinationDisplayResolver | undefined,
     resolveCronJobName: (jobId: string) => string | undefined,
+    resolveLinkedChannelSenderDisplay: LinkedChannelSenderDisplayResolver,
   ): InlineSessionHistoryAppend | null {
     subagentCoordination?.assertCurrent?.();
     const hadPendingTurnBoundary = this.turnBoundaryPending;
@@ -245,6 +254,7 @@ export class SessionHistorySseState {
       turnBoundaryPending: hadPendingTurnBoundary,
       assistantErrorPending: this.assistantErrorPending,
       resolveCronJobName,
+      resolveLinkedChannelSenderDisplay,
     });
     // Projection can split, drop, or rewrite raw transcript messages. When one
     // raw append changes multiple visible rows, callers must refresh instead of
@@ -256,6 +266,7 @@ export class SessionHistorySseState {
         maxChars: this.maxChars,
         resolveCurrentUserProfileDisplay,
         resolveCronJobName,
+        resolveLinkedChannelSenderDisplay,
       },
     );
     subagentCoordination?.assertCurrent?.();

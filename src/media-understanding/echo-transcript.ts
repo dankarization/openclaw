@@ -34,6 +34,9 @@ export async function sendTranscriptEcho(params: {
   failureLogPrefix?: string;
 }): Promise<void> {
   const { ctx, cfg, transcript } = params;
+  if (ctx.AudioTranscriptEchoEnabled === false) {
+    return;
+  }
   const channel = ctx.Provider ?? ctx.Surface ?? "";
   const to = ctx.OriginatingTo ?? ctx.From ?? "";
 
@@ -89,6 +92,7 @@ export async function sendTranscriptEcho(params: {
       accountId: ctx.AccountId ?? undefined,
       threadId: ctx.MessageThreadId ?? undefined,
       payloads: [{ text }],
+      ...(cfg.tools?.media?.audio?.echoSilent === true ? { silent: true } : {}),
       bestEffort: !deliveryIntentId,
       durability: deliveryIntentId ? "required" : "best_effort",
       ...(deliveryIntentId

@@ -3,6 +3,7 @@
 // Node-driven integration: real Gateway transcript producers feed the UI reducer
 // and renderer. Its server/state imports must not enter the browser module graph.
 
+import { readFile } from "node:fs/promises";
 import { For } from "solid-js";
 import { beforeEach, expect, it, vi } from "vitest";
 import { projectChatDisplayMessagesWithState } from "../../../../../src/gateway/chat-display-projection.js";
@@ -187,5 +188,132 @@ it.each(["history", "live", "live-before-run-adoption"])(
       "plugins.catalog.get",
       { id: recommendation.id },
     ]);
+  },
+);
+
+it.each(["live", "reload"])(
+  "renders a provisional local reply once after external delivery fails through %s",
+  async (path) => {
+    const sessionKey = "agent:main:telegram:group:-100123:thread:topic:991:sender:42";
+    const runId = "telegram-error-run";
+    const answer = "Visible even when Telegram is unavailable.";
+    const persisted = {
+      role: "assistant",
+      api: "openclaw-transcript",
+      provider: "openclaw",
+      model: "delivery-mirror",
+      content: [{ type: "text", text: answer }],
+      openclawDeliveryMirror: { kind: "message-tool-source-reply", final: false },
+      timestamp: 1_780_000_000_000,
+      __openclaw: { id: "local-receipt", seq: 2, runId },
+    };
+    let messages: unknown[];
+    if (path === "live") {
+      const { state } = createSessionEventState({ sessionKey, chatRunId: runId });
+      const { payload } = projectSessionMessagePayload({
+        message: persisted,
+        messageId: "local-receipt",
+        messageSeq: 2,
+        sessionKey,
+        runId,
+        sessionSnapshot: { hasActiveRun: true },
+      });
+      expect(payload).toBeDefined();
+      emitGatewayEvent(state, "session.message", payload);
+      // There is no successful message-tool result when the adapter throws.
+      messages = state.chatMessages;
+    } else {
+      messages = attachHistoryActivity(projectChatDisplayMessagesWithState([persisted])).messages;
+    }
+    const frames = projectTranscriptChain(buildItems({ sessionKey, messages }), {
+      sessionKey,
+      runWorking: false,
+      searchActive: false,
+      messages,
+    }).transcriptItems;
+    const { client } = createClient(async () => {
+      throw new Error("Unexpected RPC");
+    });
+    const context = createInitializationContext(client);
+    const view = mountSolid(
+      () => (
+        <For each={frames}>
+          {(frame) =>
+            frame.kind === "agent-run-frame" ? (
+              <AgentRunFrame
+                frame={frame}
+                options={{
+                  streamOptions: {},
+                  partDependencies: (part) => [part],
+                  renderGroupOptions: () => ({ agentId: "main", showReasoning: false }),
+                  isWorkExpanded: () => false,
+                  onToggleWork: () => {},
+                }}
+              />
+            ) : undefined
+          }
+        </For>
+      ),
+      { wrapper: createSolidApplicationContextProvider(context).wrapper },
+    );
+    await waitForSolid(() => expect(view.container.textContent).toContain(answer));
+    expect(view.container.textContent?.split(answer)).toHaveLength(2);
+  },
+);
+
+it.skipIf(!process.env.OPENCLAW_TERRA_198785_PROOF)(
+  "renders the real Gateway WebSocket receipt and actual RPC reload exactly once",
+  async () => {
+    const proof = JSON.parse(await readFile(process.env.OPENCLAW_TERRA_198785_PROOF!, "utf8")) as {
+      sessionKey: string;
+      runId: string;
+      text: string;
+      event: unknown;
+      history: unknown[];
+    };
+    const { state } = createSessionEventState({
+      sessionKey: proof.sessionKey,
+      chatRunId: proof.runId,
+    });
+    emitGatewayEvent(state, "session.message", proof.event);
+    for (const messages of [state.chatMessages, proof.history]) {
+      const frames = projectTranscriptChain(
+        buildItems({ sessionKey: proof.sessionKey, messages }),
+        {
+          sessionKey: proof.sessionKey,
+          runWorking: false,
+          searchActive: false,
+          messages,
+        },
+      ).transcriptItems;
+      const { client } = createClient(async () => {
+        throw new Error("Unexpected RPC");
+      });
+      const context = createInitializationContext(client);
+      const view = mountSolid(
+        () => (
+          <For each={frames}>
+            {(frame) =>
+              frame.kind === "agent-run-frame" ? (
+                <AgentRunFrame
+                  frame={frame}
+                  options={{
+                    streamOptions: {},
+                    partDependencies: (part) => [part],
+                    renderGroupOptions: () => ({ agentId: "main", showReasoning: false }),
+                    isWorkExpanded: () => false,
+                    onToggleWork: () => {},
+                  }}
+                />
+              ) : undefined
+            }
+          </For>
+        ),
+        { wrapper: createSolidApplicationContextProvider(context).wrapper },
+      );
+      await waitForSolid(() => expect(view.container.textContent).toContain(proof.text));
+      expect(view.container.textContent?.split(proof.text)).toHaveLength(2);
+      view.unmount();
+    }
   },
 );

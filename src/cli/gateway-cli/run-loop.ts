@@ -1022,6 +1022,7 @@ export async function runGatewayLoop(params: GatewayRunLoopParams): Promise<numb
     getTerminalHostedStop: () =>
       terminalHostedStop === hostLifecycle ? terminalHostedStop : undefined,
     updateSuccessor,
+    beforeRestart: params.beforeRestart,
     request,
   });
   // These handlers own SIGINT/SIGTERM now; retire the startup owner in the same turn.

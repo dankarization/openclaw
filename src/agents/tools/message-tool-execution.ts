@@ -1,3 +1,4 @@
+import { parseStrictInteger } from "@openclaw/normalization-core/number-coercion";
 import {
   normalizeOptionalLowercaseString,
   normalizeOptionalString,
@@ -28,9 +29,13 @@ import { isDeliveredCurrentSourceReplyAsync } from "../../infra/outbound/source-
 import { readBooleanParam } from "../../plugin-sdk/boolean-param.js";
 import { stringifyRouteThreadId } from "../../plugin-sdk/channel-route.js";
 import { getPreparedMessageToolCatalog } from "../../plugins/prepared-message-tool-catalog.js";
-import { isCronSessionKey, parseAgentSessionKey } from "../../routing/session-key.js";
+import {
+  isCronSessionKey,
+  normalizeAccountId,
+  parseAgentSessionKey,
+} from "../../routing/session-key.js";
 import { withChannelReadAuthority } from "../../shared/channel-read-authority.js";
-import { normalizeMessageChannel } from "../../utils/message-channel.js";
+import { INTERNAL_MESSAGE_CHANNEL, normalizeMessageChannel } from "../../utils/message-channel.js";
 import { resolveSessionAgentId } from "../agent-scope.js";
 import { runWithAgentToolSourceExecutionScope } from "../agent-tool-source-execution-guard.js";
 import * as embeddedMessageDelivery from "../embedded-agent-message-delivery.js";
@@ -131,7 +136,6 @@ function* createMessageToolSteps(
     (options?.agentThreadId != null
       ? stringifyRouteThreadId(options.agentThreadId)
       : inferredCurrentChannel.currentThreadTs);
-  const replyToMode = options?.replyToMode ?? (currentThreadTs ? "all" : undefined);
   const agentAccountId =
     resolveAgentAccountId(options?.agentAccountId) ?? inferredCurrentChannel.accountId;
   const sourceReplySinkDeliveryMode = resolveSourceReplySinkDeliveryMode(
@@ -249,7 +253,7 @@ function* createMessageToolSteps(
       } = turnAuthority.beginInvocation(action);
       const messageActionAuthorization: MessageActionAuthorization = trustedTurnContext ?? {};
       const requestedAccountId = readToolStringParam(params, "accountId");
-      const effectiveCurrentChannel = await resolveEffectiveCurrentChannelContextForRequest(
+      const resolvedCurrentChannel = await resolveEffectiveCurrentChannelContextForRequest(
         options,
         {
           config: rawConfig,
@@ -259,6 +263,77 @@ function* createMessageToolSteps(
           preparedMessageToolCatalog,
         },
       );
+      // A WebChat turn can operate on a Telegram-owned session. The persisted
+      // route carries the provider topic; the session-key suffix is only identity.
+      const delivery =
+        sessionEntry?.delivery?.kind === "external" ? sessionEntry.delivery : undefined;
+      const storedRoute = delivery?.context;
+      const isImplicitWebchatSource =
+        action === "send" &&
+        normalizeMessageChannel(options?.currentChannelProvider) === INTERNAL_MESSAGE_CHANNEL &&
+        (!options?.runSessionKey || options.runSessionKey === options.agentSessionKey) &&
+        Boolean(options?.sessionId && sessionEntry?.sessionId === options.sessionId) &&
+        normalizeMessageChannel(storedRoute?.channel) === "telegram" &&
+        Boolean(normalizeOptionalString(storedRoute?.to)) &&
+        ![
+          "channel",
+          "target",
+          "to",
+          "channelId",
+          "targets",
+          "accountId",
+          "threadId",
+          "messageThreadId",
+          "replyTo",
+        ].some((key) => params[key] !== undefined) &&
+        params.topLevel !== true;
+      const eligibleWebchatSource =
+        isImplicitWebchatSource &&
+        (!options?.inputProvenance || options.inputProvenance.kind === "external_user") &&
+        !options?.sourceReplyOnly &&
+        !messageActionAuthorization.scheduled;
+      const webchatSourceReply = eligibleWebchatSource && !options?.webchatExternalDeliveryDisabled;
+      const webchatLocalOnly =
+        eligibleWebchatSource && options?.webchatExternalDeliveryDisabled === true;
+      const storedThreadId = stringifyRouteThreadId(storedRoute?.threadId);
+      const threadRequired = /:(?:topic|thread):/iu.test(options?.agentSessionKey ?? "");
+      const numericThreadId = parseStrictInteger(storedThreadId);
+      const invalidTelegramThread =
+        webchatSourceReply &&
+        ((threadRequired && !storedThreadId) ||
+          (storedThreadId !== undefined &&
+            (numericThreadId === undefined || numericThreadId <= 0)));
+      const invalidTelegramAccount =
+        webchatSourceReply &&
+        Boolean(storedRoute?.accountId && delivery?.route.accountId) &&
+        normalizeAccountId(storedRoute?.accountId) !==
+          normalizeAccountId(delivery?.route.accountId);
+      const effectiveCurrentChannel =
+        webchatSourceReply && storedRoute
+          ? {
+              currentChannelProvider: "telegram",
+              currentChannelId: storedRoute.to,
+              currentMessagingTarget: storedRoute.to,
+              currentChatType: delivery?.origin.chatType ?? delivery?.route.target?.chatType,
+              currentThreadTs: stringifyRouteThreadId(storedRoute.threadId),
+              accountId: storedRoute.accountId,
+            }
+          : webchatLocalOnly
+            ? {
+                currentChannelProvider: INTERNAL_MESSAGE_CHANNEL,
+                currentChannelId: options?.currentChannelId,
+                currentMessagingTarget: options?.currentMessagingTarget,
+                currentChatType: options?.currentChatType,
+                currentThreadTs: undefined,
+                accountId: undefined,
+              }
+            : resolvedCurrentChannel;
+      const effectiveAgentAccountId = webchatSourceReply
+        ? resolveAgentAccountId(storedRoute?.accountId ?? delivery?.route.accountId)
+        : agentAccountId;
+      const executionThreadTs = webchatSourceReply
+        ? effectiveCurrentChannel.currentThreadTs
+        : currentThreadTs;
       const decisions = createMessageToolDecisionRecorder({
         actionId: toolCallId,
         action,
@@ -304,7 +379,7 @@ function* createMessageToolSteps(
             currentMessagingTarget: effectiveCurrentChannel.currentMessagingTarget,
             currentThreadTs,
             currentMessageId: options.currentMessageId,
-            currentAccountId: agentAccountId,
+            currentAccountId: effectiveAgentAccountId,
             trustedTurnContext,
           }),
         );
@@ -435,7 +510,7 @@ function* createMessageToolSteps(
         targets: params.targets,
         fallbackChannel: effectiveCurrentChannel.currentChannelProvider,
         accountId: requestedAccountId,
-        fallbackAccountId: scheduledAccountId ?? agentAccountId,
+        fallbackAccountId: scheduledAccountId ?? effectiveAgentAccountId,
       });
       // Broadcast execution only narrows on an explicit non-all channel. Target
       // prefixes cannot authorize fewer providers than the runner will execute.
@@ -473,24 +548,40 @@ function* createMessageToolSteps(
         scope.accountId = explicitAccountId;
         params.accountId = explicitAccountId;
       }
-      const scopedTargets = getScopedChannelsCommandSecretTargets({
-        config: rawConfig,
-        channel: broadcastAccountPlan ? undefined : scope.channel,
-        ...(broadcastAccountPlan ? { channels: broadcastAccountPlan.secretChannels } : {}),
-        accountId: scope.accountId,
-      });
-      const cfg = (
-        await resolveCommandSecretRefsViaGateway({
+      // The dual-surface path resolves external secrets only after the local
+      // transcript owner has published the reply.
+      let cfg = rawConfig;
+      const resolveMessageConfig = async () => {
+        if (invalidTelegramThread || invalidTelegramAccount) {
+          throw new Error(
+            invalidTelegramAccount
+              ? "The saved Telegram account binding is inconsistent; the local reply was recorded but Telegram delivery was not attempted."
+              : "The saved Telegram topic is missing or invalid; the local reply was recorded but Telegram delivery was not attempted.",
+          );
+        }
+        const scopedTargets = getScopedChannelsCommandSecretTargets({
           config: rawConfig,
-          commandName: "tools.message",
-          targetIds: scopedTargets.targetIds,
-          ...(scopedTargets.allowedPaths ? { allowedPaths: scopedTargets.allowedPaths } : {}),
-          mode: "enforce_resolved",
-        })
-      ).resolvedConfig;
-      assertActionCurrent();
+          channel: broadcastAccountPlan ? undefined : scope.channel,
+          ...(broadcastAccountPlan ? { channels: broadcastAccountPlan.secretChannels } : {}),
+          accountId: scope.accountId,
+        });
+        cfg = (
+          await resolveCommandSecretRefsViaGateway({
+            config: rawConfig,
+            commandName: "tools.message",
+            targetIds: scopedTargets.targetIds,
+            ...(scopedTargets.allowedPaths ? { allowedPaths: scopedTargets.allowedPaths } : {}),
+            mode: "enforce_resolved",
+          })
+        ).resolvedConfig;
+        assertActionCurrent();
+        return cfg;
+      };
+      if (!webchatSourceReply && !webchatLocalOnly) {
+        await resolveMessageConfig();
+      }
 
-      const accountId = explicitAccountId ?? scheduledAccountId ?? agentAccountId;
+      const accountId = explicitAccountId ?? scheduledAccountId ?? effectiveAgentAccountId;
       const pollVoteEchoRoute = resolvePollVoteEchoRoute({
         action,
         args: params,
@@ -511,14 +602,17 @@ function* createMessageToolSteps(
 
       const toolContext = buildMessageToolThreadingContext(
         effectiveCurrentChannel,
-        { currentThreadTs, replyToMode },
+        {
+          currentThreadTs: executionThreadTs,
+          replyToMode: options?.replyToMode ?? (executionThreadTs ? "all" : undefined),
+        },
         options,
       );
       const groupThread = prepareMessageToolGroupThread(params, {
         action,
         channel: scope.channel,
         accountId,
-        currentAccountId: agentAccountId,
+        currentAccountId: effectiveAgentAccountId,
         toolContext,
         catalog: preparedMessageToolCatalog,
       });
@@ -537,9 +631,11 @@ function* createMessageToolSteps(
           actionIdempotencyKey = `${runId}:message-tool:${autogeneratedDeliveryFingerprint}:${operationId}`;
         }
       }
-      const actionParams = actionIdempotencyKey
-        ? { ...params, idempotencyKey: actionIdempotencyKey }
-        : params;
+      const actionParams = {
+        ...params,
+        ...(webchatSourceReply && executionThreadTs ? { threadId: executionThreadTs } : {}),
+        ...(actionIdempotencyKey ? { idempotencyKey: actionIdempotencyKey } : {}),
+      };
       const hasExactSourceTurn =
         action === "send" &&
         normalizeOptionalString(trustedTurnContext?.toolContext?.currentSourceTurnId) !== undefined;
@@ -591,14 +687,21 @@ function* createMessageToolSteps(
                   workspaceMediaAccess: sandboxWorkspaceMediaAccess,
                   sandboxRoot: options?.sandboxRoot,
                   sandboxContainerWorkdir: options?.sandboxContainerWorkdir,
-                  sourceReplyDeliveryMode: sourceReplySinkDeliveryMode,
+                  sourceReplyDeliveryMode: webchatSourceReply
+                    ? "automatic"
+                    : sourceReplySinkDeliveryMode,
+                  webchatSourceReply,
+                  webchatLocalOnly,
+                  ...(webchatSourceReply ? { resolveExternalConfig: resolveMessageConfig } : {}),
                   sourceReplyTranscriptOnly: options?.inputProvenance?.kind === "inter_session",
                   // Only an admitted channel source can arm terminal restart reconciliation.
-                  // Preserve progress even without a source turn: recovery must not
-                  // mistake its persisted mirror for a completed assistant reply.
+                  // A local WebChat receipt stays provisional until external settlement;
+                  // without a source turn it must not arm terminal recovery.
                   sourceReplyFinal: hasExactSourceTurn
                     ? sourceReplyFinal
-                    : action === "send" && sourceReplyFinal === false
+                    : webchatSourceReply ||
+                        webchatLocalOnly ||
+                        (action === "send" && sourceReplyFinal === false)
                       ? false
                       : undefined,
                   sourceReplyToolCallId: hasExactSourceTurn ? toolCallId : undefined,
@@ -661,7 +764,7 @@ function* createMessageToolSteps(
             channel: result.channel,
             actionParams: "to" in result ? { ...actionParams, target: result.to } : actionParams,
             accountId,
-            currentAccountId: agentAccountId,
+            currentAccountId: effectiveAgentAccountId,
             sessionKey: options?.agentSessionKey,
             toolContext,
             deliveredPayload: result.payload,

@@ -43,6 +43,7 @@ const dictationHarness = vi.hoisted(() => {
     constructor(
       private options: {
         onCommit: (transcript: string) => void;
+        onError: (message: string) => void | (() => void);
         prepareSession?: () => Promise<string | undefined>;
       },
     ) {
@@ -56,6 +57,7 @@ const dictationHarness = vi.hoisted(() => {
     }
     update(options: {
       onCommit: (transcript: string) => void;
+      onError: (message: string) => void | (() => void);
       prepareSession?: () => Promise<string | undefined>;
     }) {
       this.options = options;
@@ -71,6 +73,7 @@ const dictationHarness = vi.hoisted(() => {
   const harness = {
     options: null as null | {
       onCommit: (transcript: string) => void;
+      onError: (message: string) => void | (() => void);
       prepareSession?: () => Promise<string | undefined>;
     },
     controllers: [] as Controller[],
@@ -174,6 +177,19 @@ describe("DirectDictationControl", () => {
 
     expect(insertTranscript).not.toHaveBeenCalled();
     expect(onMessage).not.toHaveBeenCalled();
+  });
+
+  it("forwards only the active draft's notice resolution", () => {
+    const dismiss = vi.fn();
+    const onError = vi.fn(() => dismiss);
+    const { control } = fixture({ onError });
+    control.prepare("first");
+    const report = expectDefined(dictationHarness.options, "dictation options").onError;
+    expect(report("Transcription failed")).toBe(dismiss);
+    control.prepare("replacement");
+    expect(report("Obsolete failure")).toBeUndefined();
+    expect(onError).toHaveBeenCalledExactlyOnceWith("Transcription failed");
+    control.dispose();
   });
 
   it("starts canonical dictation from a plain microphone click", () => {

@@ -1,0 +1,165 @@
+import { beforeEach, expect, it, vi } from "vitest";
+import { setRuntimeConfigSnapshot } from "../../config/runtime-snapshot.js";
+import { upsertSessionEntryCore } from "../../config/sessions/session-accessor.js";
+import type { SessionEntry } from "../../config/sessions/types.js";
+import type { OpenClawConfig } from "../../config/types.openclaw.js";
+import { withOpenClawTestState } from "../../test-utils/openclaw-test-state.js";
+import { createSessionMessageSubscriberRegistry } from "../server-chat-state.js";
+import { handleGatewayRequest } from "../server-methods.js";
+import { roleClient, rolePolicyConfig } from "../session-sharing.test-utils.js";
+import { createHistoryReadContext } from "./chat-history.test-helpers.js";
+import { disposeSessionReadContexts } from "./sessions-read-cache.test-support.js";
+import { sessionSubscriptionHandlers } from "./sessions-subscriptions.js";
+import type { RespondFn } from "./types.js";
+
+const mocks = vi.hoisted(() => ({ linked: true, onHistory: () => {} }));
+vi.mock("../../state/user-channel-identity-operations.js", async (original) => ({
+  ...(await original<typeof import("../../state/user-channel-identity-operations.js")>()),
+  prepareUserProfileRoleAuthority: async (profileId: string) => ({
+    profileId,
+    isCurrent: () => true,
+  }),
+  listCanonicalUserChannelIdentities: async () => [],
+}));
+vi.mock("../session-channel-membership.js", () => ({
+  prepareTelegramGroupMemberships: async () =>
+    new Map([[JSON.stringify(["default", "-123"]), { isCurrent: () => mocks.linked }]]),
+}));
+vi.mock("./chat-history-handler.js", () => ({
+  handleChatHistoryRequest: async ({ respond }: { respond: RespondFn }) => {
+    mocks.onHistory();
+    respond(true, { messages: [] }, undefined);
+  },
+}));
+
+const key = "agent:main:telegram:group:-123";
+function row(access?: SessionEntry["access"]): SessionEntry {
+  return {
+    sessionId: "synthetic-group",
+    updatedAt: 1,
+    createdVia: "channel",
+    access,
+    createdActor: { type: "human", source: "channel", id: "123" },
+    delivery: {
+      kind: "external",
+      context: {},
+      route: { channel: "telegram", accountId: "default", target: { to: "telegram:-123" } },
+      origin: { provider: "telegram", chatType: "group", nativeChannelId: "-123" },
+    },
+  };
+}
+async function subscribe(access?: SessionEntry["access"], includeApprovals = false) {
+  return await withOpenClawTestState(
+    { scenario: "minimal", prepareProfileCatalog: true },
+    async (state) => {
+      const cfg: OpenClawConfig = {
+        ...rolePolicyConfig(),
+        agents: { ownership: "explicit", entries: { main: {} } },
+      };
+      cfg.gateway!.roles!.definitions!.none!.scopes!.push("operator.approvals");
+      await state.writeConfig(cfg);
+      setRuntimeConfigSnapshot(cfg);
+      const controller = new AbortController();
+      const client = roleClient("none", "ldap-subscription-staff");
+      client.connect.scopes!.push("operator.approvals");
+      client.connect.device = {
+        id: "synthetic-device",
+        publicKey: "key",
+        signature: "signature",
+        signedAt: 1,
+        nonce: "nonce",
+      };
+      Object.assign(client, { connId: "staff-browser", connectionSignal: controller.signal });
+      await upsertSessionEntryCore(
+        { agentId: "main", sessionKey: key, sessionId: "synthetic-group" },
+        row(access),
+      );
+      const subscribers = createSessionMessageSubscriberRegistry();
+      const context = await createHistoryReadContext({
+        getRuntimeConfig: () => cfg,
+        subscribeSessionMessageEvents: subscribers.subscribe,
+        unsubscribeSessionMessageEvents: subscribers.unsubscribe,
+      });
+      context.listSessionPendingApprovals = async () => ({
+        replay: { sessionKey: key, updatedAtMs: 42, approvals: [], truncated: false },
+        isCurrent: () => true,
+        release: () => {},
+      });
+      const respond = vi.fn<RespondFn>();
+      const params = {
+        key,
+        subscriptionId: "gui",
+        ...(includeApprovals ? { includeApprovals: true } : {}),
+        initialHistory: { limit: 80, maxBytes: 262144, toolResultMaxChars: 2000 },
+      };
+      try {
+        // Fresh connection: the first session RPC is the exact GUI subscription.
+        await handleGatewayRequest({
+          req: { type: "req", id: "gui", method: "sessions.messages.subscribe", params },
+          client,
+          context,
+          respond,
+          isWebchatConnect: () => false,
+          extraHandlers: sessionSubscriptionHandlers,
+        });
+        return { calls: respond.mock.calls, observers: subscribers.get(key).size };
+      } finally {
+        controller.abort();
+        subscribers.unsubscribeAll("staff-browser");
+        await disposeSessionReadContexts();
+      }
+    },
+  );
+}
+beforeEach(() => {
+  mocks.linked = true;
+  mocks.onHistory = () => {};
+});
+
+it("opens a linked group from a fresh staff GUI subscription with initial history", async () => {
+  const result = await subscribe();
+  expect(result.calls).toEqual([
+    [
+      true,
+      expect.objectContaining({
+        subscribed: true,
+        key,
+        agentId: "main",
+        initialHistory: { ok: true, payload: { messages: [] } },
+      }),
+      undefined,
+    ],
+  ]);
+  expect(result.observers).toBe(1);
+});
+
+it("denies private ACL and revocation while preparing initial history", async () => {
+  const privateResult = await subscribe({ mode: "creator" });
+  expect(privateResult.calls[0]?.[0]).toBe(false);
+  mocks.onHistory = () => {
+    mocks.linked = false;
+  };
+  const revoked = await subscribe();
+  expect(revoked.calls[0]?.[0]).toBe(false);
+  expect(revoked.observers).toBe(0);
+});
+
+it("opens a linked group on a fresh GUI subscription with approval replay", async () => {
+  const result = await subscribe(undefined, true);
+  expect(result.calls[0]?.[0]).toBe(true);
+  expect(result.calls[0]?.[1]).toEqual(
+    expect.objectContaining({
+      approvalReplay: expect.objectContaining({ sessionKey: key, approvals: [] }),
+    }),
+  );
+  expect(result.observers).toBe(1);
+});
+
+it("rolls back approval replay after membership revocation", async () => {
+  mocks.onHistory = () => {
+    mocks.linked = false;
+  };
+  const result = await subscribe(undefined, true);
+  expect(result.calls[0]?.[0]).toBe(false);
+  expect(result.observers).toBe(0);
+});

@@ -17,6 +17,7 @@ type DashboardSessionTitleRequest = {
   cfg: OpenClawConfig;
   context: GatewayRequestContext;
   request: Pick<NormalizedChatSendRequest, "normalizedAttachments" | "rawMessage">;
+  messageId?: string;
   sessionKey: string;
   storePath: string;
 };
@@ -71,6 +72,7 @@ export function scheduleChatDashboardSessionTitle(
       storePath: params.storePath,
       currentUserMessage: params.request.rawMessage,
       userMessage: titleSource,
+      ...(params.messageId ? { messageId: params.messageId } : {}),
       ...(retryAfter ? { retryAfter } : {}),
       onFallback: () =>
         params.context.logGateway.warn(

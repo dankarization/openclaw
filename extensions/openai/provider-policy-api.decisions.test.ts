@@ -9,7 +9,11 @@ describe("OpenAI capability route policy", () => {
       kind: "routes",
       routes: [
         { api: "openai-responses", authRequirement: "api-key" },
-        { api: "openai-chatgpt-responses", authRequirement: "subscription" },
+        {
+          api: "openai-chatgpt-responses",
+          authRequirement: "subscription",
+          inference: { chat: true },
+        },
       ],
     });
     const decision = resolveModelRoutes({

@@ -18,10 +18,12 @@ import {
   trapLightboxTabFocus,
 } from "./image-lightbox-gallery.ts";
 import { panImageWithKeyboard } from "./image-lightbox-keyboard.ts";
+import { LightboxThumbnails } from "./image-lightbox-thumbnails.tsx";
 import { createImageLightboxTransition } from "./image-lightbox-transition.ts";
 import {
   LightboxAction,
   LightboxChrome,
+  LightboxZoomControls,
   LightboxImage,
   lightboxImageStyle,
 } from "./image-lightbox-view.tsx";
@@ -43,6 +45,8 @@ export function ImageLightboxContent(props: ImageLightboxProps) {
   const gallery = createImageLightboxGallery();
   const galleryState = gallery.state;
   const hasGallery = () => galleryState().count > 1;
+  const thumbnails = () =>
+    props.mediaKind === "image" && hasGallery() ? props.gallery?.thumbnails : undefined;
   const currentImage = () => galleryState().current;
   const [originalRead, setOriginalRead] = createSignal(
     { result: Promise.resolve("") },
@@ -577,6 +581,7 @@ export function ImageLightboxContent(props: ImageLightboxProps) {
               {
                 "stage--video": props.mediaKind === "video",
                 "stage--gallery": props.mediaKind !== "video" && hasGallery(),
+                "stage--thumbnails": Boolean(thumbnails()),
               },
             ]}
             ref={[
@@ -670,7 +675,7 @@ export function ImageLightboxContent(props: ImageLightboxProps) {
                 total: String(galleryState().count),
               })}
             </p>
-            <Show when={galleryState().failed}>
+            <Show when={galleryState().failed && !thumbnails()}>
               <p class="gallery-error" role="alert">
                 {t("chat.imageLightbox.loadFailed")}
               </p>
@@ -690,36 +695,28 @@ export function ImageLightboxContent(props: ImageLightboxProps) {
               </Show>
             </p>
           </Show>
+          <Show when={thumbnails()}>
+            {(items) => (
+              <LightboxThumbnails
+                items={items()}
+                index={galleryState().index}
+                busy={galleryState().busy}
+                failed={galleryState().failed}
+                focusableRef={focusableRef}
+                onSelect={(index) => void navigate(index - gallery.peek().index)}
+              />
+            )}
+          </Show>
           <Show when={props.mediaKind === "image"}>
-            <div class="zoom-controls">
-              <LightboxAction
-                focusableRef={focusableRef}
-                class="zoom-control"
-                label="chat.imageLightbox.zoomOut"
-                disabled={!canZoom() || scale() <= 1}
-                action={zoomOut}
-              >
-                −
-              </LightboxAction>
-              <LightboxAction
-                focusableRef={focusableRef}
-                class="zoom-control zoom-level"
-                label="chat.imageLightbox.resetZoom"
-                disabled={!canZoom() || scale() === 1}
-                action={resetZoom}
-              >
-                {Math.round(scale() * 100)}%
-              </LightboxAction>
-              <LightboxAction
-                focusableRef={focusableRef}
-                class="zoom-control"
-                label="chat.imageLightbox.zoomIn"
-                disabled={!canZoom() || scale() >= MAX_SCALE}
-                action={zoomIn}
-              >
-                +
-              </LightboxAction>
-            </div>
+            <LightboxZoomControls
+              focusableRef={focusableRef}
+              canZoom={canZoom()}
+              scale={scale()}
+              maxScale={MAX_SCALE}
+              zoomIn={zoomIn}
+              zoomOut={zoomOut}
+              resetZoom={resetZoom}
+            />
           </Show>
         </LightboxChrome>
       </openclaw-modal-dialog>

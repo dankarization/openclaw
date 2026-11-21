@@ -5,6 +5,7 @@ import { extractThinkingCached } from "../../../lib/chat/message-extract.ts";
 import { normalizeRoleForGrouping } from "../../../lib/chat/message-normalizer.ts";
 import { gatewayClientKind } from "../../../lib/gateway-client-kind.ts";
 import { resolveIdentityHue } from "../../../lib/identity-avatar.ts";
+import { formatSessionChannelLabel } from "../../../lib/session-display.ts";
 import { DEFAULT_AGENT_ID } from "../../../lib/sessions/session-key.ts";
 import {
   assistantMessageCanOwnTurnActions,
@@ -107,6 +108,15 @@ export function prepareMessageGroupFrame(
     !isForwarded &&
     !sourceOnly &&
     (normalizedRole !== "user" || !isOwnGroup || opts.showOwnSenderName !== false);
+  const channelIdentity = group.sender?.identity;
+  const linkedChannelSource =
+    group.sender?.displayProfileId &&
+    channelIdentity?.type === "observation" &&
+    channelIdentity.pluginId
+      ? t("chat.messages.viaSource", {
+          source: formatSessionChannelLabel(channelIdentity.pluginId),
+        })
+      : undefined;
   const visibleSources = group.sourceClients?.filter(
     (source) => gatewayClientKind(source) !== "web",
   );
@@ -199,6 +209,7 @@ export function prepareMessageGroupFrame(
     replyLine,
     showSenderName,
     visibleSources,
+    linkedChannelSource,
     who,
     avatarPlacement,
     meta,

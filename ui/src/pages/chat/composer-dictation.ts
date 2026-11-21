@@ -30,7 +30,7 @@ type ComposerDictationOwnerOptions = {
   dictationAvailable?: boolean;
   realtimeTalkActive: boolean;
   onCommit: (text: string, late?: true, preservePreview?: true) => void;
-  onError: (message: string, failure: ComposerDictationFailure) => void;
+  onError: (message: string, failure: ComposerDictationFailure) => void | (() => void);
   onTap?: () => void;
   onDictationUnavailable?: () => void;
 };
@@ -81,6 +81,30 @@ export class ComposerDictationOwner extends EventTarget {
   // Stop releases the microphone and typing lock before the final text arrives.
   get transcribing(): boolean {
     return Boolean(this.commits?.size);
+  }
+
+  get recovery(): ComposerDictationSession | undefined {
+    return this.commits?.recovery;
+  }
+
+  get canRetry(): boolean {
+    return Boolean(this.recovery && this.phase === "idle" && this.canHold());
+  }
+
+  retry(): Promise<boolean> {
+    const commits = this.commits;
+    if (!commits || !this.canRetry) {
+      return Promise.resolve(false);
+    }
+    return commits.retry(this.playback, () => commits.cancelRetry());
+  }
+
+  discardRecovery(): boolean {
+    const discarded = this.commits?.discardRecovery() ?? false;
+    if (discarded) {
+      this.pendingCommitsChanged();
+    }
+    return discarded;
   }
 
   get locksComposer(): boolean {
@@ -136,14 +160,19 @@ export class ComposerDictationOwner extends EventTarget {
     }
     if (this.phase !== "idle" && !this.canHold()) {
       const keepFinal = this.active && !options.connected;
-      const preservesText = keepFinal ? (this.session?.markGatewayDisconnected() ?? false) : false;
+      const session = this.session;
+      const preservesText = keepFinal ? (session?.markGatewayDisconnected() ?? false) : false;
       void this.stop({ commit: keepFinal });
       // Empty drains report through the session; retained text still needs this notice.
       if (keepFinal && preservesText) {
-        options.onError(t("chat.composer.dictationDisconnected"), {
+        const dismissFailure = options.onError(t("chat.composer.dictationDisconnected"), {
           kind: "interrupted",
           preservesText,
         });
+        if (session) {
+          session.dismissFailure =
+            typeof dismissFailure === "function" ? dismissFailure : undefined;
+        }
       }
     }
   }
@@ -290,6 +319,17 @@ export class ComposerDictationOwner extends EventTarget {
     void this.finishActive();
   };
 
+  private handlePlaybackSuperseded(): void {
+    if (this.commits?.hasRecovery) {
+      this.commits.cancelRetry();
+      if (this.active) {
+        void this.stop({ commit: false });
+      }
+      return;
+    }
+    this.cancel();
+  }
+
   private canHold(): boolean {
     return (
       this.options.enabled &&
@@ -328,7 +368,7 @@ export class ComposerDictationOwner extends EventTarget {
     ];
     try {
       // Preserve Safari playback activation before the lazy capture module loads.
-      this.playback.prepare(client, () => this.cancel());
+      this.playback.prepare(client, () => this.handlePlaybackSuperseded());
       const sessionKey = this.options.prepareSession
         ? await this.options.prepareSession()
         : this.options.sessionKey;
@@ -351,8 +391,14 @@ export class ComposerDictationOwner extends EventTarget {
             if (this.session !== session && !commits.has(session)) {
               return;
             }
+            let dismissFailure: void | (() => void);
             try {
-              this.options.onError(message, { kind: "interrupted", preservesText });
+              dismissFailure = this.options.onError(message, {
+                kind: "interrupted",
+                preservesText,
+              });
+              session.dismissFailure =
+                typeof dismissFailure === "function" ? dismissFailure : undefined;
             } finally {
               if (this.session === session) {
                 void this.stop({ commit: true });

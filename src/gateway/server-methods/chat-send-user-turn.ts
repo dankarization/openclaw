@@ -164,7 +164,7 @@ export function prepareChatSendUserTurn(params: {
     | "systemInputProvenance"
     | "systemProvenanceReceipt"
     | "toolBindings"
-  >;
+  > & Partial<Pick<NormalizedChatSendRequest, "p">>;
   session: Pick<PreparedChatSendSession, "agentId" | "clientRunId" | "sessionKey"> &
     Partial<Pick<PreparedChatSendSession, "cfg">>;
   admission: Pick<AdmittedChatSend, "originatingRoute"> &
@@ -268,6 +268,7 @@ export function prepareChatSendUserTurn(params: {
     AgentId: session.agentId,
     OriginatingTo: originatingTo,
     ExplicitDeliverRoute: explicitDeliverRoute,
+    ...(request.p?.deliver === false ? { WebchatExternalDeliveryDisabled: true } : {}),
     AccountId: accountId,
     MessageThreadId: messageThreadId,
     ...(commandSource ? { CommandSource: commandSource } : {}),

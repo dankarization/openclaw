@@ -208,7 +208,9 @@ export async function handleWorkspaceIconHttpRequest(
         : undefined;
     const localRoot = localWorkspaceRoot(root);
     // An unknown session stays an ordinary miss; a known one must be visible to the profile.
-    const visible = entry ? requestAuth.canReadSession(query.key, entry) : true;
+    const visible = entry
+      ? requestAuth.canReadSession(query.key, entry, read.readMembership(query))
+      : true;
     return {
       generation: row?.generation,
       sessionId: entry?.sessionId,

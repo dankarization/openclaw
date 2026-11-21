@@ -6,12 +6,14 @@ import type {
 } from "@openclaw/acp-core/types";
 import { asNonNegativeFiniteNumber } from "@openclaw/normalization-core/number-coercion";
 import { normalizeOptionalString, type FastMode } from "@openclaw/normalization-core/string-coerce";
+import type { Static } from "typebox";
 import type {
   SessionEntryArchiveReason,
   SessionRow,
   SessionRunStatus,
 } from "../../../packages/gateway-protocol/src/index.js";
 import type { QueueMode } from "../../../packages/gateway-protocol/src/schema/logs-chat.js";
+import type { SessionAccessSchema } from "../../../packages/gateway-protocol/src/schema/session-access.js";
 import type { SessionGoal } from "../../../packages/gateway-protocol/src/schema/sessions-goal.js";
 import type { SessionObserverDigest } from "../../../packages/gateway-protocol/src/schema/sessions.js";
 import type { SessionAgentStatus } from "../../../packages/gateway-protocol/src/session-agent-status.js";
@@ -266,6 +268,8 @@ type SessionEntryCore = SessionEntryProvenance &
   Pick<SessionRow, "permissionMode" | "sandboxMode" | "nativeRuntimeConsent" | "sessionRoot"> & {
     /** Collaboration mode. Missing legacy values are equivalent to "shared". */
     visibility?: NonNullable<SessionRow["visibility"]>;
+    /** Confidentiality is independent of collaboration and display visibility. */
+    access?: Static<typeof SessionAccessSchema>;
     /**
      * Last delivered heartbeat payload (used to suppress duplicate heartbeat notifications).
      * Stored on the main session entry.
@@ -681,6 +685,17 @@ export type SessionScheduledMemoryParent = {
 };
 
 export type InternalSessionEntryCore = SessionEntryCore & {
+  /** Bounded, generation-bound context for refining an automatically managed Dashboard title. */
+  conversationLabelRefinement?: {
+    sessionId: string;
+    lifecycleRevision?: string;
+    managedTitle: string;
+    phase: "countdown" | "pending" | "completed";
+    remainingMessages: number;
+    lastMessageId?: string;
+    seenMessageIds: string[];
+    inputMessages: string[];
+  };
   /**
    * Written only by cron run preparation on a child-placement `:run:` row, so a
    * session the run spawns can resolve its memory audience through that parent.

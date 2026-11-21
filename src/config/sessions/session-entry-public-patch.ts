@@ -24,6 +24,9 @@ function generationValidPrivateFieldsForSameSession(
     ...(existingEntry.cliHistoryBoundary
       ? { cliHistoryBoundary: existingEntry.cliHistoryBoundary }
       : {}),
+    ...(existingEntry.conversationLabelRefinement
+      ? { conversationLabelRefinement: existingEntry.conversationLabelRefinement }
+      : {}),
     ...(existingEntry.activeWriterRunId !== undefined
       ? { activeWriterRunId: existingEntry.activeWriterRunId }
       : {}),

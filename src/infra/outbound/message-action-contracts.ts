@@ -121,6 +121,11 @@ export type MessageActionInput = Pick<
   sourceReplyDeliveryMode?: SourceReplyDeliveryMode;
   /** The run answers another session, so an internal sink write reaches only its transcript. */
   sourceReplyTranscriptOnly?: boolean;
+  /** The WebChat source must be committed before the external source send. */
+  webchatSourceReply?: boolean;
+  webchatLocalOnly?: boolean;
+  /** Resolve external credentials after the local source receipt is committed. */
+  resolveExternalConfig?: () => Promise<OpenClawConfig>;
   sourceReplyFinal?: boolean;
   sourceReplyToolCallId?: string;
   inboundEventKind?: InboundEventKind;

@@ -1,4 +1,5 @@
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
+import { racePromiseWithAbortSignal } from "../infra/abort-signal.js";
 import { createSqliteWorkerOperationAdmission } from "../infra/sqlite-worker-operation-admission.js";
 import {
   executeExistingOpenClawStateRead,
@@ -36,7 +37,9 @@ import type {
   UserChannelIdentityWorkerOperations,
 } from "./user-profiles.types.js";
 
-type IdentityOptions = Pick<OpenClawStateDatabaseOptions, "path" | "env">;
+type IdentityOptions = Pick<OpenClawStateDatabaseOptions, "path" | "env"> & {
+  signal?: AbortSignal;
+};
 
 function captureAuthorityContext(options: IdentityOptions) {
   if (getActiveOpenClawStateDatabaseReadSnapshot(options)) {
@@ -77,10 +80,11 @@ export async function listCanonicalUserChannelIdentities(
   profileId: string,
   options: IdentityOptions = {},
 ): Promise<UserChannelIdentityLink[]> {
-  const reply = await executeExistingOpenClawStateRead(options, {
-    type: "userProfiles.channelIdentity.list",
-    profileId,
-  });
+  const reply = await executeExistingOpenClawStateRead(
+    options,
+    { type: "userProfiles.channelIdentity.list", profileId },
+    { signal: options.signal },
+  );
   if (!reply) {
     return [];
   }
@@ -110,6 +114,7 @@ async function changeIdentity(
       assertCurrent,
       createAdmission: (operation) => {
         let fence: ReturnType<typeof fenceUserProfileMutationAuthority> | undefined;
+        let notifyProfiles = false;
         const admission = createSqliteWorkerOperationAdmission((request, grant) => {
           if (
             (request.stage !== "transaction" && request.stage !== "commit") ||
@@ -134,6 +139,7 @@ async function changeIdentity(
             const { profiles, channels } = request.facts;
             if (
               !grant(() => {
+                notifyProfiles = profiles.length > 0 || channels.length > 0;
                 fence = fenceUserProfileMutationAuthority(context.admission, {
                   profiles,
                   identities: [],
@@ -152,7 +158,7 @@ async function changeIdentity(
         void operation.settled.then((settlement) => {
           const committed = admission.committed;
           if (
-            captured.action !== "authorize" &&
+            notifyProfiles &&
             committed &&
             isRecord(committed.facts) &&
             committed.facts.kind === "channel-identity" &&
@@ -248,14 +254,19 @@ export async function prepareUserChannelIdentityAuthority(
       : userChannelIdentitySubject(capturedIdentity);
   const context = captureAuthorityContext(options);
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const read = await captureUserProfileAuthorityRead(context.admission, subject);
+    const read = await racePromiseWithAbortSignal(
+      () => captureUserProfileAuthorityRead(context.admission, subject),
+      options.signal,
+    );
     const reply = await executeExistingOpenClawStateRead(
       { path: context.admission.databasePath, env: context.environment },
       {
         type: "userProfiles.channelIdentity.resolve",
         identity: capturedIdentity,
       },
+      { signal: options.signal },
     );
+    options.signal?.throwIfAborted();
     context.admission.assertCurrent();
     if (!reply) {
       return undefined;

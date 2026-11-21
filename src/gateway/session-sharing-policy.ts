@@ -9,7 +9,11 @@ import { GATEWAY_OWNER_PROFILE_ID } from "../../packages/gateway-protocol/src/sc
 import { assertAdmittedRunOperatorAuthority } from "../agents/admitted-run-context.js";
 import type { SessionEntry } from "../config/sessions.js";
 import { resolveSessionStorePathCore } from "../config/sessions/paths.js";
-import { sessionCreatorProfileId } from "../config/sessions/session-entry-provenance.js";
+import { canReadSessionAccess, resolveSessionAccess } from "../config/sessions/session-access.js";
+import {
+  sessionCreatorProfileId,
+  projectSessionSharingDelivery,
+} from "../config/sessions/session-entry-provenance.js";
 import type { CapturedSessionEntryReadSource } from "../config/sessions/session-entry-read-source.types.js";
 import type { GatewayOperatorRoleDefinition } from "../config/types.gateway.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
@@ -74,6 +78,10 @@ export function hasSessionReadAccessChanged(
     sessionCreatorProfileId(previous.createdActor) !==
       sessionCreatorProfileId(current.createdActor) ||
     resolveSessionVisibility(previous) !== resolveSessionVisibility(current) ||
+    JSON.stringify(previous.access) !== JSON.stringify(current.access) ||
+    previous.createdVia !== current.createdVia ||
+    JSON.stringify(projectSessionSharingDelivery(previous?.delivery)) !==
+      JSON.stringify(projectSessionSharingDelivery(current.delivery)) ||
     (previous.incognito === true) !== (current.incognito === true)
   );
 }
@@ -335,7 +343,16 @@ export function prepareSessionSharingRole(
         !isSessionSharingOwnerEquivalent(params.client, operatorActor))
         ? "viewer"
         : "owner";
-    return () => role;
+    if (
+      operatorActor?.kind === "system" ||
+      params.client?.authenticatedUserProfile?.profileId === GATEWAY_OWNER_PROFILE_ID
+    ) {
+      return () => role;
+    }
+    return (target) =>
+      canReadSessionAccess(params.cfg, target.canonicalKey, target.entry, () => false)
+        ? role
+        : "viewer";
   }
   const creatorMatches = isCreator ?? prepareSessionCreatorProfile(identity.id);
   const sessionCap = preparedCap
@@ -344,6 +361,9 @@ export function prepareSessionSharingRole(
   return (target, isMember) => {
     if (creatorMatches(target.entry.createdActor)) {
       return "owner";
+    }
+    if (!canReadSessionAccess(params.cfg, target.canonicalKey, target.entry, creatorMatches)) {
+      return "viewer";
     }
     if (
       sessionCap === "write" &&
@@ -589,6 +609,23 @@ export function authorizeSessionSharingTarget(
     ? prepared.value
     : params.cfg && operatorSessionCap(params.client, params.cfg);
   const role = prepared?.role ?? resolveSessionSharingRole(params, { value: sessionCap });
+  const access = resolveSessionAccess(params.cfg, params.target.canonicalKey, params.target.entry);
+  if (
+    role === "viewer" &&
+    access &&
+    access.mode !== "unrestricted" &&
+    (visibility === "draft" ||
+      !canReadSessionAccess(
+        params.cfg,
+        params.target.canonicalKey,
+        params.target.entry,
+        prepareSessionCreatorProfile(
+          sharingIdentity(params.client, resolveGatewayOperatorRoleActor(params.client))?.id,
+        ),
+      ))
+  ) {
+    return hiddenSessionNotFound(params.target.canonicalKey);
+  }
   if (
     (sessionCap === "none" && role !== "owner" && role !== "admin") ||
     (sessionCap === "invited" && role === "viewer")

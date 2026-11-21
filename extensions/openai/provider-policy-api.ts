@@ -402,6 +402,10 @@ function resolveSingleObservedModelRoute(
       baseUrl: OPENAI_CODEX_RESPONSES_BASE_URL,
       authRequirement: "subscription",
       requestTransportOverrides,
+      ...(OPENAI_MODEL_CATALOG?.providers?.openai?.models.find((entry) => entry.id === modelId)
+        ?.inference?.chat === true
+        ? { inference: { chat: true } }
+        : {}),
     },
     modelId,
   );

@@ -6,6 +6,7 @@ import { registerChatDictationEnglish } from "../../i18n/locales/en-chat-dictati
 import { bytesToBase64 } from "../../lib/bytes-base64.ts";
 import { formatUiError, formatUiExternalText } from "../../lib/format-error.ts";
 import { registerEnglishCatalog } from "../../lib/reactive/i18n.ts";
+import type { GatewaySpeechPlayback } from "../../lib/speech-playback.ts";
 import {
   floatToG711Ulaw,
   measureRealtimeTalkAudioFrame,
@@ -31,7 +32,7 @@ type DictationSessionResult = {
 };
 
 type ComposerDictationSessionCallbacks = {
-  onError: (message: string, preservesText: boolean) => void;
+  onError: (message: string, preservesText: boolean) => void | (() => void);
   onLevel?: (level: number) => void;
   onTranscriptChange: () => void;
   onReady: () => void;
@@ -62,6 +63,8 @@ function formatDictationError(error: unknown): string {
 export class ComposerDictationCommits {
   private readonly sessions = new Set<ComposerDictationSession>();
   private tail: Promise<unknown> = Promise.resolve();
+  private readonly recoveryWaiters = new Map<ComposerDictationSession, (text: string | null) => void>();
+  private readonly recoveryResults = new Map<ComposerDictationSession, string | null>();
   // Consumers place delivered and preview transcripts in their drafts.
   readonly place = placeComposerDictation;
 
@@ -69,11 +72,26 @@ export class ComposerDictationCommits {
     return this.sessions.size;
   }
 
+  get hasRecovery(): boolean {
+    for (const session of this.sessions) {
+      if (session.recovery && session.hasRecording) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Only the head recording is actionable. Later finals wait here so retry or
+  // discard preserves the main commit queue's capture-order and preview contract.
+  get recovery(): ComposerDictationSession | undefined {
+    const first = this.sessions.values().next().value as ComposerDictationSession | undefined;
+    return first?.recovery ? first : undefined;
+  }
+
   has(session: ComposerDictationSession): boolean {
     return this.sessions.has(session);
   }
 
-  /** Delivers once earlier recordings settle; a retired recording resolves false. */
   add(
     session: ComposerDictationSession,
     deliver: (transcript: string) => boolean,
@@ -83,13 +101,49 @@ export class ComposerDictationCommits {
     const settled = session
       .finish(true)
       .catch(() => "")
-      .then(async (transcript) => {
+      .then(async (initialTranscript) => {
         await previous;
-        return this.sessions.delete(session) && deliver(transcript);
+        if (!this.sessions.has(session)) {
+          return false;
+        }
+        const transcript = initialTranscript ||
+          (session.hasRecording ? await this.waitForRecovery(session) : "");
+        const owned = this.sessions.delete(session);
+        this.recoveryWaiters.delete(session);
+        this.recoveryResults.delete(session);
+        return owned && transcript ? deliver(transcript) : false;
       })
       .catch(() => false);
     this.tail = settled;
     return settled;
+  }
+
+  async retry(playback: GatewaySpeechPlayback, superseded: () => void): Promise<boolean> {
+    const session = this.recovery;
+    if (!session || session.retrying) {
+      return false;
+    }
+    const transcript = await session.retry(playback, superseded);
+    if (!transcript) {
+      return false;
+    }
+    this.resolveRecovery(session, transcript);
+    return true;
+  }
+
+  discardRecovery(): boolean {
+    const session = this.recovery;
+    if (!session) {
+      return false;
+    }
+    this.sessions.delete(session);
+    this.resolveRecovery(session, null);
+    void session.cancel().catch(() => undefined);
+    return true;
+  }
+
+  cancelRetry(): void {
+    this.recovery?.cancelRetryAttempt();
   }
 
   markGatewayDisconnected(): void {
@@ -100,9 +154,31 @@ export class ComposerDictationCommits {
 
   retire(): void {
     for (const session of this.sessions) {
+      this.resolveRecovery(session, null);
       void session.cancel().catch(() => undefined);
     }
     this.sessions.clear();
+    this.recoveryWaiters.clear();
+    this.recoveryResults.clear();
+  }
+
+  private waitForRecovery(session: ComposerDictationSession): Promise<string | null> {
+    if (this.recoveryResults.has(session)) {
+      const result = this.recoveryResults.get(session) ?? null;
+      this.recoveryResults.delete(session);
+      return Promise.resolve(result);
+    }
+    return new Promise((resolve) => this.recoveryWaiters.set(session, resolve));
+  }
+
+  private resolveRecovery(session: ComposerDictationSession, text: string | null): void {
+    const resolve = this.recoveryWaiters.get(session);
+    if (resolve) {
+      this.recoveryWaiters.delete(session);
+      resolve(text);
+    } else {
+      this.recoveryResults.set(session, text);
+    }
   }
 }
 
@@ -187,8 +263,15 @@ export class ComposerDictationSession {
   private readonly finalTranscripts: string[] = [];
   private currentPartial = "";
   private startPromise: Promise<void> | null = null;
+  private readonly recording: Float32Array[] = [];
+  recovery = false;
+  retrying = false;
+  dismissFailure: (() => void) | undefined;
+  private retryCancelled = false;
+  private retryGeneration: object | undefined;
   private appendChain: Promise<void> = Promise.resolve();
   private closeRequest: { discard: boolean; promise: Promise<void> } | null = null;
+  private cleanupPromise: Promise<void> = Promise.resolve();
   private stopped = false;
   private discarded = false;
   private failed = false;
@@ -226,9 +309,36 @@ export class ComposerDictationSession {
     } catch {
       this.context = null;
     }
-    // Claim the Gateway session before the microphone opens. Stopped recordings
-    // hold their sessions while they transcribe, so a full connection must refuse
-    // here rather than after the user has started speaking.
+    // Admission stays before microphone access so capacity failures never open a mic.
+    await this.createRemote();
+    if (this.stopped) {
+      return;
+    }
+    this.subscribeToRemote();
+    const media = await this.input.open(inputDeviceId);
+    if (this.stopped || this.failed) {
+      return;
+    }
+    if (this.context?.sampleRate !== DICTATION_SAMPLE_RATE_HZ) {
+      throw new Error(t("chat.composer.dictationBrowserAudioUnsupported"));
+    }
+    const context = this.context;
+    this.inputMeter = new RealtimeTalkMediaStreamMeter((level) => {
+      this.inputLevel.set(level);
+      this.callbacks.onLevel?.(level);
+    });
+    this.inputMeter.start(media, context);
+    this.inputPump.start(media, context, (samples) => {
+      if (this.stopped) {
+        return;
+      }
+      this.queueAudio(samples);
+      this.detectSilence(samples);
+    });
+    this.callbacks.onReady();
+  }
+
+  private async createRemote(): Promise<void> {
     const result = await this.client.request<DictationSessionResult>("talk.session.create", {
       mode: "transcription",
       transport: "gateway-relay",
@@ -237,9 +347,6 @@ export class ComposerDictationSession {
     });
     this.sessionId = result.sessionId;
     this.transcriptionSessionId = result.transcriptionSessionId ?? result.sessionId;
-    if (this.stopped) {
-      return;
-    }
     if (
       result.audio?.inputEncoding !== DICTATION_ENCODING ||
       result.audio.inputSampleRateHz !== DICTATION_SAMPLE_RATE_HZ
@@ -247,14 +354,18 @@ export class ComposerDictationSession {
       await this.closeRemote();
       throw new Error(t("chat.composer.dictationAudioUnsupported"));
     }
-    // Listen before awaiting the permission prompt: a provider failure while it is
-    // open must stop startup instead of capturing against a removed session.
+  }
+
+  private subscribeToRemote(): void {
+    this.unsubscribe?.();
     this.unsubscribe = this.client.addEventListener((frame) => {
       const payload = eventPayload(frame);
       if (
         !payload ||
         payload.transcriptionSessionId !== this.transcriptionSessionId ||
-        this.stopped
+        this.stopped ||
+        this.discarded ||
+        (this.retrying && this.retryCancelled)
       ) {
         return;
       }
@@ -285,42 +396,33 @@ export class ComposerDictationSession {
         this.reportFailure(t("chat.composer.dictationDisconnected"));
       }
     });
-    const media = await this.input.open(inputDeviceId);
-    if (this.stopped || this.failed) {
-      return;
-    }
-    if (this.context?.sampleRate !== DICTATION_SAMPLE_RATE_HZ) {
-      throw new Error(t("chat.composer.dictationBrowserAudioUnsupported"));
-    }
-    const context = this.context;
-    this.inputMeter = new RealtimeTalkMediaStreamMeter((level) => {
-      this.inputLevel.set(level);
-      this.callbacks.onLevel?.(level);
-    });
-    this.inputMeter.start(media, context);
-    this.inputPump.start(media, context, (samples) => {
-      if (this.stopped) {
-        return;
-      }
-      this.queueAudio(samples);
-      this.detectSilence(samples);
-    });
-    this.callbacks.onReady();
   }
 
   transcriptSnapshot(): string {
     return [...this.finalTranscripts, this.currentPartial].filter(Boolean).join(" ").trim();
   }
 
+  get hasRecording(): boolean {
+    return this.recording.length > 0 && !this.discarded;
+  }
+
   async finish(requireTranscript?: true): Promise<string> {
     const transcript =
       this.gatewayDisconnected || this.failed ? this.transcriptSnapshot() : this.waitForLateFinal();
-    // Bound admission separately; a started close uses the media provider timeout.
-    void this.stopAndClose(true).catch(() => undefined);
+    // Retry must join this attempt's capture/append/close cleanup before replacing
+    // its mutable transport fields with a new Gateway session.
+    this.cleanupPromise = this.stopAndClose(true).catch(() => undefined);
     const text = await transcript;
-    // Composer dictation needs a visible outcome; split Talk can quietly listen again.
-    // Cancellation and already-reported provider failures keep their existing outcomes.
-    if (requireTranscript && !text && !this.discarded && !this.failed) {
+    const recovery = !text && this.hasRecording;
+    if (this.recovery !== recovery) {
+      this.recovery = recovery;
+      this.callbacks.onTranscriptChange();
+    }
+    if (text) {
+      this.recording.length = 0;
+      this.recovery = false;
+    }
+    if (requireTranscript && !text && !this.discarded && !this.failed && !this.retryCancelled) {
       this.reportFailure(
         t(
           this.gatewayDisconnected
@@ -332,26 +434,120 @@ export class ComposerDictationSession {
     return text;
   }
 
+  async retry(playback: GatewaySpeechPlayback, superseded: () => void): Promise<string> {
+    if (!this.recovery || !this.hasRecording || this.retrying || this.discarded) {
+      return "";
+    }
+    const generation = {};
+    this.retryGeneration = generation;
+    this.retryCancelled = false;
+    this.retrying = true;
+    this.callbacks.onTranscriptChange();
+    // Shared playback supersession cancels only this relay attempt; the captured
+    // PCM remains in this tab for another explicit retry.
+    this.failed = false;
+    try {
+      playback.prepare(this.client, () => {
+        if (this.retryGeneration === generation) {
+          superseded();
+        }
+      });
+      // finish() can surface recovery before stopCapture()/append/close cleanup
+      // settles. Keep the old session fields intact until that owner is quiescent.
+      await this.cleanupPromise;
+      if (this.discarded || this.retryCancelled) {
+        return "";
+      }
+      this.gatewayDisconnected = false;
+      this.stopped = false;
+      this.sessionId = null;
+      this.transcriptionSessionId = null;
+      this.closeRequest = null;
+      this.appendChain = Promise.resolve();
+      this.finalTranscripts.length = 0;
+      this.currentPartial = "";
+      await this.createRemote();
+      if (this.discarded || this.retryCancelled || !this.sessionId) {
+        await this.closeRemote(true);
+        return "";
+      }
+      this.subscribeToRemote();
+      for (const samples of this.recording) {
+        if (this.discarded || this.retryCancelled) {
+          break;
+        }
+        this.queueAudio(samples, false);
+      }
+      await this.appendChain;
+      if (this.discarded || this.retryCancelled) {
+        await this.closeRemote(true);
+        return "";
+      }
+      const transcript = await this.finish(true);
+      if (this.discarded || this.retryCancelled) {
+        return "";
+      }
+      if (transcript) {
+        this.dismissFailure?.();
+        this.dismissFailure = undefined;
+      }
+      return transcript;
+    } catch (error) {
+      if (!this.discarded && !this.retryCancelled && !isAbortError(error)) {
+        this.reportFailure(formatDictationError(error));
+      }
+      await this.closeRemote(true);
+      return "";
+    } finally {
+      if (this.retryGeneration === generation) {
+        this.retryGeneration = undefined;
+        this.retrying = false;
+        this.callbacks.onTranscriptChange();
+      }
+    }
+  }
+
+  cancelRetryAttempt(): void {
+    if (!this.retrying || this.retryCancelled) {
+      return;
+    }
+    this.retryCancelled = true;
+    this.settleLateFinalDrain?.(true);
+    void this.appendChain.finally(() => this.closeRemote(true));
+    this.callbacks.onTranscriptChange();
+  }
+
   async cancel(): Promise<void> {
     this.discarded = true;
+    this.retryCancelled = true;
+    this.recovery = false;
+    this.recording.length = 0;
+    this.dismissFailure?.();
+    this.dismissFailure = undefined;
     this.settleLateFinalDrain?.(true);
+    this.callbacks.onTranscriptChange();
     await this.stopAndClose(false);
   }
 
   private async stopAndClose(reportStartFailure: boolean): Promise<void> {
-    await this.stopCapture();
-    // Startup may already be waiting for a normal close; discard must interrupt it.
-    if (!this.discarded || !this.sessionId) {
-      await this.startPromise?.catch((error: unknown) => {
-        if (reportStartFailure && !isAbortError(error)) {
-          this.reportFailure(formatDictationError(error));
-        }
-      });
+    try {
+      await this.stopCapture();
+      // Startup may already be waiting for a normal close; discard must interrupt it.
+      if (!this.discarded || !this.sessionId) {
+        await this.startPromise?.catch((error: unknown) => {
+          if (reportStartFailure && !isAbortError(error)) {
+            this.reportFailure(formatDictationError(error));
+          }
+        });
+      }
+      if (!this.discarded) {
+        await this.appendChain;
+      }
+    } finally {
+      // Even a failed local AudioContext close must not let an attempt's Gateway
+      // session survive the join that gates a later retry.
+      await this.closeRemote();
     }
-    if (!this.discarded) {
-      await this.appendChain;
-    }
-    await this.closeRemote();
   }
 
   markGatewayDisconnected(): boolean {
@@ -376,11 +572,14 @@ export class ComposerDictationSession {
     }
   }
 
-  private queueAudio(samples: Float32Array): void {
+  private queueAudio(samples: Float32Array, retain = true): void {
     if (!this.sessionId) {
       return;
     }
     const sessionId = this.sessionId;
+    if (retain && !this.retrying) {
+      this.recording.push(samples.slice());
+    }
     const audioBase64 = bytesToBase64(floatToG711Ulaw(samples));
     this.appendChain = this.appendChain
       .then(async () => {
@@ -400,7 +599,8 @@ export class ComposerDictationSession {
     }
     this.failed = true;
     this.settleLateFinalDrain?.(false);
-    this.callbacks.onError(message, this.hasTranscript());
+    this.dismissFailure?.();
+    this.dismissFailure = this.callbacks.onError(message, this.hasTranscript()) || undefined;
   }
 
   private hasTranscript(): boolean {
@@ -422,15 +622,15 @@ export class ComposerDictationSession {
     this.context = null;
   }
 
-  private closeRemote(): Promise<void> {
+  private closeRemote(forceDiscard = false): Promise<void> {
     if (!this.sessionId) {
       return Promise.resolve();
     }
-    if (!this.closeRequest || (this.discarded && !this.closeRequest.discard)) {
+    const discard = forceDiscard || this.discarded || this.retryCancelled;
+    if (!this.closeRequest || (discard && !this.closeRequest.discard)) {
       // Buffered STT finalizes during close; its media owner bounds the request.
       // The browser's late-event grace starts only after that work completes.
       this.pauseFinalDrain?.();
-      const discard = this.discarded;
       const promise = this.client
         .request(
           "talk.session.close",

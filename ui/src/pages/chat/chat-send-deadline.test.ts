@@ -68,6 +68,8 @@ it.each(["send", "send-consumed"] as const)("bounds %s without a client deadline
   const operation = handleSendChat(host);
   await issued.promise;
   expect(wire.send).toHaveBeenCalledOnce();
+  const sent = JSON.parse(wire.send.mock.calls[0]![0]) as RequestFrame;
+  expect(sent.params).not.toHaveProperty("deliver");
   expect(pending.hasUnboundedPending).toBe(false);
   await vi.advanceTimersByTimeAsync(GATEWAY_STARTUP_ADMISSION_WAIT_MS - 1);
   expect(pending.hasPending).toBe(true);

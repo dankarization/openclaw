@@ -13,11 +13,10 @@ import { SessionLabelOwnerIndex } from "../../config/sessions/session-entry-sele
 import { resolveMissingAgentHarnessSessionError } from "../../sessions/agent-harness-session-key.js";
 import { runSessionMutation } from "../../sessions/session-controller.lifecycle.js";
 import type { UserModelAccountSelection } from "../model-account-authority.js";
-import { authorizeGatewaySessionCreation, resolveCreatorSandbox } from "../operator-role-policy.js";
+import { resolveCreatorSandbox } from "../operator-role-policy.js";
 import { ADMIN_SCOPE } from "../operator-scopes.js";
 import { resolveOperatorSessionCreation } from "../session-creation-provenance.js";
 import { recordSessionStatusModelPatchOutcome } from "../session-model-patch-origin.js";
-import { resolvePluginSessionOwnershipError } from "../session-plugin-ownership.js";
 import { invalidSessionRequest } from "../session-request-error.js";
 import {
   resolveCanonicalGatewaySessionStoreKey,
@@ -26,16 +25,21 @@ import {
 import { gatewayClientSessionCreator } from "./gateway-client-identity.js";
 import { createSessionModelCatalogWait } from "./session-model-catalog-wait.js";
 import * as sessionUnreadAck from "./session-unread-ack.js";
+import { releaseSessionPatchArchiveDrains } from "./sessions-patch-archive-drains.js";
 import {
   prepareSessionPatchArchive,
   prepareSessionPatchArchiveTransition,
-  releaseSessionPatchArchive,
   validateSessionPatchArchiveProjection,
 } from "./sessions-patch-archive.js";
 import {
   createSessionPatchCatalogPreparation,
   type SessionPatchCatalogResult,
 } from "./sessions-patch-catalog-preparation.js";
+import {
+  attendedPatchCreation,
+  createSessionPatchDefaultAccessGuard,
+  createSessionPatchTargetAccessCheck,
+} from "./sessions-patch-default-access.js";
 import type { SessionPatchDiagnostics } from "./sessions-patch-diagnostics.js";
 import { discoverSessionPatchTargets } from "./sessions-patch-discovery.js";
 import * as patchEffects from "./sessions-patch-effects.js";
@@ -104,9 +108,7 @@ export async function executeSessionPatchMutations(params: {
   if (!discovery.ok) {
     return discovery;
   }
-  const targetAccessError = (entry: SessionEntry | undefined, agentId: string, key: string) =>
-    (!entry && authorizeGatewaySessionCreation({ cfg, client, agentId })) ||
-    resolvePluginSessionOwnershipError({ action: "patch", entry, key, pluginOwnerId });
+  const targetAccessError = createSessionPatchTargetAccessCheck({ cfg, client, pluginOwnerId });
 
   const outcomes = Array.from<MutationOutcome | undefined>({ length: params.targets.length });
   const permissionErrors = new Map<number, ErrorShape>();
@@ -242,11 +244,6 @@ export async function executeSessionPatchMutations(params: {
   );
 
   if (activePrepared.length > 0) {
-    const releaseArchiveDrains = async () => {
-      await Promise.all(
-        activePrepared.map((target) => releaseSessionPatchArchive(target.archivePreparation)),
-      );
-    };
     try {
       // Cloud reclaim precedes every mutation mutex; an earlier Move may need one.
       timing?.mark("archive");
@@ -285,7 +282,7 @@ export async function executeSessionPatchMutations(params: {
             target.archivePreparation?.drain.handoffToMutation();
           }
         },
-        finalize: releaseArchiveDrains,
+        finalize: () => releaseSessionPatchArchiveDrains(activePrepared),
         run: async () => {
           timing?.mark();
           try {
@@ -443,6 +440,7 @@ export async function executeSessionPatchMutations(params: {
                         projection: {
                           cfg,
                           creation,
+                          attendedProfileOperator: attendedPatchCreation(client, creation),
                           existingEntry,
                           isLabelInUse: (label) => labelOwners.isLabelInUse(label, candidateKeys),
                           storeKey: primaryKey,
@@ -553,6 +551,18 @@ export async function executeSessionPatchMutations(params: {
                         archiveTransitions.set(target.index, transition);
                       }
                       commitGuards.add(mutationTargets[target.index]!.commitGuard);
+                      if (!existingEntry && !target.fullPatch.access) {
+                        commitGuards.add(
+                          createSessionPatchDefaultAccessGuard({
+                            cfg,
+                            getCurrentConfig,
+                            client,
+                            creation,
+                            primaryKey,
+                            key: target.key,
+                          }),
+                        );
+                      }
                       if (executionPermissions.validate) {
                         commitGuards.add(executionPermissions.validate);
                       }
@@ -692,7 +702,7 @@ export async function executeSessionPatchMutations(params: {
       for (const target of activePrepared) {
         target.permissionChange?.finish();
       }
-      await releaseArchiveDrains();
+      await releaseSessionPatchArchiveDrains(activePrepared);
     }
   }
 

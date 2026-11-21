@@ -260,7 +260,16 @@ export function startChatDispatch(params: StartChatDispatchParams): Promise<void
   const phase = diagnostics.scope("dispatch");
   // Naming needs only the accepted message, not a ready workspace or reply progress.
   scheduleChatDashboardSessionTitle(
-    { admittedSessionId, agentId, cfg, context, request, sessionKey, storePath },
+    {
+      admittedSessionId,
+      agentId,
+      cfg,
+      context,
+      request,
+      messageId: request.p.idempotencyKey,
+      sessionKey,
+      storePath,
+    },
     titleTurn.promise,
   );
   const dispatch = replyDispatch

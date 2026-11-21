@@ -93,6 +93,7 @@ export type RunEmbeddedAgentParams = Pick<
   messageTo?: string;
   /** Thread/topic identifier for routing replies to the originating thread. */
   messageThreadId?: string | number;
+  webchatExternalDeliveryDisabled?: boolean;
   /** Whether workspaceDir points at the canonical agent workspace for bootstrap purposes. */
   isCanonicalWorkspace?: boolean;
   /** Transport-native chat/conversation ID for hook identity context. */
@@ -275,6 +276,7 @@ export type EmbeddedForegroundPromptContext = Pick<
   | "trigger"
   | "messageTo"
   | "messageThreadId"
+  | "webchatExternalDeliveryDisabled"
   | "conversationToolPolicy"
   | "memberRoleIds"
   | "isCanonicalWorkspace"

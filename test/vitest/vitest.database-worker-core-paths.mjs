@@ -1,5 +1,7 @@
 // These consumers need the host-owned SQLite broker, which runs in forked processes.
 export const databaseWorkerCoreTestFiles = [
+  "src/agents/subagents/registry/subagent-registry-expiry-notice-retry.test.ts",
+  "src/agents/subagents/registry/subagent-registry-notice-receipt-retry.test.ts",
   "src/sessions/session-controller-model.test.ts",
   "src/agents/simple-completion-runtime.postgres.test.ts",
   "src/agents/embedded-agent-runner/compact.watched-sessions.postgres.test.ts",
@@ -38,6 +40,7 @@ export const databaseWorkerCoreTestFiles = [
   "src/sessions/confirmed-visible-message.integration.test.ts",
   "src/agents/tools/message-tool.scheduled-lifetime.test.ts",
   "src/agents/tools/message-tool.local-source-reply.integration.test.ts",
+  "src/agents/tools/message-tool.webchat-telegram.integration.test.ts",
   "test/telegram-lifecycle-notice-send.test.ts",
   "test/discord-live-policy.integration.test.ts",
   "src/commands/startup-config-preflight.fresh-profiles.test.ts",
@@ -1318,6 +1321,20 @@ export const databaseWorkerCoreTestFiles = [
   "src/agents/subagents/announce/subagent-announce.requester-settle-cancel.test.ts",
   "src/agents/subagents/completion/subagent-completion-admission.store.test.ts",
   "src/agents/subagents/completion/subagent-completion-captured-notice.test.ts",
+  "src/agents/subagents/completion/subagent-completion-notice-compaction.test.ts",
+  "src/agents/subagents/registry/subagent-registry.completion-authority.test.ts",
+  // Linked-author history fixtures read and write real SQLite state.
+  "src/gateway/server.chat-history-cursor.test.ts",
+  "src/gateway/server-methods/chat-history-model-policy.test.ts",
+  // ACL/media fixtures use real profile or session SQLite owners.
+  "src/gateway/assistant-media-policy.lifetime.test.ts",
+  "src/gateway/assistant-media-policy.standalone.http.test.ts",
+  "src/gateway/channel-avatar-http.confidential.test.ts",
+  "src/config/sessions/session-accessor.inbound-provenance.test.ts",
+  // The chat.inject session-fence suite seeds and reads SQLite transcripts.
+  "src/gateway/server-methods/chat.directive-tags.test.ts",
+  // Linked approval replay fixture uses real session SQLite state.
+  "src/gateway/server-methods/sessions.messages-subscribe-channel.test.ts",
   "src/agents/subagents/registry/subagent-registry.authority-notice.test.ts",
   "src/commands/doctor-db-bloat.worker.test.ts",
   "src/commands/doctor-device-pairing.worker.test.ts",

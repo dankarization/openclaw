@@ -285,6 +285,7 @@ function buildEmbeddedContextFromTemplate(params: {
     conversationRoutePeerId: params.run.conversationRoutePeerId,
     messageTo: sessionCtx.OriginatingTo ?? sessionCtx.To,
     messageThreadId: sessionCtx.MessageThreadId,
+    webchatExternalDeliveryDisabled: sessionCtx.WebchatExternalDeliveryDisabled,
     chatId:
       normalizeOptionalString(sessionCtx.NativeChannelId) ??
       normalizeOptionalString(sessionCtx.ChatId),

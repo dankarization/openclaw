@@ -4,6 +4,7 @@ import { readMessageWorkContext } from "../../chat/work-context.js";
 import { assertModelSelectionUnlocked } from "../../sessions/model-overrides.js";
 import { isIncognitoSessionKey } from "../../shared/incognito-session-key.js";
 import { forkCliHistoryBoundary } from "./cli-history-boundary.js";
+import { resolveSessionCreationVisibility } from "./creation-visibility.js";
 import type { TranscriptEvent } from "./session-accessor.sqlite-contract.js";
 import type { SessionMessageCutMutationResult } from "./session-accessor.types.js";
 import { findSessionTranscriptHeader } from "./session-entry-codec.js";
@@ -386,6 +387,10 @@ function buildMessageCutSessionEntry(
             entryId: params.entryId,
           },
           parentSessionKey: params.canonicalSourceKey,
+          access:
+            params.creationAccess ??
+            resolveSessionCreationVisibility({}, params.targetKey, currentEntry).access,
+          ...(params.creationVisibility ? { visibility: params.creationVisibility } : {}),
           ...(currentEntry.visibility === "draft" ? { visibility: "draft" as const } : {}),
           ...params.forkWorkspace,
           ...(params.creation ? buildSessionCreationStamp(params.creation) : {}),

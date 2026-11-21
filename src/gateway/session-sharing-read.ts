@@ -1,9 +1,11 @@
 import { isPromiseLike } from "@openclaw/normalization-core/promise-like";
 import { ErrorCodes, errorShape } from "../../packages/gateway-protocol/src/index.js";
+import { GATEWAY_OWNER_PROFILE_ID } from "../../packages/gateway-protocol/src/schema/users.js";
 import { assertAdmittedRunOperatorAuthority } from "../agents/admitted-run-context.js";
 import { runtimeConfigPublication } from "../config/runtime-config-publication.js";
 import { getRuntimeConfigSnapshotMetadata } from "../config/runtime-snapshot.js";
 import type { SessionEntry } from "../config/sessions.js";
+import { canReadSessionAccess } from "../config/sessions/session-access.js";
 import { resolveSqliteSessionKey } from "../config/sessions/session-accessor.sqlite-scope-helpers.js";
 import { withSessionSourceValidation } from "../config/sessions/session-source-authority.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
@@ -32,6 +34,12 @@ import {
 } from "./operator-role-policy.js";
 import { authenticatedProfileUnavailableError } from "./server-methods/gateway-client-identity.js";
 import type { GatewayClient, SessionMutationAuthorization } from "./server-methods/types.js";
+import { resolveTelegramSessionDirect } from "./session-channel-direct-read.js";
+import { resolveTelegramSessionGroup } from "./session-channel-group.js";
+import {
+  readTelegramSessionMembership,
+  telegramSessionMembershipKey,
+} from "./session-channel-read.js";
 import { isSessionCreatorProfile, prepareSessionCreatorProfile } from "./session-creator.js";
 import {
   SessionMutationAuthorizationChangedError,
@@ -86,7 +94,20 @@ export function canReceiveSessionEvent(params: {
       (!isNamedOperatorRoleEnforcementEnabled(policyConfig) ||
         isSessionSharingOwnerEquivalent(client, operatorActor)) &&
       event !== "session.suggestion" &&
-      event !== "session.typing"
+      event !== "session.typing" &&
+      ((Boolean(policyConfig.gateway?.roles) &&
+        isSessionSharingOwnerEquivalent(client, operatorActor)) ||
+        operatorActor?.kind === "system" ||
+        client.authenticatedUserProfile?.profileId === GATEWAY_OWNER_PROFILE_ID ||
+        sessionKeys.every((key) => {
+          const target = params.prepared.target(key, params.agentId);
+          return Boolean(
+            target &&
+            (!client.authenticatedGitHubIdentitySync ||
+              resolveSessionVisibility(target.entry) !== "draft") &&
+            canReadSessionAccess(policyConfig, target.canonicalKey, target.entry, () => false),
+          );
+        }))
     );
   }
   const preparedSharing = params.prepared.sharing;
@@ -120,6 +141,32 @@ export function canReceiveSessionEvent(params: {
   });
 }
 
+type ChannelReadEntry = Pick<
+  SessionEntry,
+  "createdActor" | "createdVia" | "delivery" | "visibility" | "incognito" | "access"
+>;
+
+/** Extend a denied read only for a current linked route within the source audience. */
+export function canReadChannelSession(params: {
+  cfg: OpenClawConfig;
+  key: string;
+  entry: ChannelReadEntry;
+  isCreator: ReturnType<typeof prepareSessionCreatorProfile>;
+  scopes: readonly string[];
+  channelRead: (key: string, entry: ChannelReadEntry) => boolean;
+}): boolean {
+  const { cfg, key, entry, isCreator, scopes, channelRead } = params;
+  return Boolean(
+    entry.visibility !== "draft" &&
+    entry.incognito !== true &&
+    !isIncognitoSessionKey(key) &&
+    canReadSessionAccess(cfg, key, entry, isCreator) &&
+    operatorScopeSatisfied("operator.sessions.read", scopes) &&
+    (resolveTelegramSessionGroup(key, entry) || resolveTelegramSessionDirect(key, entry)) &&
+    channelRead(key, entry),
+  );
+}
+
 /** Share caller facts across synchronous selection/role projection, never across an await. */
 export function prepareSessionSharing(
   params: Pick<SessionSharingRoleParams, "cfg" | "client">,
@@ -127,6 +174,7 @@ export function prepareSessionSharing(
     aliases: ReadonlySet<string>;
     sessionCap: ReturnType<typeof operatorSessionCap>;
     isMember: (target: SessionSharingTarget, identityId: string) => boolean;
+    channelRead?: (sessionKey: string, entry: ChannelReadEntry) => boolean;
   },
 ) {
   const identity = sharingIdentity(params.client, resolveGatewayOperatorRoleActor(params.client));
@@ -141,12 +189,53 @@ export function prepareSessionSharing(
       target,
       isMember ?? (prepared && Boolean(identity && prepared.isMember(target, identity.id))),
     );
-  const entryFilter = createSessionListEntryFilter(params, isCreator, { sessionCap });
+  const originalEntryFilter = createSessionListEntryFilter(params, isCreator, { sessionCap });
+  const originalDirectEntryFilter = createSessionDirectEntryFilter(params, isCreator, {
+    sessionCap,
+  });
+  const guardChannel = (filter: typeof originalEntryFilter): typeof originalEntryFilter => {
+    if (!identity || isGatewayAdmin(params.client)) {
+      return filter;
+    }
+    return (key, entry, member) => {
+      // A verified channel member must still be inside the stored source audience.
+      if (!canReadSessionAccess(params.cfg, key, entry, isCreator)) {
+        return false;
+      }
+      if (filter?.(key, entry, member) !== false) {
+        return true;
+      }
+      return Boolean(
+        key &&
+        params.cfg &&
+        !authorizeCurrentOperatorRoleScopes(params.client, params.cfg) &&
+        canReadChannelSession({
+          cfg: params.cfg,
+          key,
+          entry,
+          isCreator,
+          scopes: params.client?.connect.scopes ?? [],
+          channelRead: (channelKey, channelEntry) =>
+            prepared?.channelRead?.(channelKey, channelEntry) ??
+            readTelegramSessionMembership(params.client, params.cfg!, channelKey, channelEntry),
+        }),
+      );
+    };
+  };
+  const entryFilter = guardChannel(originalEntryFilter);
+  const directEntryFilter = guardChannel(originalDirectEntryFilter);
   return {
     identity,
     isCreator,
     sessionCap,
     entryFilter,
+    directEntryFilter,
+    canReadDirectTarget: (target: SessionSharingTarget) =>
+      directEntryFilter?.(
+        target.storeKey,
+        target.entry,
+        Boolean(sessionCap === "invited" && identity && prepared?.isMember(target, identity.id)),
+      ) ?? true,
     canReadTarget: (target: SessionSharingTarget) =>
       entryFilter?.(
         target.storeKey,
@@ -413,6 +502,7 @@ export function prepareProjectedSessionSharing(params: {
   profiles?: Pick<PreparedSessionSharingProfiles, "readCurrent">;
   /** Retained consumers lend current membership; viewer facts still revalidate on every call. */
   owner?: object;
+  channelRead?: (sessionKey: string, entry: ChannelReadEntry) => boolean;
 }): ProjectedSessionSharing {
   const { cfg, client, isMember } = params;
   if (!params.profiles && client?.internal?.syntheticClient) {
@@ -458,6 +548,7 @@ export function prepareProjectedSessionSharing(params: {
   const ownerEquivalent =
     !identity && rolesEnforced && isSessionSharingOwnerEquivalent(client, actor);
   const scopes = client?.connect?.scopes;
+  let channelKey = telegramSessionMembershipKey(client, cfg);
   const readSnapshot = (): ProjectedSharingSnapshot => {
     const viewer = params.owner ?? client ?? cfg;
     const previous = projectedSharingKeys.get(viewer);
@@ -485,10 +576,11 @@ export function prepareProjectedSessionSharing(params: {
       facts[17] === roleProfile?.role &&
       facts[18] === roleProfile?.githubLogin &&
       facts[19] === roleProfile?.profileId &&
-      facts.length === 20 + (scopes?.length ?? 0)
+      facts[20] === channelKey &&
+      facts.length === 21 + (scopes?.length ?? 0)
     ) {
       let i = 0;
-      while (i < (scopes?.length ?? 0) && facts[20 + i] === scopes?.[i]) {
+      while (i < (scopes?.length ?? 0) && facts[21 + i] === scopes?.[i]) {
         i++;
       }
       if (i === (scopes?.length ?? 0)) {
@@ -516,6 +608,7 @@ export function prepareProjectedSessionSharing(params: {
       roleProfile?.role,
       roleProfile?.githubLogin,
       roleProfile?.profileId,
+      channelKey,
     ];
     const snapshot = { facts: scopes?.length ? next.concat(scopes) : next };
     projectedSharingKeys.set(viewer, snapshot);
@@ -530,10 +623,16 @@ export function prepareProjectedSessionSharing(params: {
       aliases: profile?.aliases ?? emptyProfileAliases,
       sessionCap: policy?.sessions.others,
       isMember,
+      channelRead: params.channelRead,
     }),
     policy,
     /** Connection facts follow config/access publications, independently of row revisions. */
     getCacheKey() {
+      const currentChannelKey = telegramSessionMembershipKey(client, cfg);
+      if (currentChannelKey !== channelKey) {
+        channelKey = currentChannelKey;
+        snapshot = undefined;
+      }
       snapshot ??= readSnapshot();
       return (snapshot.key ??= JSON.stringify([
         actor,
@@ -549,6 +648,7 @@ export function prepareProjectedSessionSharing(params: {
         rolesEnforced,
         // Equal effective scopes can retain different source sharing authority.
         ownerEquivalent,
+        channelKey,
       ]));
     },
   };
@@ -565,36 +665,66 @@ export function createSessionListEntryFilter(
   isCreator?: ReturnType<typeof prepareSessionCreatorProfile>,
   prepared?: { sessionCap: ReturnType<typeof operatorSessionCap> },
 ):
-  | ((
-      sessionKey: string | undefined,
-      entry: Pick<SessionEntry, "createdActor" | "visibility" | "incognito">,
-      isMember?: boolean,
-    ) => boolean)
+  | ((sessionKey: string | undefined, entry: ChannelReadEntry, isMember?: boolean) => boolean)
   | undefined {
   const operatorActor = resolveGatewayOperatorRoleActor(params.client);
   const identity = sharingIdentity(params.client, operatorActor);
-  if (isGatewayAdmin(params.client)) {
+  if (
+    isGatewayAdmin(params.client) ||
+    (!identity &&
+      (operatorActor?.kind === "system" ||
+        (!params.cfg?.gateway?.roles &&
+          params.client?.authenticatedUserProfile?.profileId === GATEWAY_OWNER_PROFILE_ID)))
+  ) {
     return undefined;
   }
   if (!identity) {
-    return isNamedOperatorRoleEnforcementEnabled(params.cfg) &&
-      !isSessionSharingOwnerEquivalent(params.client, operatorActor)
-      ? () => false
-      : undefined;
+    if (isNamedOperatorRoleEnforcementEnabled(params.cfg)) {
+      return isSessionSharingOwnerEquivalent(params.client, operatorActor)
+        ? undefined
+        : () => false;
+    }
+    return (key, entry) =>
+      (!params.client?.authenticatedGitHubIdentitySync ||
+        resolveSessionVisibility(entry) !== "draft") &&
+      canReadSessionAccess(params.cfg, key, entry, () => false);
   }
   const sessionCap = prepared
     ? prepared.sessionCap
     : params.cfg && operatorSessionCap(params.client, params.cfg);
   return createProfileSessionEntryFilter(
-    { profileId: identity.id, sessionCap, membership: params.membership },
+    { profileId: identity.id, sessionCap, cfg: params.cfg, membership: params.membership },
     isCreator,
   );
+}
+
+/** Existing roleless readers retain direct access to legacy unset rows only. */
+export function createSessionDirectEntryFilter(
+  ...args: Parameters<typeof createSessionListEntryFilter>
+): ReturnType<typeof createSessionListEntryFilter> {
+  const [params] = args;
+  const filter = createSessionListEntryFilter(...args);
+  if (
+    params.cfg?.gateway?.roles ||
+    (params.client?.authenticatedGitHubIdentitySync &&
+      !sharingIdentity(params.client, resolveGatewayOperatorRoleActor(params.client))) ||
+    !operatorScopeSatisfied("operator.read", params.client?.connect?.scopes ?? [])
+  ) {
+    return filter;
+  }
+  return (key, entry, isMember) =>
+    (entry.access === undefined &&
+      entry.incognito !== true &&
+      !isIncognitoSessionKey(key) &&
+      resolveSessionVisibility(entry) !== "draft") ||
+    filter?.(key, entry, isMember) !== false;
 }
 
 export function createProfileSessionEntryFilter(
   params: {
     profileId: string;
     sessionCap?: ReturnType<typeof operatorSessionCap>;
+    cfg?: OpenClawConfig;
     membership?: ReadonlySet<string>;
   },
   isCreator?: ReturnType<typeof prepareSessionCreatorProfile>,
@@ -603,11 +733,12 @@ export function createProfileSessionEntryFilter(
   const creatorMatches = isCreator ?? ((actor) => isSessionCreatorProfile(actor, params.profileId));
   return (
     sessionKey: string | undefined,
-    entry: Pick<SessionEntry, "createdActor" | "visibility" | "incognito">,
+    entry: Pick<SessionEntry, "createdActor" | "visibility" | "incognito" | "access">,
     isMember = params.membership?.has(params.profileId),
   ) =>
     entry.incognito !== true &&
     !isIncognitoSessionKey(sessionKey) &&
+    canReadSessionAccess(params.cfg, sessionKey, entry, creatorMatches) &&
     (creatorMatches(entry.createdActor) ||
       (params.sessionCap !== "none" &&
         // Projection callbacks may pass metadata as the third argument; only true grants membership.
