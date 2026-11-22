@@ -162,6 +162,7 @@ type SessionsSendDeliveryParams = {
   /** Communication binds an incarnation without claiming result ownership or forbidding Cron fallback. */
   preparedTargetSessionId?: string;
   retainAcceptance?: boolean;
+  onStartError?: (error: unknown) => void;
   captureReplyAdmission?: (runId: string) => SessionSendReplyAdmission;
   assertDispatchCurrent?: () => void;
   // Destination policy fences input commit, not an already accepted acknowledgment.
@@ -499,6 +500,7 @@ export async function startSessionsSendAgentRun(
         : {}),
     };
   } catch (err) {
+    params.onStartError?.(err);
     const failure = deliveryFailure(params, err);
     // A separately selected fallback has another operation identity; never retain it as this send.
     return fallbackSessionKey ? { ok: false, result: failure.result } : failure;
