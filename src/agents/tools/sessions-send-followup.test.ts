@@ -265,6 +265,7 @@ describe("followup retained session authorization", () => {
     "commit-guard",
     "requester",
     "uncertain",
+    "transport-unknown",
     "initial-child",
     "initial-requester",
   ] as const)("handles %s custody revocation at registry admission", async (trigger) => {
@@ -289,6 +290,11 @@ describe("followup retained session authorization", () => {
               trigger === "requester" ? input.requesterSessionKey : input.targetSessionKey,
           });
         }
+        if (trigger === "transport-unknown") {
+          const error = new Error("Gateway transport timed out");
+          params.onStartError?.(error);
+          return { ok: false, result: jsonResult({ status: "error", error: error.message }) };
+        }
         try {
           params.assertDispatchCurrent?.();
         } catch (error) {
@@ -298,6 +304,7 @@ describe("followup retained session authorization", () => {
               endpoint: trigger === "requester" ? "requester" : "child",
             },
           });
+          params.onStartError?.(error);
           return {
             ok: false,
             result: jsonResult({
@@ -359,7 +366,10 @@ describe("followup retained session authorization", () => {
         expect(start).toHaveBeenCalledOnce();
       }
       if (result.start.ok) throw new Error("Expected a refused or uncertain start");
-      if (trigger === "uncertain") {
+      if (trigger === "transport-unknown") {
+        expect(result.start.result.details).toMatchObject({ error: "Gateway transport timed out" });
+        expect(result.start.result.details).not.toHaveProperty("followupAccess");
+      } else if (trigger === "uncertain") {
         expect(result.start.result.details).toMatchObject({ sentBeforeError: true });
         expect(result.start.result.details).not.toHaveProperty("followupAccess");
       } else {

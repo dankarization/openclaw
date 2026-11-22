@@ -192,15 +192,10 @@ export async function dispatchSessionsSendFollowup(
       watchField: {},
     };
   }
-  let custodyDenial: ReturnType<typeof readFollowupAccessDenial>;
+  let startDenial: ReturnType<typeof readFollowupAccessDenial>;
   const assertCurrent = () => {
     assertCallerCurrent?.();
-    try {
-      request?.custody.assertCurrent();
-    } catch (error) {
-      custodyDenial = readFollowupAccessDenial(error);
-      throw error;
-    }
+    request?.custody.assertCurrent();
   };
   const admission = registryTurn
     ? openChildFollowupAdmission(assertCurrent, params.assertDispatchCurrent)
@@ -214,13 +209,19 @@ export async function dispatchSessionsSendFollowup(
             ...params,
             ...active,
             ...(admission
-              ? { retainAcceptance: true, assertDispatchCurrent: admission.assertDispatchCurrent }
+              ? {
+                  retainAcceptance: true,
+                  assertDispatchCurrent: admission.assertDispatchCurrent,
+                  onStartError: (error: unknown) => {
+                    startDenial = readFollowupAccessDenial(error);
+                  },
+                }
               : {}),
           },
           replyContext,
         );
   let start = initialStart;
-  const denial = custodyDenial ?? readFollowupAccessDenial(request?.custody.signal.reason);
+  const denial = startDenial;
   const startDetails: Record<string, unknown> | undefined = start.ok
     ? undefined
     : { ...start.result.details };
