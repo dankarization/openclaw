@@ -680,6 +680,7 @@ export const gatewayServerIsolatedTestFiles = [
   // Real Gateway and linked identity state require the host broker.
   "src/gateway/gateway.linked-channel-display.e2e.test.ts",
   // Real provider and subagent lifecycle registrations must survive the whole scenario.
+  "src/gateway/sessions-send-followup-terra-private.proof.test.ts",
   "src/gateway/gateway.prompt-cache.test.ts",
   "src/gateway/gateway-plugin-notice.prompt-cache.test.ts",
   "src/gateway/server.subagent-prompt-recent.gateway.test.ts",
