@@ -11,13 +11,17 @@ import {
   SessionFollowupCompletion,
 } from "../subagents/completion/session-followup-completion.js";
 import type { FollowupRequest } from "../subagents/completion/session-followup-completion.types.js";
-import { prepareSessionsSendFollowup } from "./sessions-send-followup-custody.js";
+import {
+  prepareSessionsSendFollowup,
+  readFollowupAccessDenial,
+} from "./sessions-send-followup-custody.js";
 import {
   dispatchSessionsSendFollowup,
   startSessionsSendFollowup,
 } from "./sessions-send-followup.js";
 import { startSessionsSendReplyFlow } from "./sessions-send-reply-flow.js";
 import * as sendDelivery from "./sessions-send-tool.delivery.js";
+import { jsonResult } from "./tool-results.js";
 vi.mock("./sessions-send-reply-flow.js", () => ({ startSessionsSendReplyFlow: vi.fn() }));
 const mocks = vi.hoisted(() => ({
   config: vi.fn<() => OpenClawConfig>(),
@@ -256,6 +260,135 @@ describe("followup retained session authorization", () => {
     }
   });
 
+  it.each([
+    "notification",
+    "commit-guard",
+    "requester",
+    "uncertain",
+    "initial-child",
+    "initial-requester",
+  ] as const)("handles %s custody revocation at registry admission", async (trigger) => {
+    const { runId, ...keys } = input;
+    const callGateway = vi.fn(async () => {
+      throw new Error("Unexpected transport call");
+    });
+    const activeDelivery = vi
+      .spyOn(sendDelivery, "trySessionsSendActiveRunDelivery")
+      .mockResolvedValue({});
+    const start = vi
+      .spyOn(sendDelivery, "startSessionsSendAgentRun")
+      .mockImplementation(async (params) => {
+        if (trigger === "requester") {
+          facts.get(input.requesterSessionKey)!.target!.entry.archivedAt = 2;
+        } else {
+          target().membership = new Set();
+        }
+        if (trigger !== "commit-guard") {
+          sessionChanges.emit({
+            sessionKey:
+              trigger === "requester" ? input.requesterSessionKey : input.targetSessionKey,
+          });
+        }
+        try {
+          params.assertDispatchCurrent?.();
+        } catch (error) {
+          expect(readFollowupAccessDenial(error)).toMatchObject({
+            followupAccess: {
+              phase: "revocation",
+              endpoint: trigger === "requester" ? "requester" : "child",
+            },
+          });
+          return {
+            ok: false,
+            result: jsonResult({
+              runId: params.runId,
+              status: "error",
+              error: error instanceof Error ? error.message : "error",
+              ...(trigger === "uncertain" ? { sentBeforeError: true } : {}),
+              sessionKey: params.sessionKey,
+            }),
+          };
+        }
+        throw new Error("Expected child admission to be refused");
+      });
+    const params: Parameters<typeof dispatchSessionsSendFollowup>[0] = {
+      cfg: mocks.config(),
+      admissionConfig: mocks.config(),
+      callGateway,
+      runId,
+      sessionKey: input.targetSessionKey,
+      sessionStoreTarget: storageTarget(input.targetSessionKey),
+      sendParams: {
+        agentId: "main",
+        message: "followup",
+        inputProvenance: { kind: "inter_session", sourceSessionKey: input.requesterSessionKey },
+        sourceReplyDeliveryMode: "message_tool_only",
+      },
+    };
+    const replyContext = {
+      ...keys,
+      callGateway,
+      displayKey: input.targetSessionKey,
+      replyTimeoutMs: 0,
+      replyMode: "one-way" as const,
+      requesterSession: {
+        sessionId: `${input.requesterSessionKey}-id`,
+        lifecycleRevision: "one",
+      },
+    };
+    try {
+      if (trigger === "initial-child") target().membership = new Set();
+      if (trigger === "initial-requester") {
+        facts.get(input.requesterSessionKey)!.target!.entry.archivedAt = 2;
+      }
+      const result = await dispatchSessionsSendFollowup(params, replyContext, {
+        message: "followup",
+        ownChild: true,
+        nativeChild: true,
+        watch: true,
+        requesterSessionKey: input.requesterSessionKey,
+        requesterAgentId: "main",
+        requesterTurnRunId: "requester-turn",
+        targetSession: { sessionId: `${input.targetSessionKey}-id`, lifecycleRevision: "one" },
+      });
+      const initial = trigger === "initial-child" || trigger === "initial-requester";
+      if (initial) {
+        expect(start).not.toHaveBeenCalled();
+        expect(mocks.release).toHaveBeenCalledOnce();
+      } else {
+        expect(start).toHaveBeenCalledOnce();
+      }
+      if (result.start.ok) throw new Error("Expected a refused or uncertain start");
+      if (trigger === "uncertain") {
+        expect(result.start.result.details).toMatchObject({ sentBeforeError: true });
+        expect(result.start.result.details).not.toHaveProperty("followupAccess");
+      } else {
+        expect(result.start).toMatchObject({
+          ok: false,
+          result: {
+            details: {
+              status: "error",
+              followupAccess: {
+                phase: initial ? "admission" : "revocation",
+                endpoint:
+                  trigger === "requester" || trigger === "initial-requester"
+                    ? "requester"
+                    : "child",
+                code: "INVALID_REQUEST",
+              },
+            },
+          },
+        });
+        expect(result.start.result.details).not.toHaveProperty("sessionKey");
+        expect(JSON.stringify(result.start.result)).not.toContain(input.targetSessionKey);
+        expect(JSON.stringify(result.start.result)).not.toContain(input.requesterSessionKey);
+      }
+    } finally {
+      activeDelivery.mockRestore();
+      start.mockRestore();
+    }
+  });
+
   it.each(["access", "archive"] as const)(
     "latches %s revocation after the row recovers",
     async (change) => {
@@ -285,6 +418,23 @@ describe("followup retained session authorization", () => {
       assertRevoked();
     },
   );
+  it("reports an unavailable initial requester profile as admission denial", async () => {
+    mocks.profile.mockResolvedValueOnce(undefined);
+    let failure: unknown;
+    try {
+      await prepareSessionsSendFollowup(input);
+    } catch (error) {
+      failure = error;
+    }
+    expect(readFollowupAccessDenial(failure)).toMatchObject({
+      followupAccess: { phase: "admission", endpoint: "requester", code: "FORBIDDEN" },
+    });
+    expect(mocks.release).toHaveBeenCalledOnce();
+  });
+  it("does not project unrelated failures as custody denials", () => {
+    expect(readFollowupAccessDenial(new Error("unrelated failure"))).toBeUndefined();
+    expect(readFollowupAccessDenial({ code: "INVALID_REQUEST" })).toBeUndefined();
+  });
   it("refuses missing captured authority rather than selecting a System caller", async () => {
     mocks.capture.mockReturnValue(undefined);
     await expect(prepareSessionsSendFollowup(input)).rejects.toThrow("in-process caller custody");
