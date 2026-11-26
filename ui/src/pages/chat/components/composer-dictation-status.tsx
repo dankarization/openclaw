@@ -86,6 +86,13 @@ export function ActiveDictationStatus(props: {
           <button
             type="button"
             class="btn btn--sm"
+            onClick={() => props.readDictation()?.recovery?.saveRecording()}
+          >
+            {t("chat.dictation.save")}
+          </button>
+          <button
+            type="button"
+            class="btn btn--sm"
             onClick={() => props.readDictation()?.discardRecovery()}
           >
             {t("chat.dictation.discard")}

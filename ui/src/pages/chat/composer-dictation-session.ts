@@ -1,9 +1,11 @@
 import { asOptionalObjectRecord } from "@openclaw/normalization-core/record-coerce";
+import { encodeMulaw8kWav } from "../../../../src/shared/mulaw-wav.ts";
 import type { GatewayBrowserClient, GatewayEventFrame } from "../../api/gateway.ts";
 import { loadSettings } from "../../app/settings.ts";
 import { t } from "../../i18n/index.ts";
 import { registerChatDictationEnglish } from "../../i18n/locales/en-chat-dictation.ts";
-import { bytesToBase64 } from "../../lib/bytes-base64.ts";
+import { base64ToBytes, bytesToBase64 } from "../../lib/bytes-base64.ts";
+import { downloadBlobFile } from "../../lib/download.ts";
 import { formatUiError, formatUiExternalText } from "../../lib/format-error.ts";
 import { registerEnglishCatalog } from "../../lib/reactive/i18n.ts";
 import type { GatewaySpeechPlayback } from "../../lib/speech-playback.ts";
@@ -379,6 +381,14 @@ export class ComposerDictationSession {
 
   get hasRecording(): boolean {
     return !this.discarded && this.recording.length > 0;
+  }
+
+  saveRecording(): void {
+    if (!this.recovery || !this.hasRecording) {
+      return;
+    }
+    const wav = encodeMulaw8kWav(this.recording.map(base64ToBytes));
+    downloadBlobFile("dictation.wav", new Blob([wav], { type: "audio/wav" }));
   }
 
   async retry(playback: GatewaySpeechPlayback, superseded: () => void): Promise<string> {

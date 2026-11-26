@@ -6,8 +6,8 @@ import type { OpenClawConfig } from "../../config/types.js";
 import { resolvePreferredOpenClawTmpDir } from "../../infra/tmp-openclaw-dir.js";
 import type { MediaUnderstandingProvider } from "../../media-understanding/provider-types.js";
 import type { RealtimeTranscriptionSessionCallbacks } from "../../realtime-transcription/provider-types.js";
+import { encodeMulaw8kWav } from "../../shared/mulaw-wav.js";
 import { resolveTalkSessionAgentId } from "../../talk/agent-target.js";
-import { mulawToPcmInto } from "../../talk/audio-codec.js";
 
 export type TalkFileTranscriptionConfig = {
   cfg: OpenClawConfig;
@@ -108,25 +108,6 @@ export async function resolveTalkFileTranscriptionConfig(
   };
 }
 
-function encodeWav(audio: Buffer): Buffer {
-  const pcmBytes = audio.length * 2;
-  const wav = Buffer.alloc(44 + pcmBytes);
-  wav.write("RIFF", 0);
-  wav.writeUInt32LE(36 + pcmBytes, 4);
-  wav.write("WAVEfmt ", 8);
-  wav.writeUInt32LE(16, 16);
-  wav.writeUInt16LE(1, 20);
-  wav.writeUInt16LE(1, 22);
-  wav.writeUInt32LE(8000, 24);
-  wav.writeUInt32LE(16000, 28);
-  wav.writeUInt16LE(2, 32);
-  wav.writeUInt16LE(16, 34);
-  wav.write("data", 36);
-  wav.writeUInt32LE(pcmBytes, 40);
-  mulawToPcmInto(audio, wav.subarray(44));
-  return wav;
-}
-
 /** Adapts the browser's existing audio frames to the file-transcription owner. */
 export function createTalkFileTranscriptionSession(
   config: TalkFileTranscriptionConfig,
@@ -166,7 +147,7 @@ export function createTalkFileTranscriptionSession(
       const directory = await fs.mkdtemp(path.join(root, "talk-stt-"));
       try {
         const filePath = path.join(directory, "speech.wav");
-        await fs.writeFile(filePath, encodeWav(audio), { mode: 0o600 });
+        await fs.writeFile(filePath, new Uint8Array(encodeMulaw8kWav([audio])), { mode: 0o600 });
         const { transcribeAudioFile } = await import("../../media-understanding/runtime.js");
         if (cancellation.signal.aborted) {
           return;

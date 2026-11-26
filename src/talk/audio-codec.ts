@@ -1,4 +1,5 @@
 import { expectDefined } from "@openclaw/normalization-core";
+import { mulawToLinear } from "../shared/mulaw-wav.js";
 /**
  * Telephony providers generally expect 8 kHz mu-law frames, while local audio
  * capture and realtime providers can produce higher-rate signed 16-bit PCM.
@@ -389,14 +390,4 @@ function linearToMulaw(sampleInput: number): number {
 
   const mantissa = (sample >> (exponent + 3)) & 0x0f;
   return ~(sign | (exponent << 4) | mantissa) & 0xff;
-}
-
-function mulawToLinear(value: number): number {
-  const muLaw = ~value & 0xff;
-  const sign = muLaw & 0x80;
-  const exponent = (muLaw >> 4) & 0x07;
-  const mantissa = muLaw & 0x0f;
-  let sample = ((mantissa << 3) + 132) << exponent;
-  sample -= 132;
-  return sign ? -sample : sample;
 }

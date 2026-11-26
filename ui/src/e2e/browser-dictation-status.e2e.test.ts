@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Locator, Page } from "playwright";
 import { expect, it } from "vitest";
@@ -113,6 +113,7 @@ suite.define(() => {
     (route) =>
       suite.withPage(
         {
+          acceptDownloads: true,
           permissions: ["microphone"],
           viewport: { width: route === "new" ? 390 : 1280, height: 900 },
         },
@@ -145,6 +146,8 @@ suite.define(() => {
             });
           });
           await gateway.waitForRequest("talk.session.appendAudio");
+          const save = button(page, "Save recording", true);
+          expect(await save.count()).toBe(0);
           await button(page, "Stop and keep text", true).click();
           await gateway.waitForRequest("talk.session.close");
           await gateway.emitGatewayEvent("talk.event", {
@@ -164,6 +167,34 @@ suite.define(() => {
           expect(
             await status.evaluate((element) => element.scrollWidth <= element.clientWidth),
           ).toBe(true);
+          const saveWav = async () => {
+            const [download] = await Promise.all([
+              page.waitForEvent("download"),
+              save.click({ timeout: 5_000 }),
+            ]);
+            expect(download.suggestedFilename()).toBe("dictation.wav");
+            return readFile(await download.path());
+          };
+          const wav = await saveWav();
+          expect(wav.byteLength).toBe(50);
+          expect(wav.toString("ascii", 0, 4)).toBe("RIFF");
+          expect(wav.readUInt32LE(4)).toBe(wav.byteLength - 8);
+          expect(wav.toString("ascii", 8, 16)).toBe("WAVEfmt ");
+          expect([wav.readUInt16LE(20), wav.readUInt16LE(22), wav.readUInt32LE(24)]).toEqual([
+            1, 1, 8_000,
+          ]);
+          expect(wav.readUInt16LE(34)).toBe(16);
+          expect(wav.toString("ascii", 36, 40)).toBe("data");
+          expect(wav.readUInt32LE(40)).toBe(6);
+          // The known μ-law octets ff, 80, 00 decode to these exact PCM samples.
+          expect([wav.readInt16LE(44), wav.readInt16LE(46), wav.readInt16LE(48)]).toEqual([
+            0, 32_124, -32_124,
+          ]);
+          expect(await gateway.getRequests("talk.session.create")).toHaveLength(1);
+          expect(await gateway.getRequests("talk.session.appendAudio")).toHaveLength(1);
+          expect(await gateway.getRequests("chat.send")).toHaveLength(0);
+          await expectDraft(textarea, "");
+          expect(await page.getByText(/Transcription unavailable/).count()).toBeGreaterThan(0);
           await retry.click();
           await expect
             .poll(async () => (await gateway.getRequests("talk.session.create")).length)
@@ -172,7 +203,13 @@ suite.define(() => {
             .poll(async () => (await gateway.getRequests("talk.session.appendAudio")).length)
             .toBe(2);
           const audio = await gateway.getRequests("talk.session.appendAudio");
+          expect(audio[0]?.params).toMatchObject({ audioBase64: "/4AA" });
           expect(audio[1]?.params).toEqual(audio[0]?.params);
+          expect(await saveWav()).toEqual(wav);
+          expect(await gateway.getRequests("talk.session.create")).toHaveLength(2);
+          expect(await gateway.getRequests("talk.session.appendAudio")).toHaveLength(2);
+          expect(await gateway.getRequests("chat.send")).toHaveLength(0);
+          await expectDraft(textarea, "");
           await gateway.emitGatewayEvent("talk.event", {
             transcriptionSessionId: sessionId,
             type: "transcript",
@@ -185,6 +222,8 @@ suite.define(() => {
             reason: "completed",
           });
           await expectDraft(textarea, "Recovered recording");
+          expect(await gateway.getRequests("talk.session.create")).toHaveLength(2);
+          expect(await gateway.getRequests("talk.session.appendAudio")).toHaveLength(2);
           await expect.poll(() => page.getByText(/Transcription unavailable/).count()).toBe(0);
           expect(await gateway.getRequests("chat.send")).toHaveLength(0);
           expect(
